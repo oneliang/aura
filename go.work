@@ -1,0 +1,20 @@
+go 1.26.1
+
+use (
+	./cmd/aura
+	./modules/adapters
+	./modules/agent
+	./modules/api
+	./modules/cli
+	./modules/commands
+	./modules/core
+	./modules/habit
+	./modules/knowledge
+	./modules/mcp
+	./modules/personality
+	./modules/session
+	./modules/shared
+	./modules/skill
+	./modules/storage
+	./modules/tools
+)

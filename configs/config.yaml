@@ -1,0 +1,361 @@
+# Aura Configuration
+
+# LLM Provider Settings
+llm:
+  provider: openai
+  base_url: https://coding.dashscope.aliyuncs.com/v1
+  model: qwen3.5-plus
+  api_key: ${DASHSCOPE_API_KEY}  # Set environment variable: export DASHSCOPE_API_KEY=your-key
+  # embedding_model: text-embedding-v3  # Optional: only needed when using knowledge base features
+
+  # LLM request retry configuration
+  retry:
+    max_retries: 3       # Maximum number of retries (0 = disabled)
+    initial_delay: 1s    # Initial backoff delay
+    max_delay: 30s       # Maximum backoff delay
+
+  # LLM thinking/reasoning configuration (default: enabled)
+  thinking:
+    enabled: true              # Enable native thinking mode
+    reasoning_effort: medium   # OpenAI: low/medium/high (non-reasoning models may error)
+    budget_tokens: 102400        # Max thinking tokens (Anthropic/Ollama)
+
+# Memory Settings
+memory:
+  type: sqlite
+  storage_dir: ~/.aura/memory
+  max_context: 50
+  max_tokens: 102400
+  token_estimator: simple
+  summary_threshold: 0.7   # Token ratio to trigger summarization (0.0-1.0)
+  context_threshold: 0.85  # Token ratio for context window (0.0-1.0)
+
+# Tools Settings
+tools:
+  enabled:
+    - file_read
+    - file_write
+    - file_search
+    - file_list
+    - bash
+    - datetime
+    - calculator
+    - web_fetch
+    - knowledge_search
+    - knowledge_import
+    - code_navigate
+    - text
+    - glob
+    - grep
+    - location
+  # Tool execution timeouts
+  default_timeout: 30s  # Default timeout for all tools
+  shell_timeout: 30s    # Shell command execution timeout
+  ssh_timeout: 30s      # SSH command execution timeout
+  web_timeout: 30s      # Web fetch/search timeout
+
+# Logging Settings
+log:
+  level: info
+  format: text
+  output: stdout
+  # path: ~/.aura/logs/aura.log  # Optional: log file path
+
+# SSH Server Configurations
+# Configure your remote servers for SSH remote control
+# Two authentication methods are supported: key-based (recommended) and password-based
+ssh:
+  servers:
+    # Example 1: Key-based authentication (recommended)
+    # - name: "my-server"
+    #   host: "192.168.1.100"
+    #   port: 22
+    #   user: "ubuntu"
+    #   key_path: "~/.ssh/id_rsa"
+    #   # password: ""  # Not needed when using key
+
+    # Example 2: Password-based authentication
+    # - name: "production"
+    #   host: "prod.example.com"
+    #   port: 22
+    #   user: "deploy"
+    #   password: "your-password-here"
+    #   # key_path: ""  # Not needed when using password
+
+# Permission Configuration
+# Controls access levels and restrictions for tools
+permissions:
+  # Default permission level for unknown tools: ask, allow, deny
+  default_level: ask
+  
+  # Per-tool permission settings
+  tools:
+    # Read-only tools (no confirmation needed)
+    file_read: allow
+    file_list: allow
+    file_search: allow
+    datetime: allow
+    calculator: allow
+    text: allow
+    web_fetch: allow
+    knowledge_search: allow
+    glob: allow
+    grep: allow
+    location: allow
+    
+    # Write tools (require confirmation)
+    file_write: ask
+    knowledge_import: ask
+    
+    # Execute tools (require confirmation + command restrictions)
+    bash: ask
+    ssh_exec: ask
+    code_navigate: allow
+
+  # Shell command restrictions (for bash)
+  shell_restrictions:
+    # Allowed commands (whitelist) - empty means all not denied are allowed
+    allowed_commands: []
+    # Denied commands (blacklist) - these are always blocked
+    denied_commands:
+      - "rm -rf /"
+      - "rm -rf /*"
+      - "mkfs *"
+      - "dd if=*"
+      - "curl * | sh"
+      - "curl * | bash"
+      - "wget * | sh"
+      - "wget * | bash"
+  
+  # SSH restrictions (for ssh_exec)
+  ssh:
+    # Allowed hosts (empty means all not denied are allowed)
+    allowed_hosts: []
+    # Denied hosts
+    denied_hosts: []
+    # Allowed SSH commands (empty means all not denied are allowed)
+    allowed_commands: []
+    # Denied SSH commands
+    denied_commands: []
+
+  # Trusted directories for file system access
+  # Files outside these directories will be denied
+  # Supports absolute paths and ~ (home directory expansion)
+  # Example:
+  # trusted_dirs:
+  #   - ~/projects/my-project
+  #   - /workspace/aura
+  #   - ./relative/to/current/dir
+  trusted_dirs: []
+
+  # Auto-ask trust in CLI/TUI modes (default: true)
+  # When enabled, prompts to trust current directory on first run
+  # Set to false to skip the prompt (Serve mode always skips auto-ask)
+  auto_ask_trust: true
+
+# Skill Configuration
+# Skills are Markdown-based prompt templates that guide agent behavior
+# Each skill directory contains a SKILL.md file with metadata and instructions
+skills:
+  # Enable/disable skill system
+  enabled: true
+  # Directories to search for skills
+  # Each subdirectory should contain a SKILL.md file
+  directories:
+    - ~/.aura/skills
+
+# Orchestrator Configuration
+# Settings for multi-agent orchestration
+orchestrator:
+  enabled: false
+  max_sub_agents: 5
+  workspace_dir: ~/.aura/workspace
+  supervision_interval: 30s
+  stale_doc_threshold: 5m
+  auto_cleanup: true
+
+# Agent Configuration
+# Settings for LLM-triggered SubAgent delegation
+agents:
+  # Enable/disable agent delegation system
+  enabled: true
+  # Directories to search for agent definitions
+  # Each subdirectory should contain an AGENT.md file with:
+  #   - YAML frontmatter (name, description, llm_model, disable_tools)
+  #   - Role definition and guidelines
+  directories:
+    - ~/.aura/agents
+
+# Intent Recognition Configuration
+# Natural language command recognition with alias resolution
+intent:
+  enabled: true
+  confidence_threshold: 0.7
+
+# Users Configuration
+# Settings for multi-user configuration
+users:
+  default: "default"
+  definitions: []
+
+# Agent Configuration
+# Settings for the AI agent behavior
+agent:
+  # Planning mode (default: implicit)
+  # - implicit: LLM implicitly plans during ReAct loop (fast, default)
+  # - explicit: Create explicit plan first, then execute step by step
+  # - auto: Auto-detect based on task complexity
+  planning_mode: implicit
+
+  # LLM temperature settings
+  temperature: 0.7      # Temperature for general conversation (0.0-1.0)
+  summary_temp: 0.3     # Temperature for summarization (lower = more focused)
+
+  # Plan system settings
+  plan:
+    enable_review: true       # Show plan review prompt before execution
+
+# API Server Configuration
+# Settings for the HTTP API server (aura serve command)
+api:
+  # Port to listen on (default: 8080)
+  # Can be overridden with --port flag
+  port: 8080
+
+  # Session storage directory (default: ~/.aura/sessions)
+  # Can be overridden with --data-dir flag
+  # Note: This is where session data (index.json and .jsonl files) is stored
+  sessions_dir: ~/.aura/sessions
+
+# TUI Configuration
+# Settings for the terminal user interface
+tui:
+  # Debug mode for TUI (default: false)
+  # When enabled:
+  #   - Shows step counters in UI (Step N)
+  #   - Logs detailed events to /tmp/aura_tui_debug.log
+  # Can also be enabled via command line: aura --debug
+  debug_mode: true
+
+# Debug Configuration
+# Settings for debugging and logging
+debug:
+  # Show token usage in TUI (default: true)
+  show_tokens: true
+
+  # Log token changes (default: true)
+  log_tokens: true
+
+  # Log LLM requests/responses to file (default: true)
+  # When enabled, all LLM interactions are logged to ~/.aura/logs/llm_requests.log
+  # Each log entry includes:
+  #   - request_id: Unique ID for each request
+  #   - session_id: Session ID for tracing requests within the same session
+  #   - provider: LLM provider (ollama, openai, anthropic)
+  #   - model: Model name
+  #   - messages: Request messages
+  #   - response: Response content and usage
+  #   - duration_ms: Request duration in milliseconds
+  log_llm_interactions: true
+
+# Adapter Configuration
+# Adapters enable integration with external IM platforms (Feishu, WeChat, etc.)
+# Unlike plugins which are passively invoked tools, adapters are long-running services
+# that actively receive events from external platforms and push them to Aura.
+adapters:
+  # Master switch for all adapters
+  enabled: true
+
+  # Data directory for adapter storage (default: ~/.aura/data)
+  # Each adapter stores its data in a separate file under this directory
+  data_dir: ~/.aura/data
+
+  # List of enabled adapters by name
+  enabled_adapters:
+    - feishu
+    # - wechat  # Future: WeChat integration
+    # - dingtalk # Future: DingTalk integration
+    # - telegram # Future: Telegram integration
+
+  # Feishu Adapter Configuration
+  # To use Feishu adapter, you need to:
+  # 1. Create a Feishu Open Platform app at https://open.feishu.cn/
+  # 2. Get App ID and App Secret from the app settings
+  # 3. Configure webhook URL in Feishu event subscription settings
+  # 4. Set encrypt_key and verification_token if enabled in Feishu
+  feishu:
+    # Enable/disable Feishu adapter
+    enabled: false
+
+    # Feishu Open Platform credentials (required)
+    app_id: ""       # e.g., "cli_xxxxxxxxxxxxx"
+    app_secret: ""   # e.g., "xxxxxxxxxxxxxxxxxxxx"
+
+    # Event subscription settings (optional, depending on Feishu app configuration)
+    encrypt_key: ""          # Message encryption key (if enabled in Feishu)
+    verification_token: ""   # Verification token for webhook validation
+
+    # HTTP server settings
+    webhook_path: "/webhook/feishu"  # Webhook endpoint path
+    port: "8080"                      # Port to listen on (can share with API server)
+
+    # Message processing settings
+    async_processing: true   # Process messages asynchronously (recommended)
+    auto_reply: true         # Automatically reply to messages (set false for receive-only)
+    show_processing_indicator: true  # Show "🤔 正在思考中..." indicator while processing
+
+# Knowledge Base Configuration
+# Settings for RAG (Retrieval-Augmented Generation) system
+knowledge:
+  # Number of results to retrieve from knowledge base
+  top_k: 5
+
+  # Maximum ratio of context tokens for RAG results (0.0-1.0)
+  # Controls how much of the context window can be used for retrieved knowledge
+  rag_token_ratio: 0.5
+
+# Internationalization Configuration
+# Multi-language support settings
+i18n:
+  # Current locale (en, zh-CN, zh-TW)
+  locale: en
+
+  # Custom locales directory (optional)
+  # If not set, uses built-in locales from modules/shared/pkg/i18n/locales/
+  # locales_dir: ~/.aura/locales
+
+  # Fallback locale when translation is missing (default: en)
+  fallback: en
+
+# Habit Tracking Configuration
+# Automatically learns user operation patterns (tool preferences, output style, workflows)
+habit:
+  # Enable/disable habit tracking
+  enabled: true
+
+  # Minimum number of times a pattern must appear before it's recognized as a habit
+  min_occurrences: 3
+
+  # Minimum confidence threshold (0.0-1.0) for a habit to be considered valid
+  conf_threshold: 0.3
+
+  # Maximum age of actions to consider during analysis (in days)
+  max_action_age_days: 30
+
+  # Maximum number of recent actions to analyze per session
+  analysis_limit: 500
+
+# Location Configuration
+# Settings for user geolocation detection (used by the location Tool)
+location:
+  # Enable IP-based auto-detection of user location (default: true)
+  # When enabled, Aura detects your approximate city/region via public IP
+  auto_detect: true
+
+  # Fixed city name (optional)
+  # When set, skips IP detection and uses this value directly
+  # Useful for privacy concerns or when IP detection is inaccurate
+  # fixed_city: "Beijing"
+
+  # Fixed country name (optional, used together with fixed_city)
+  # fixed_country: "China"

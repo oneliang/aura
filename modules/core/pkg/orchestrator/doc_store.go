@@ -1,0 +1,227 @@
+package orchestrator
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gofrs/flock"
+	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
+)
+
+// DocStore is a file-backed store for collaboration documents.
+// Each document is a single .md file inside docsDir.
+// Concurrent write safety is ensured by advisory file locks.
+type DocStore struct {
+	docsDir string
+	mu      sync.RWMutex
+}
+
+// NewDocStore creates a new document store.
+// docsDir is the directory where collaboration documents are stored (e.g., workspace/docs/).
+func NewDocStore(docsDir string) (*DocStore, error) {
+	if docsDir == "" {
+		return nil, fmt.Errorf("docsDir is required")
+	}
+
+	// Create directory if it doesn't exist
+	if err := ffp.EnsureDir(docsDir); err != nil {
+		return nil, fmt.Errorf("failed to create docs directory: %w", err)
+	}
+
+	return &DocStore{
+		docsDir: docsDir,
+	}, nil
+}
+
+// Save creates or overwrites a document atomically (write-to-temp then rename).
+// Uses file locking to prevent concurrent writes.
+func (s *DocStore) Save(doc *CollaboDoc) error {
+	if doc == nil {
+		return fmt.Errorf("doc is nil")
+	}
+	if doc.ID == "" {
+		return fmt.Errorf("doc.ID is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	filename := s.filename(doc.ID)
+	lockFile := filename + ".lock"
+
+	// Acquire lock
+	lock := flock.New(lockFile)
+	locked, err := lock.TryLock()
+	if err != nil {
+		return fmt.Errorf("failed to acquire lock: %w", err)
+	}
+	if !locked {
+		return fmt.Errorf("document is locked by another process")
+	}
+	defer lock.Unlock()
+
+	// Render document to bytes
+	data, err := RenderDoc(doc)
+	if err != nil {
+		return fmt.Errorf("failed to render document: %w", err)
+	}
+
+	// Write to temp file
+	tmpFile := filename + ".tmp"
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tmpFile, filename); err != nil {
+		os.Remove(tmpFile) // Clean up temp file on failure
+		return fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	return nil
+}
+
+// Load reads and parses a document by ID.
+func (s *DocStore) Load(id string) (*CollaboDoc, error) {
+	if id == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	filename := s.filename(id)
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("document not found: %s", id)
+		}
+		return nil, fmt.Errorf("failed to read document: %w", err)
+	}
+
+	return ParseDoc(data)
+}
+
+// List returns all documents, optionally filtered by status.
+func (s *DocStore) List(status ...DocStatus) ([]*CollaboDoc, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Find all .md files (exclude .lock and .tmp files)
+	pattern := filepath.Join(s.docsDir, "*.md")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list documents: %w", err)
+	}
+
+	var docs []*CollaboDoc
+	statusFilter := make(map[DocStatus]bool)
+	for _, st := range status {
+		statusFilter[st] = true
+	}
+
+	for _, match := range matches {
+		// Skip lock files and temp files
+		base := filepath.Base(match)
+		if filepath.Ext(base) != ".md" {
+			continue
+		}
+
+		data, err := os.ReadFile(match)
+		if err != nil {
+			continue // Skip unreadable files
+		}
+
+		doc, err := ParseDoc(data)
+		if err != nil {
+			continue // Skip unparseable files
+		}
+
+		// Apply status filter if specified
+		if len(statusFilter) > 0 && !statusFilter[doc.Status] {
+			continue
+		}
+
+		docs = append(docs, doc)
+	}
+
+	return docs, nil
+}
+
+// Delete removes a document file.
+func (s *DocStore) Delete(id string) error {
+	if id == "" {
+		return fmt.Errorf("id is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	filename := s.filename(id)
+	lockFile := filename + ".lock"
+
+	// Acquire lock if possible (non-blocking)
+	lock := flock.New(lockFile)
+	locked, _ := lock.TryLock()
+	if locked {
+		defer lock.Unlock()
+	}
+
+	// Remove document file
+	if err := os.Remove(filename); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("document not found: %s", id)
+		}
+		return fmt.Errorf("failed to delete document: %w", err)
+	}
+
+	// Remove lock file if exists
+	os.Remove(lockFile)
+
+	return nil
+}
+
+// UpdateStatus atomically updates the status of a document.
+func (s *DocStore) UpdateStatus(id string, status DocStatus, note string) error {
+	doc, err := s.Load(id)
+	if err != nil {
+		return err
+	}
+
+	doc.Status = status
+	doc.UpdatedAt = time.Now()
+	if note != "" {
+		doc.AddHistory("system", "status_change", note)
+	}
+
+	return s.Save(doc)
+}
+
+// filename returns the full path for a document ID.
+func (s *DocStore) filename(id string) string {
+	return filepath.Join(s.docsDir, sanitizeFilename(id)+".md")
+}
+
+// sanitizeFilename ensures the ID is safe for use in filenames.
+func sanitizeFilename(id string) string {
+	// Simple sanitization: replace dangerous characters
+	// In practice, IDs should already be safe (generated by us)
+	replacer := strings.NewReplacer(
+		"/", "-",
+		"\\", "-",
+		"..", "-",
+		":", "-",
+		"*", "-",
+		"?", "-",
+		"\"", "-",
+		"<", "-",
+		">", "-",
+		"|", "-",
+	)
+	return replacer.Replace(id)
+}

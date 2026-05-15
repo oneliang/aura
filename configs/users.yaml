@@ -1,0 +1,27 @@
+# Users Configuration
+# Multi-user support: each user has isolated data (habits, knowledge, profile, sessions)
+
+# Default user ID used when running CLI commands without explicit user selection
+default: alice
+
+# User definitions list
+definitions:
+  - id: alice
+    name: Alice
+    # API token for external access (used by API server / Feishu adapter)
+    # Format: sk_ + random string
+    api_token: ""
+    # Custom profile path (optional, defaults to ~/.aura/users/{id}/profile.yaml)
+    profile_path: ""
+    # Knowledge directories (private + shared)
+    knowledge_dirs: []
+    # IDs of other users whose shared knowledge this user can access
+    allowed_shared_kb: []
+
+  - id: bob
+    name: Bob
+    api_token: ""
+    profile_path: ""
+    knowledge_dirs: []
+    allowed_shared_kb:
+      - alice  # Bob can read Alice's shared knowledge

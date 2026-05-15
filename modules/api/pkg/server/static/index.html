@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura - Personal AI Assistant</title>
+  <!-- Favicon: dark circle with aurora ring and 'A' -->
+  <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'&gt;&lt;circle cx='32' cy='32' r='30' fill='%231a1a2e' stroke='%23e94560' stroke-width='3'/&gt;&lt;text x='32' y='44' text-anchor='middle' font-family='system-ui,sans-serif' font-size='32' font-weight='bold' fill='%23e94560'&gt;A&lt;/text&gt;&lt;/svg&gt;" type="image/svg+xml">
+  <!-- KaTeX CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-tertiary: #0f3460;
+      --text-primary: #eee;
+      --text-secondary: #aaa;
+      --accent: #e94560;
+      --accent-hover: #ff6b6b;
+      --success: #4ecca3;
+      --border: #2a2a4e;
+      --message-user: #0f3460;
+      --message-assistant: #1a1a2e;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header h1 {
+      font-size: 1.5rem;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .new-chat-btn {
+      width: 100%;
+      margin-top: 15px;
+      padding: 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .new-chat-btn:hover {
+      background: var(--accent-hover);
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    .session-item {
+      padding: 12px 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 5px;
+      transition: background 0.2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .session-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .session-item.active {
+      background: var(--bg-tertiary);
+      border-left: 3px solid var(--accent);
+    }
+
+    .session-item .session-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .session-item .delete-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 5px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .session-item:hover .delete-btn {
+      opacity: 1;
+    }
+
+    .session-item .delete-btn:hover {
+      color: var(--accent);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-primary);
+    }
+
+    .chat-header {
+      padding: 20px 30px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chat-header h2 {
+      font-size: 1.2rem;
+      font-weight: 500;
+    }
+
+    .system-prompt-toggle {
+      padding: 8px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 30px;
+    }
+
+    .message {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 15px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .message.user .message-avatar {
+      background: var(--success);
+      color: white;
+    }
+
+    .message.assistant .message-avatar {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .message-content {
+      flex: 1;
+      background: var(--message-user);
+      padding: 15px 20px;
+      border-radius: 12px;
+      line-height: 1.6;
+    }
+
+    .message.assistant .message-content {
+      background: var(--message-assistant);
+      border: 1px solid var(--border);
+    }
+
+    .message-content pre {
+      background: var(--bg-secondary);
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+
+    .message-content code {
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 13px;
+    }
+
+    .message-content p {
+      margin-bottom: 10px;
+    }
+
+    .message-content p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* KaTeX formula styles */
+    .message-content .katex-display {
+      margin: 15px 0;
+      overflow-x: auto;
+    }
+
+    .message-content .katex {
+      font-size: 1.1em;
+    }
+
+    .message-content .katex-error {
+      color: var(--accent);
+      font-family: monospace;
+    }
+
+    /* Input Area */
+    .input-container {
+      padding: 20px 30px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+
+    .input-wrapper {
+      display: flex;
+      gap: 15px;
+      align-items: flex-end;
+    }
+
+    .input-field {
+      flex: 1;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 15px 20px;
+      color: var(--text-primary);
+      font-size: 14px;
+      resize: none;
+      min-height: 56px;
+      max-height: 200px;
+      font-family: inherit;
+    }
+
+    .input-field:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .send-btn {
+      width: 56px;
+      height: 56px;
+      background: var(--accent);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .send-btn:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Empty State */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-secondary);
+    }
+
+    .empty-state svg {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+      color: var(--text-primary);
+    }
+
+    /* Empty message placeholder */
+    .empty-message {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+      display: flex;
+      gap: 5px;
+      padding: 15px 20px;
+    }
+
+    .typing-indicator span {
+      width: 8px;
+      height: 8px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      animation: bounce 1.4s infinite ease-in-out;
+    }
+
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+
+    /* Thinking content styles */
+    .thinking {
+      color: var(--text-secondary);
+      font-style: italic;
+      font-size: 0.9em;
+      opacity: 0.8;
+      display: block;
+      margin-bottom: 10px;
+      padding: 10px 15px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      border-left: 3px solid var(--accent);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .thinking.complete {
+      opacity: 1;
+      border-left-color: var(--success);
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 25px;
+      width: 500px;
+      max-width: 90%;
+    }
+
+    .modal h3 {
+      margin-bottom: 15px;
+      color: var(--accent);
+    }
+
+    .modal textarea {
+      width: 100%;
+      min-height: 150px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 15px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .modal-actions button {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .modal-actions .cancel-btn {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .modal-actions .save-btn {
+      background: var(--accent);
+      color: white;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-secondary);
+    }
+
+    /* System message */
+    .message.system .message-content {
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    /* Action/Result blocks */
+    .action-block {
+      padding: 8px 12px;
+      margin: 8px 0;
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+    .result-block {
+      padding: 8px 12px;
+      margin: 8px 0;
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--success);
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Confirmation notification */
+    .confirm-block {
+      padding: 6px 12px;
+      margin: 6px 0;
+      background: rgba(233, 69, 96, 0.1);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    /* Streaming cursor animation */
+    .streaming::after {
+      content: '▊';
+      animation: blink 1s step-end infinite;
+      color: var(--accent);
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* Task widget */
+    .task-widget {
+      margin: 10px 0;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    .task-widget h4 {
+      margin: 0 0 8px 0;
+      color: var(--accent);
+      font-size: 0.9rem;
+    }
+    .task-item {
+      padding: 4px 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .task-status {
+      width: 16px;
+      text-align: center;
+    }
+    .task-pending { color: var(--text-secondary); }
+    .task-in-progress { color: #e9a045; }
+    .task-done { color: var(--success); }
+    .task-failed { color: var(--accent); }
+
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 100;
+        transform: translateX(-100%);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .menu-toggle {
+        display: block;
+      }
+    }
+
+    /* Login Overlay */
+    .login-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg-primary);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-box {
+      background: var(--bg-secondary);
+      padding: 40px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+
+    .login-box h2 {
+      color: var(--accent);
+      margin-bottom: 30px;
+      font-size: 1.5rem;
+    }
+
+    .login-box input {
+      width: 100%;
+      padding: 12px;
+      margin: 16px 0;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .login-box input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .login-box button {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .login-box button:hover {
+      background: var(--accent-hover);
+    }
+
+    .login-error {
+      color: var(--accent);
+      margin-top: 12px;
+      font-size: 13px;
+    }
+
+    /* Sidebar Header with User Info */
+    .sidebar-header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 15px;
+      justify-content: space-between;
+    }
+
+    .user-badge {
+      background: var(--bg-tertiary);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .logout-btn {
+      padding: 6px 12px;
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .logout-btn:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+  </style>
+  <!-- markdown-it -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+  <!-- KaTeX -->
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+</head>
+<body>
+  <!-- Login Overlay -->
+  <div id="login-overlay" class="login-overlay" style="display:none">
+    <div class="login-box">
+      <h2>Aura Login</h2>
+      <input type="text" id="login-user-id" placeholder="User ID" autocomplete="username">
+      <button onclick="handleLogin()">Login</button>
+      <div id="login-error" class="login-error"></div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+        Aura
+      </h1>
+      <button class="new-chat-btn" onclick="createNewSession()">+ New Chat</button>
+      <div class="sidebar-header-right">
+        <span id="current-user-id" class="user-badge"></span>
+        <button class="logout-btn" onclick="handleLogout()">Logout</button>
+      </div>
+    </div>
+    <div class="session-list" id="sessionList">
+      <!-- Sessions will be loaded here -->
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="chat-header">
+      <h2 id="chatTitle">Select a chat</h2>
+      <button class="system-prompt-toggle" onclick="toggleSystemPrompt()">System Prompt</button>
+    </div>
+
+    <div class="chat-container" id="chatContainer">
+      <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+        </svg>
+        <h3>Welcome to Aura</h3>
+        <p>Select a conversation or start a new one</p>
+      </div>
+    </div>
+
+    <div class="input-container">
+      <div class="input-wrapper">
+        <textarea
+          class="input-field"
+          id="inputField"
+          placeholder="Type a message..."
+          rows="1"
+          onkeydown="handleKeyDown(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- System Prompt Modal -->
+  <div class="modal-overlay" id="systemPromptModal">
+    <div class="modal">
+      <h3>System Prompt</h3>
+      <textarea id="systemPromptInput" placeholder="Enter system prompt to customize AI behavior..."></textarea>
+      <div class="modal-actions">
+        <button class="cancel-btn" onclick="toggleSystemPrompt()">Cancel</button>
+        <button class="save-btn" onclick="saveSystemPrompt()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api';
+    let currentSessionId = null;
+    let sessions = [];
+    let isLoading = false;
+    let currentAbortController = null; // For cancelling in-flight SSE requests
+
+    // Auth state
+    let authToken = null;
+    let currentUserID = null;
+
+    // Streaming state
+    let accumulatedContent = '';
+    let isStreaming = false;
+    let accumulatedThinking = '';  // For thinking_chunk accumulation
+
+    // Task widget state
+    let tasks = {};
+
+    // Input history state
+    let messageHistory = [];      // Sent messages history array
+    let historyIndex = -1;        // Current history index (-1 = new input)
+    let savedDraft = '';          // Saved draft while browsing history
+
+    // Initialize - Check auth first
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('Aura UI loaded');
+      checkAuthAndInit();
+    });
+
+    // Check authentication and initialize
+    async function checkAuthAndInit() {
+      authToken = localStorage.getItem('aura_token');
+      currentUserID = localStorage.getItem('aura_user_id');
+
+      if (authToken) {
+        // Validate existing token
+        try {
+          const resp = await fetch(`${API_BASE}/auth/validate`, {
+            headers: { 'Authorization': 'Bearer ' + authToken }
+          });
+          if (resp.ok) {
+            showMainUI();
+            loadSessions();
+          } else {
+            // Token invalid, show login
+            showLoginOverlay();
+          }
+        } catch (e) {
+          console.error('Token validation failed:', e);
+          showLoginOverlay();
+        }
+      } else {
+        showLoginOverlay();
+      }
+    }
+
+    // Show login overlay
+    function showLoginOverlay() {
+      document.getElementById('login-overlay').style.display = 'flex';
+      document.getElementById('sidebar').style.display = 'none';
+      document.querySelector('.main-content').style.display = 'none';
+    }
+
+    // Show main UI
+    function showMainUI() {
+      document.getElementById('login-overlay').style.display = 'none';
+      document.getElementById('sidebar').style.display = 'flex';
+      document.querySelector('.main-content').style.display = 'flex';
+      // Update user badge
+      document.getElementById('current-user-id').textContent = currentUserID || 'User';
+    }
+
+    // Handle login
+    async function handleLogin() {
+      const userID = document.getElementById('login-user-id').value.trim();
+      if (!userID) {
+        document.getElementById('login-error').textContent = 'Please enter User ID';
+        return;
+      }
+
+      try {
+        const resp = await fetch(`${API_BASE}/auth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userID })
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          authToken = data.token;
+          currentUserID = userID;
+          localStorage.setItem('aura_token', authToken);
+          localStorage.setItem('aura_user_id', userID);
+          showMainUI();
+          loadSessions();
+        } else {
+          const err = await resp.json();
+          document.getElementById('login-error').textContent = err.message || 'User not found';
+        }
+      } catch (e) {
+        console.error('Login failed:', e);
+        document.getElementById('login-error').textContent = 'Connection failed';
+      }
+    }
+
+    // Handle logout
+    function handleLogout() {
+      authToken = null;
+      currentUserID = null;
+      localStorage.removeItem('aura_token');
+      localStorage.removeItem('aura_user_id');
+      currentSessionId = null;
+      sessions = [];
+      showLoginOverlay();
+    }
+
+    // Authenticated fetch wrapper
+    async function authenticatedFetch(url, options = {}) {
+      if (!authToken) {
+        throw new Error('Not authenticated');
+      }
+
+      options.headers = options.headers || {};
+      options.headers['Authorization'] = 'Bearer ' + authToken;
+
+      const resp = await fetch(url, options);
+      if (resp.status === 401) {
+        // Token expired/invalid
+        showLoginOverlay();
+        throw new Error('Session expired');
+      }
+      return resp;
+    }
+
+    // Auto-resize textarea
+    function autoResize(textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
+
+    // Handle Enter key and history navigation
+    function handleKeyDown(event) {
+      const input = document.getElementById('inputField');
+
+      // Up arrow: browse history (older messages)
+      if (event.key === 'ArrowUp') {
+        // Only trigger history when single line and cursor at start
+        if (input.value.indexOf('\n') === -1 && input.selectionStart === 0) {
+          if (messageHistory.length > 0 && historyIndex < messageHistory.length - 1) {
+            if (historyIndex === -1) {
+              savedDraft = input.value; // Save current draft
+            }
+            historyIndex++;
+            input.value = messageHistory[messageHistory.length - 1 - historyIndex];
+            autoResize(input);
+            event.preventDefault();
+          }
+        }
+      }
+      // Down arrow: browse history (newer messages)
+      else if (event.key === 'ArrowDown') {
+        // Only trigger history when single line and cursor at end
+        if (input.value.indexOf('\n') === -1 && input.selectionStart === input.value.length) {
+          if (historyIndex > 0) {
+            historyIndex--;
+            input.value = messageHistory[messageHistory.length - 1 - historyIndex];
+            autoResize(input);
+          } else if (historyIndex === 0) {
+            historyIndex = -1;
+            input.value = savedDraft; // Restore draft
+            autoResize(input);
+          }
+          event.preventDefault();
+        }
+      }
+      // Enter sends message
+      else if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    }
+
+    // Load sessions
+    async function loadSessions() {
+      console.log('loadSessions started');
+      try {
+        const response = await authenticatedFetch(`${API_BASE}/sessions`);
+        const result = await response.json();
+        // Backend returns: { status: "ok", data: { sessions: [...] } }
+        sessions = result.data?.sessions || [];
+
+        // Sort sessions by updated_at descending (newest first)
+        sessions.sort((a, b) => b.updated_at - a.updated_at);
+
+        renderSessionList();
+
+        // Auto-select first session if none selected
+        console.log('Checking auto-select: sessions.length=', sessions.length, 'currentSessionId=', currentSessionId);
+        if (sessions.length > 0 && !currentSessionId) {
+          console.log('Auto-selecting first session:', sessions[0].id);
+          await selectSession(sessions[0].id);
+        } else if (sessions.length === 0) {
+          console.log('No sessions, showing empty state');
+          // Show empty state when no sessions
+          showEmptyState();
+        }
+        console.log('loadSessions completed, currentSessionId:', currentSessionId);
+      } catch (error) {
+        console.error('Failed to load sessions:', error);
+        if (error.message === 'Session expired') return; // Already showing login
+      }
+    }
+
+    // Show empty state
+    function showEmptyState() {
+      currentSessionId = null;
+      document.getElementById('chatTitle').textContent = 'Select a chat';
+
+      // Clear chat container and show empty state
+      const container = document.getElementById('chatContainer');
+      if (container) {
+        container.innerHTML = `
+          <div class="empty-state" id="emptyState">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+            </svg>
+            <h3>Welcome to Aura</h3>
+            <p>Select a conversation or start a new one</p>
+          </div>
+        `;
+      }
+    }
+
+    // Hide empty state
+    function hideEmptyState() {
+      const emptyState = document.getElementById('emptyState');
+      if (emptyState) {
+        emptyState.style.display = 'none';
+      }
+    }
+
+    // Render session list
+    // Note: sessions array is already sorted by updated_at descending in loadSessions()
+    function renderSessionList() {
+      const container = document.getElementById('sessionList');
+      container.innerHTML = sessions.map(session => {
+        // Display name if available, otherwise show session ID
+        const displayName = session.name || session.id;
+        return `
+        <div class="session-item ${session.id === currentSessionId ? 'active' : ''}" onclick="selectSession('${session.id}')">
+          <span class="session-name">${escapeHtml(displayName)}</span>
+          <button class="delete-btn" onclick="event.stopPropagation(); deleteSession('${session.id}')">×</button>
+        </div>
+      `;
+      }).join('');
+    }
+
+    // Select session
+    async function selectSession(sessionId) {
+      console.log('selectSession called with:', sessionId);
+      try {
+        currentSessionId = sessionId;
+        const session = sessions.find(s => s.id === sessionId);
+
+        document.getElementById('chatTitle').textContent = session?.name || 'Chat';
+        hideEmptyState();
+
+        // Clear chat container immediately to avoid showing messages from previous session
+        const container = document.getElementById('chatContainer');
+        if (container) {
+          container.innerHTML = '<div class="empty-message"><p>Loading...</p></div>';
+        }
+
+        renderSessionList();
+        await loadMessages(sessionId);
+
+        // Load input history for the session
+        await loadInputHistory(sessionId);
+
+        console.log('selectSession completed, currentSessionId:', currentSessionId);
+      } catch (error) {
+        console.error('selectSession error:', error);
+      }
+    }
+
+    // Load input history for session
+    async function loadInputHistory(sessionId) {
+      try {
+        const response = await authenticatedFetch(`${API_BASE}/sessions/${sessionId}/input_history?limit=50`);
+        const result = await response.json();
+        messageHistory = result.history || [];
+        historyIndex = -1;
+        savedDraft = '';
+      } catch (error) {
+        console.error('Failed to load input history:', error);
+        messageHistory = [];
+        historyIndex = -1;
+        savedDraft = '';
+      }
+    }
+
+    // Load messages
+    async function loadMessages(sessionId) {
+      try {
+        const response = await authenticatedFetch(`${API_BASE}/sessions/${sessionId}/messages?limit=50`);
+        const result = await response.json();
+        // Backend returns: { status: "ok", data: { messages: [...] } }
+        renderMessages(result.data?.messages || []);
+      } catch (error) {
+        console.error('Failed to load messages:', error);
+      }
+    }
+
+    // Render messages - completely replaces container content
+    function renderMessages(messages) {
+      const container = document.getElementById('chatContainer');
+
+      // Build HTML string first
+      if (messages.length === 0) {
+        container.innerHTML = `
+          <div class="empty-message">
+            <p>No messages yet. Start the conversation!</p>
+          </div>
+        `;
+        return;
+      }
+
+      const messagesHTML = messages.map(msg => `
+        <div class="message ${msg.role}">
+          <div class="message-avatar">${msg.role === 'user' ? 'U' : 'A'}</div>
+          <div class="message-content">${formatMessage(msg.content)}</div>
+        </div>
+      `).join('');
+
+      container.innerHTML = messagesHTML;
+      scrollToBottom();
+    }
+
+    // Initialize markdown-it
+    const md = window.markdownit({
+      html: false,
+      linkify: true,
+      typographer: true,
+      highlight: function (str, lang) {
+        return '<pre><code>' + escapeHtml(str) + '</code></pre>';
+      }
+    });
+
+    // Format message with markdown-it + KaTeX
+    function formatMessage(content) {
+      if (!content) return '';
+
+      // Render markdown first
+      let html = md.render(content);
+
+      // Process LaTeX: $$...$$ (block) first, then $...$ (inline)
+      html = html.replace(/\$\$([\s\S]+?)\$\$/g, (match, tex) => {
+        try {
+          return katex.renderToString(tex.trim(), { displayMode: true });
+        } catch (e) {
+          return '<span class="katex-error">' + escapeHtml(match) + '</span>';
+        }
+      });
+
+      html = html.replace(/\$([^\$\n]+?)\$/g, (match, tex) => {
+        try {
+          return katex.renderToString(tex.trim(), { displayMode: false });
+        } catch (e) {
+          return '<span class="katex-error">' + escapeHtml(match) + '</span>';
+        }
+      });
+
+      return html;
+    }
+
+    // Send message with SSE streaming
+    async function sendMessage() {
+      const input = document.getElementById('inputField');
+      const content = input.value.trim();
+
+      console.log('sendMessage called:', { content, currentSessionId, isLoading });
+
+      if (!content || isLoading) {
+        console.log('sendMessage skipped:', { hasContent: !!content, isLoading });
+        return;
+      }
+
+      // Auto-create session if no session is selected
+      if (!currentSessionId) {
+        console.log('No session selected, creating new session automatically');
+        await createNewSessionAndContinue(content);
+        return;
+      }
+
+      isLoading = true;
+      document.getElementById('sendBtn').disabled = true;
+
+      // Reset streaming state
+      accumulatedContent = '';
+      isStreaming = false;
+
+      // Get current messages container
+      const container = document.getElementById('chatContainer');
+
+      // Add user message immediately
+      const userMessageHTML = `
+        <div class="message user">
+          <div class="message-avatar">U</div>
+          <div class="message-content">${formatMessage(content)}</div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', userMessageHTML);
+
+      // Add assistant placeholder with typing indicator
+      const assistantMessageId = 'assistant-' + Date.now();
+      const typingIndicatorHTML = `
+        <div class="message assistant" id="${assistantMessageId}">
+          <div class="message-avatar">A</div>
+          <div class="message-content">
+            <div class="typing-indicator"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', typingIndicatorHTML);
+      scrollToBottom();
+
+      input.value = '';
+      autoResize(input);
+
+      // Add to input history (dedup)
+      if (content && messageHistory[messageHistory.length - 1] !== content) {
+        messageHistory.push(content);
+        // Limit history size
+        if (messageHistory.length > 100) {
+          messageHistory.shift();
+        }
+      }
+      historyIndex = -1;
+      savedDraft = '';
+
+      // Cache DOM references
+      const assistantEl = document.getElementById(assistantMessageId);
+      const contentEl = assistantEl.querySelector('.message-content');
+
+      try {
+        // SSE can't use Authorization header, pass token in query param
+        const url = `${API_BASE}/sessions/${currentSessionId}/message?token=${encodeURIComponent(authToken)}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          body: JSON.stringify({ content, source: 'web' })
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            showLoginOverlay();
+            throw new Error('Session expired');
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = 'message';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+
+          // Process all complete SSE messages
+          while (buffer.includes('\n\n')) {
+            const newlineIdx = buffer.indexOf('\n\n');
+            const rawEvent = buffer.slice(0, newlineIdx);
+            buffer = buffer.slice(newlineIdx + 2);
+
+            const lines = rawEvent.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('event:')) {
+                currentEvent = line.slice(6).trim();
+              } else if (line.startsWith('data:')) {
+                const data = line.slice(5).trim();
+                handleSSEEvent(currentEvent, data, assistantEl, contentEl);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to send message:', error);
+        contentEl.innerHTML = `<span class="error">Error: ${escapeHtml(error.message)}</span>`;
+      } finally {
+        isLoading = false;
+        document.getElementById('sendBtn').disabled = false;
+      }
+    }
+
+    // Handle SSE event
+    function handleSSEEvent(eventType, data, assistantEl, contentEl) {
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        parsed = { content: data };
+      }
+
+      switch (eventType) {
+        case 'thinking_start':
+          // Initialize thinking accumulation
+          accumulatedThinking = '';
+          contentEl.innerHTML = `<span class="thinking">💭 Thinking...</span>`;
+          break;
+        case 'thinking_chunk':
+          // Accumulate thinking content chunks
+          if (parsed.content) {
+            accumulatedThinking += parsed.content;
+            // Update display with accumulated content (real-time streaming)
+            const thinkingEl = contentEl.querySelector('.thinking');
+            if (thinkingEl) {
+              thinkingEl.textContent = '💭 ' + accumulatedThinking;
+            }
+          }
+          break;
+        case 'thinking_end':
+          // Finalize thinking display
+          const thinkingEl = contentEl.querySelector('.thinking');
+          if (thinkingEl && accumulatedThinking) {
+            thinkingEl.textContent = accumulatedThinking;
+            thinkingEl.classList.add('complete');
+          }
+          accumulatedThinking = '';
+          break;
+        case 'response_chunk':
+          // Streaming mode: accumulate and render in real-time
+          accumulatedContent += (parsed.content || '');
+          isStreaming = true;
+          // Preserve thinking content if exists and complete
+          const thinkingCompleteEl = contentEl.querySelector('.thinking.complete');
+          if (thinkingCompleteEl) {
+            // Insert response after thinking
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'response-text streaming';
+            responseDiv.innerHTML = formatMessage(accumulatedContent);
+            // Remove any existing response-text (from previous chunks)
+            const existingResponse = contentEl.querySelector('.response-text');
+            if (existingResponse) existingResponse.remove();
+            contentEl.appendChild(responseDiv);
+          } else {
+            contentEl.innerHTML = formatMessage(accumulatedContent);
+            contentEl.classList.add('streaming');
+          }
+          break;
+        case 'response':
+        case 'message':
+          // Skip user messages echoed back from SSE (already rendered by frontend)
+          if (parsed.role === 'user') break;
+          // Remove typing indicator
+          const typingIndicator = contentEl.querySelector('.typing-indicator');
+          if (typingIndicator) typingIndicator.remove();
+          // Preserve thinking content if exists and complete
+          const thinkingCompleteEl2 = contentEl.querySelector('.thinking.complete');
+          // If streaming accumulated content, use it; otherwise use response content
+          if (isStreaming && accumulatedContent) {
+            contentEl.classList.remove('streaming');
+            if (thinkingCompleteEl2) {
+              // Keep thinking, replace response-text with final content
+              const existingResponse = contentEl.querySelector('.response-text');
+              if (existingResponse) {
+                existingResponse.innerHTML = formatMessage(accumulatedContent);
+                existingResponse.classList.remove('streaming');
+              } else {
+                const responseDiv = document.createElement('div');
+                responseDiv.className = 'response-text';
+                responseDiv.innerHTML = formatMessage(accumulatedContent);
+                contentEl.appendChild(responseDiv);
+              }
+            } else {
+              contentEl.innerHTML = formatMessage(accumulatedContent);
+            }
+            accumulatedContent = '';
+            isStreaming = false;
+          } else {
+            if (thinkingCompleteEl2) {
+              // Keep thinking, add response after it
+              const responseDiv = document.createElement('div');
+              responseDiv.className = 'response-text';
+              responseDiv.innerHTML = formatMessage(parsed.content || data);
+              contentEl.appendChild(responseDiv);
+            } else {
+              contentEl.innerHTML = formatMessage(parsed.content || data);
+            }
+          }
+          break;
+        case 'tool_start':
+          contentEl.innerHTML += `<div class="action-block">⚡ <strong>${escapeHtml(parsed.tool || 'Tool')}</strong></div>`;
+          break;
+        case 'tool_end':
+          contentEl.innerHTML += `<div class="result-block">✓ <strong>${escapeHtml(parsed.tool || 'Tool')}</strong> completed</div>`;
+          break;
+        case 'action':
+          // Parse action JSON to extract tool name
+          let actionToolName = '';
+          try {
+            const action = JSON.parse(parsed.content || '{}');
+            actionToolName = action.tool || '';
+          } catch {}
+          if (actionToolName) {
+            contentEl.innerHTML += `<div class="action-block">⚡ <strong>${escapeHtml(actionToolName)}</strong></div>`;
+          } else {
+            contentEl.innerHTML += `<div class="action-block">⚡ ${escapeHtml(parsed.content || '').substring(0, 100)}</div>`;
+          }
+          break;
+        case 'result':
+          const resultText = (parsed.content || '').length > 200
+            ? (parsed.content || '').substring(0, 200) + '...'
+            : (parsed.content || '');
+          contentEl.innerHTML += `<div class="result-block">📋 ${escapeHtml(resultText)}</div>`;
+          break;
+        case 'command_matched':
+          contentEl.innerHTML += `<div class="action-block" style="border-left-color: #4ecca3;">🎯 识别命令: ${escapeHtml(parsed.command || parsed.content || '')}</div>`;
+          // 清空 UI 状态（与 TUI clearUIState 一致）
+          if (parsed.content === 'command_clear') {
+            clearChatUI();
+          }
+          break;
+        case 'command_result':
+          contentEl.innerHTML += `<div class="result-block" style="border-left-color: #4ecca3;">✓ ${escapeHtml(parsed.content || '')}</div>`;
+          break;
+        case 'confirmation_request':
+          contentEl.innerHTML += `<div class="confirm-block">🔒 自动审批: ${escapeHtml(parsed.toolName || 'tool')}</div>`;
+          break;
+        case 'task_create':
+          addTask(parsed.task_id, parsed.content || '');
+          renderTaskWidget(contentEl);
+          break;
+        case 'task_update':
+          updateTask(parsed.task_id, parsed.status, parsed.notes);
+          renderTaskWidget(contentEl);
+          break;
+        case 'task_list':
+          if (parsed.tasks && Array.isArray(parsed.tasks)) {
+            tasks = {};
+            for (const t of parsed.tasks) {
+              tasks[t.id] = { id: t.id, content: t.content || '', status: t.status || 'pending' };
+            }
+            renderTaskWidget(contentEl);
+          }
+          break;
+        case 'error':
+          contentEl.innerHTML = `<span class="error">Error: ${escapeHtml(parsed.message || parsed.content || data)}</span>`;
+          break;
+        case 'done':
+          // Streaming complete — finalize
+          if (isStreaming && accumulatedContent) {
+            contentEl.classList.remove('streaming');
+            contentEl.innerHTML = formatMessage(accumulatedContent);
+            accumulatedContent = '';
+            isStreaming = false;
+          }
+          break;
+        default:
+          console.log('Unknown SSE event:', eventType, data);
+      }
+      scrollToBottom();
+    }
+
+    // Task widget helpers
+    function addTask(taskId, content) {
+      tasks[taskId] = { id: taskId, content, status: 'pending' };
+    }
+
+    function updateTask(taskId, status, notes) {
+      if (tasks[taskId]) {
+        tasks[taskId].status = status || tasks[taskId].status;
+        if (notes) tasks[taskId].notes = notes;
+      }
+    }
+
+    // Clear chat UI state (consistent with TUI clearUIState)
+    function clearChatUI() {
+      // Clear chat container
+      const container = document.getElementById('chatContainer');
+      if (container) {
+        container.innerHTML = `
+          <div class="empty-state" id="emptyState">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+            </svg>
+            <h3>Welcome to Aura</h3>
+            <p>Select a conversation or start a new one</p>
+          </div>
+        `;
+      }
+      // Clear task list
+      tasks = {};
+      // Reset streaming state
+      accumulatedContent = '';
+      accumulatedThinking = '';
+      isStreaming = false;
+    }
+
+    function renderTaskWidget(contentEl) {
+      const taskIds = Object.keys(tasks);
+      if (taskIds.length === 0) {
+        const widget = document.getElementById('taskWidget');
+        if (widget) widget.remove();
+        return;
+      }
+
+      let widget = document.getElementById('taskWidget');
+      if (!widget) {
+        widget = document.createElement('div');
+        widget.id = 'taskWidget';
+        widget.className = 'task-widget';
+        contentEl.appendChild(widget);
+      }
+
+      let html = '<h4>Tasks</h4>';
+      for (const id of taskIds) {
+        const task = tasks[id];
+        let statusIcon = '○';
+        let statusClass = 'task-pending';
+        if (task.status === 'in_progress') { statusIcon = '◐'; statusClass = 'task-in-progress'; }
+        else if (task.status === 'done' || task.status === 'completed') { statusIcon = '●'; statusClass = 'task-done'; }
+        else if (task.status === 'failed') { statusIcon = '✗'; statusClass = 'task-failed'; }
+
+        html += `<div class="task-item"><span class="task-status ${statusClass}">${statusIcon}</span><span>${escapeHtml(task.content)}</span></div>`;
+      }
+      widget.innerHTML = html;
+    }
+    async function createNewSession() {
+      try {
+        const response = await authenticatedFetch(`${API_BASE}/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'New Chat' })
+        });
+
+        const result = await response.json();
+        // Backend returns: { status: "created", data: { session: {...} } }
+        console.log('Created new session:', result.data?.session?.id);
+        await loadSessions(); // This will auto-select the new session
+      } catch (error) {
+        console.error('Failed to create session:', error);
+        if (error.message === 'Session expired') return; // Already showing login
+      }
+    }
+
+    // Create new session and continue sending message
+    async function createNewSessionAndContinue(messageContent) {
+      try {
+        const response = await authenticatedFetch(`${API_BASE}/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'New Chat' })
+        });
+
+        const result = await response.json();
+        const newSession = result.data?.session;
+
+        if (!newSession) {
+          throw new Error('Failed to create session');
+        }
+
+        console.log('Created new session:', newSession.id);
+
+        // Update sessions array and select the new session
+        sessions.unshift(newSession);
+        currentSessionId = newSession.id;
+
+        // Update UI to show selected session
+        document.getElementById('chatTitle').textContent = newSession.name || 'Chat';
+        renderSessionList();
+        hideEmptyState();
+
+        // Clear chat container (no messages yet)
+        const container = document.getElementById('chatContainer');
+        if (container) {
+          container.innerHTML = '';
+        }
+
+        // Reset loading state and send the message
+        isLoading = false;
+        document.getElementById('sendBtn').disabled = false;
+
+        // Recursively call sendMessage to send the actual message
+        await sendMessage();
+      } catch (error) {
+        console.error('Failed to create session:', error);
+        isLoading = false;
+        document.getElementById('sendBtn').disabled = false;
+        if (error.message === 'Session expired') return; // Already showing login
+      }
+    }
+
+    // Delete session
+    async function deleteSession(sessionId) {
+      if (!confirm('Delete this chat?')) return;
+
+      try {
+        await authenticatedFetch(`${API_BASE}/sessions/${sessionId}`, {
+          method: 'DELETE'
+        });
+
+        await loadSessions();
+
+        if (currentSessionId === sessionId) {
+          currentSessionId = null;
+          document.getElementById('chatContainer').innerHTML = '';
+          showEmptyState();
+        }
+      } catch (error) {
+        console.error('Failed to delete session:', error);
+        if (error.message === 'Session expired') return; // Already showing login
+      }
+    }
+
+    // Toggle system prompt modal
+    function toggleSystemPrompt() {
+      const modal = document.getElementById('systemPromptModal');
+      modal.classList.toggle('active');
+
+      if (modal.classList.contains('active') && currentSessionId) {
+        const session = sessions.find(s => s.id === currentSessionId);
+        document.getElementById('systemPromptInput').value = session?.system_prompt || '';
+      }
+    }
+
+    // Save system prompt
+    async function saveSystemPrompt() {
+      if (!currentSessionId) return;
+
+      const systemPrompt = document.getElementById('systemPromptInput').value;
+
+      try {
+        await authenticatedFetch(`${API_BASE}/sessions/${currentSessionId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system_prompt: systemPrompt })
+        });
+
+        toggleSystemPrompt();
+        await loadSessions();
+      } catch (error) {
+        console.error('Failed to save system prompt:', error);
+        if (error.message === 'Session expired') return; // Already showing login
+      }
+    }
+
+    // Scroll to bottom
+    function scrollToBottom() {
+      const container = document.getElementById('chatContainer');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

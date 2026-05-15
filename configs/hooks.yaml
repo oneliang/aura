@@ -1,0 +1,74 @@
+# Aura Hooks Configuration
+# Process-isolated subprocesses triggered on events.
+# File: ~/.aura/hooks.yaml
+
+# Master switch — set false for zero overhead (no hooks execute)
+enabled: true
+
+# PreToolUse: triggered after tool confirmation check, before execution
+# Supports regex matcher for filtering by tool name
+PreToolUse:
+  # Example: audit-log all bash tool invocations
+  # - matcher: "bash"
+  #   hooks:
+  #     - type: command
+  #       command: "audit-log --tool '{{.tool_name}}' --session '{{.session_id}}'"
+  #       timeout: 30
+
+# PostToolUse: triggered after tool execution succeeds
+PostToolUse:
+  # Example: auto-format files after write/edit tools
+  # - matcher: "file_write|file_edit"
+  #   hooks:
+  #     - type: command
+  #       command: "prettier --write {{.tool_input.file_path}}"
+  #       timeout: 30
+
+# PostToolUseFailure: triggered after tool execution fails
+PostToolUseFailure: []
+
+# UserPromptSubmit: triggered after user input, before skill matching (blocking)
+# Exit code 2 or continue:false blocks processing
+UserPromptSubmit:
+  # Example: scan user input for sensitive data patterns
+  # - hooks:
+  #     - type: command
+  #       command: "scan-sensitive-data"
+  #       timeout: 30
+
+# SessionStart: triggered after runtime initialization succeeds
+SessionStart: []
+
+# SessionEnd: triggered during runtime shutdown
+SessionEnd:
+  # Example: archive session on shutdown
+  # - hooks:
+  #     - type: command
+  #       command: "archive-session '{{.session_id}}'"
+  #       timeout: 60
+
+# Stop: triggered after ReAct loop completes normally
+Stop: []
+
+# StopFailure: triggered after ReAct loop panics
+StopFailure: []
+
+# SubagentStop: triggered after sub-agent execution completes
+SubagentStop: []
+
+# PreCompact: triggered before conversation summarization
+PreCompact: []
+
+# PostCompact: triggered after conversation summarization
+PostCompact: []
+
+# TaskCreated: triggered when a new task is created
+TaskCreated: []
+
+# TaskCompleted: triggered when a task is marked completed
+TaskCompleted: []
+
+# FileChanged: triggered on file system changes (requires watch_paths)
+FileChanged: []
+# watch_paths:
+#   - ~/.aura/config.yaml

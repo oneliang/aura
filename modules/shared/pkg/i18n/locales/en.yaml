@@ -1,0 +1,439 @@
+# Agent messages
+agent.system_prompt: "You are Aura, a helpful AI assistant with access to various tools."
+agent.react_format: |
+  When you need to use tools, follow this format:
+  Thought: [your reasoning]
+  Action: {"tool": "tool_name", "parameters": {"param": "value"}}
+  Observation: [tool result]
+  ... (repeat as needed)
+  Final Answer: [your response to the user]
+
+  IMPORTANT: Actions MUST use pure JSON format starting with "Action: ". Never use <tool>, <function>, {{, or any other tags or markup.
+agent.planning_started: "Planning task..."
+agent.planning_completed: "Plan created with %d steps"
+
+# Memory messages
+memory.summarizing: "Summarizing conversation history..."
+memory.summary_prompt: "Summarize the following conversation concisely, preserving key information:"
+memory.cleared: "Conversation memory cleared"
+memory.token_limit: "Token limit reached (%d/%d), triggering summarization"
+
+# Tool messages
+tool.file_read.name: "file_read"
+tool.file_read.desc: "Read file contents from the specified path"
+tool.file_write.name: "file_write"
+tool.file_write.desc: "Write content to a file at the specified path"
+tool.file_search.name: "file_search"
+tool.file_search.desc: "Search for files matching a pattern"
+tool.file_list.name: "file_list"
+tool.file_list.desc: "List directory contents"
+tool.web_fetch.name: "web_fetch"
+tool.web_fetch.desc: "Fetch content from a URL"
+tool.web_search.name: "web_search"
+tool.web_search.desc: "Search the web using DuckDuckGo"
+tool.bash.name: "bash"
+tool.bash.desc: "Execute a shell command"
+tool.ssh_exec.name: "ssh_exec"
+tool.ssh_exec.desc: "Execute a command on a remote server via SSH"
+tool.calculator.name: "calculator"
+tool.calculator.desc: "Perform mathematical calculations"
+tool.datetime.name: "datetime"
+tool.datetime.desc: "Get current date and time"
+tool.text_process.name: "text_process"
+tool.text_process.desc: "Perform text operations (word_count, char_count)"
+tool.knowledge_import.name: "knowledge_import"
+tool.knowledge_import.desc: "Import documents into the knowledge base"
+tool.knowledge_search.name: "knowledge_search"
+tool.knowledge_search.desc: "Search the personal knowledge base"
+tool.code_navigate.name: "code_navigate"
+tool.code_navigate.desc: "Navigate and analyze Go code using gopls LSP"
+tool.permission_denied: "Permission denied for tool: %s"
+tool.execution_failed: "Tool execution failed: %s"
+tool.timeout: "Tool execution timeout after %s"
+
+# CLI messages
+cli.root.short: "Aura - Your Personal AI Assistant"
+cli.root.long: "Aura is a modular personal AI assistant that learns your communication style and helps with various tasks through tool usage."
+cli.session.create.success: "Session created: %s (ID: %s)"
+cli.session.delete.success: "Session deleted: %s"
+cli.session.not_found: "Session not found: %s"
+cli.session.list.title: "Available Sessions"
+cli.session.subscribe.success: "Subscription added: trigger=%q, source=%s"
+cli.knowledge.import.success: "Imported %d documents to knowledge base"
+cli.knowledge.search.no_results: "No results found"
+cli.serve.starting: "Starting API server on port %d..."
+cli.serve.started: "API server started successfully"
+cli.assistant_response: "Aura: %s\n\n"
+cli.error: "Error: %s"
+cli.tool_using: "Using tool: %s"
+cli.tool_completed: "Tool completed"
+cli.sensitive_operation: "Sensitive operation requested:"
+cli.step_label: "Step"
+cli.plan_label: "Plan"
+cli.plan_step_label: "Plan Step %d/%d"
+cli.plan_complete_label: "Plan Complete"
+
+# TUI messages
+tui.placeholder: "Type your message... (Ctrl+C to exit, /help for commands)"
+tui.help.title: "Available Commands"
+tui.help.content: |
+  /help     - Show this help
+  /clear    - Clear conversation
+  /exit     - Exit the application
+  /session  - Manage sessions
+  /tools    - List available tools
+tui.thinking: "Thinking..."
+tui.thinking_label: "Thinking"
+tui.thought: "Thought for %v"
+tui.processing: "Processing..."
+tui.processing_label: "Processing"
+tui.error: "Error: %s"
+tui.no_active_session: "No active session. Use /sessions to select a session first."
+tui.session_switched: "Switched to session: %s"
+tui.already_viewing_session: "Already viewing session: %s"
+tui.session_loaded: "Session loaded: %s"
+tui.history_start: "--- History ---"
+tui.history_end: "--- End of History ---"
+
+# API messages
+api.webhook.received: "Webhook received from %s"
+api.webhook.invalid: "Invalid webhook payload"
+api.session.created: "Session created successfully"
+api.message.sent: "Message sent to session"
+api.error.internal: "Internal server error"
+api.error.not_found: "Resource not found"
+api.error.bad_request: "Bad request: %s"
+api.session.not_found: "Session not found: %s"
+api.session.name_required: "Session name is required"
+api.message.content_required: "Content is required"
+
+# Adapter messages
+adapter.feishu.message_received: "Received message from Feishu"
+adapter.feishu.message_ignored: "Ignored message_read event"
+adapter.feishu.processing_async: "Processing message asynchronously"
+adapter.feishu.processing_sync: "Processing message synchronously"
+adapter.feishu.error.no_sender: "Cannot get sender ID"
+adapter.feishu.error.empty_message: "Skipping empty message"
+
+# Error messages
+error.config.load: "Failed to load configuration: %s"
+error.config.invalid: "Invalid configuration: %s"
+error.llm.connection: "Failed to connect to LLM: %s"
+error.llm.timeout: "LLM request timeout"
+error.file.not_found: "File not found: %s"
+error.file.permission: "Permission denied: %s"
+error.network.timeout: "Network timeout"
+error.network.connection: "Connection failed: %s"
+
+# Engine runtime messages
+engine.exploration_phase: "Phase: Exploration"
+engine.review_phase: "Phase: Review"
+engine.plan_complete: "Plan execution completed"
+engine.verify_phase: "Phase: Verification"
+engine.exploring: "Exploring..."
+engine.summarizing_exploration: "Summarizing exploration..."
+
+# Success messages
+success.operation: "Operation completed successfully"
+success.saved: "Saved successfully"
+success.deleted: "Deleted successfully"
+
+# Internal Commands (natural language commands)
+internal_command.exit.name: "Exit"
+internal_command.exit.desc: "Exit the current conversation session"
+internal_command.quit.name: "Quit"
+internal_command.quit.desc: "Exit the application"
+internal_command.clear.name: "Clear"
+internal_command.clear.desc: "Clear the conversation history"
+internal_command.compact.name: "Compact"
+internal_command.compact.desc: "Summarize conversation history to save memory"
+internal_command.help.name: "Help"
+internal_command.help.desc: "Show available commands and help information"
+internal_command.sessions.name: "Sessions"
+internal_command.sessions.desc: "List all available sessions"
+internal_command.session_create.name: "Create Session"
+internal_command.session_create.desc: "Create a new conversation session"
+internal_command.session_delete.name: "Delete Session"
+internal_command.session_delete.desc: "Delete the current session"
+internal_command.session_show.name: "Show Session"
+internal_command.session_show.desc: "Show details of the current session"
+internal_command.tools.name: "Tools"
+internal_command.tools.desc: "List all available tools"
+internal_command.skills.name: "Skills"
+internal_command.skills.desc: "List all loaded skills"
+internal_command.status.name: "Status"
+internal_command.status.desc: "Show current execution status"
+internal_command.history.name: "History"
+internal_command.history.desc: "Show tool execution history"
+internal_command.memory.name: "Memory"
+internal_command.memory.desc: "Show current memory usage"
+internal_command.model.name: "Model"
+internal_command.model.desc: "Show or switch the current model"
+internal_command.role.name: "Role"
+internal_command.role.desc: "View or set the current role"
+internal_command.profile.name: "Profile"
+internal_command.profile.desc: "View or configure user profile"
+internal_command.config.name: "Config"
+internal_command.config.desc: "View configuration settings"
+internal_command.knowledge.name: "Knowledge"
+internal_command.knowledge.desc: "Search or manage knowledge base"
+
+# Internal command execution messages
+internal_command.tool.name: "Internal Command"
+internal_command.tool.desc: |
+  Execute internal commands like exit, help, clear, session management, etc.
+  Available: command_exit, command_help, command_clear, command_compact,
+  command_sessions, command_session_create, command_session_delete,
+  command_session_show, command_tools, command_skills, command_status, command_history,
+  command_memory, command_model, command_role, command_profile,
+  command_config, command_knowledge, command_quit.
+  Format: {"command": "command_exit", "params": {}}
+internal_command.executed: "Command executed: %s"
+internal_command.executing: "Executing command: %s..."
+internal_command.failed: "Command execution failed: %s"
+internal_command.unknown: "Unknown command: %s"
+
+# Skill management commands
+internal_command.skill_create.name: "Create Skill"
+internal_command.skill_create.desc: "Create a new skill with name, description, and body"
+internal_command.skill_update.name: "Update Skill"
+internal_command.skill_update.desc: "Update an existing skill"
+internal_command.skill_delete.name: "Delete Skill"
+internal_command.skill_delete.desc: "Delete a skill by name"
+internal_command.skill_reload.name: "Reload Skills"
+internal_command.skill_reload.desc: "Reload all skills from disk"
+internal_command.skill_list.name: "List Skills"
+internal_command.skill_list.desc: "List all available skills"
+internal_command.skill_get.name: "Get Skill"
+internal_command.skill_get.desc: "Get details of a specific skill"
+
+# Agent management commands
+internal_command.agent_create.name: "Create Agent"
+internal_command.agent_create.desc: "Create a new agent with name, description, and configuration"
+internal_command.agent_update.name: "Update Agent"
+internal_command.agent_update.desc: "Update an existing agent"
+internal_command.agent_delete.name: "Delete Agent"
+internal_command.agent_delete.desc: "Delete an agent by name"
+internal_command.agent_reload.name: "Reload Agents"
+internal_command.agent_reload.desc: "Reload all agents from disk"
+internal_command.agent_list.name: "List Agents"
+internal_command.agent_list.desc: "List all available agents"
+
+# Config commands
+internal_command.config_get.name: "Get Config"
+internal_command.config_get.desc: "Get a specific configuration value by key"
+
+# MCP commands
+internal_command.mcp_list.name: "List MCP Servers"
+internal_command.mcp_list.desc: "List all configured MCP servers and their status"
+
+# Intent keywords (comma-separated, used for NLP matching)
+intent.keyword.create: "create,new"
+intent.keyword.list: "list,show"
+intent.keyword.delete: "delete,remove"
+intent.keyword.show: "show,what,current"
+intent.keyword.clear: "clear,reset"
+intent.keyword.stats: "stats,status"
+intent.keyword.session: "session"
+intent.keyword.skill: "skill"
+intent.keyword.agent: "agent"
+intent.keyword.config: "config,model,temperature"
+intent.keyword.memory: "memory,conversation"
+intent.keyword.exit: "exit,quit,bye,leave"
+intent.keyword.help: "help,how to,usage"
+
+# Intent patterns (comma-separated, used for parameter extraction)
+intent.pattern.name: "called,named"
+
+# Tool observation messages (P0)
+tool.observation.no_output: "(no output)"
+tool.observation.error_format: "Observation [%s]: error - %v"
+tool.observation.output_format: "Observation [%s]: %s"
+tool.observation.output_empty: "Observation [%s]: (no output)"
+tool.not_allowed_phase: "Tool %q not allowed in current phase"
+tool.output_missing_field: "Tool %q output missing required field %q"
+tool.output_type_mismatch: "Tool %q output field %q type mismatch: expected %s, got %T"
+
+# Engine messages (P0-P1)
+engine.plan_create_failed: "Failed to create plan: %v"
+engine.plan_rejected: "Plan rejected by user."
+engine.step_failed: "Step failed: %s"
+engine.plan_revised: "Plan was revised due to a failed step. Follow the updated plan."
+engine.exploration_cancelled: "Exploration cancelled."
+engine.summarize_discovery: "Summarize what you discovered during exploration in a few sentences."
+engine.step_completed: "Observation: Step completed - %s"
+engine.task_completed: "Task completed."
+engine.summary_assistant_prompt: "You are a helpful assistant that summarizes completed work."
+
+# Error messages (P1)
+error.command.unknown: "Unknown command: %s"
+error.param.session_id_required: "session_id is required"
+error.param.trigger_required: "trigger is required"
+error.param.subscription_id_required: "subscription_id is required"
+error.param.required: "missing required parameter: %s"
+error.param.type_string: "parameter '%s' must be a string"
+error.param.empty: "parameter '%s' cannot be empty"
+error.subscription.not_found: "subscription %s not found"
+error.subscription.unknown: "unknown subscription command: %s"
+error.skill.manager_not_configured: "skill manager not configured"
+error.skill.not_found: "skill '%s' not found"
+error.skill.unknown: "unknown skill command: %s"
+error.agent.manager_not_configured: "agent manager not configured"
+error.agent.delegation_not_configured: "agent delegation not configured"
+error.agent.param_agent_required: "missing 'agent' parameter"
+error.agent.param_task_required: "missing 'task' parameter"
+error.agent.unknown: "unknown agent command: %s"
+error.agent.not_found: "agent '%s' not found"
+error.config.temperature_range: "temperature must be between 0.0 and 1.0, got %f"
+error.config.summary_temp_range: "summary_temp must be between 0.0 and 1.0, got %f"
+error.config.invalid_planning_mode: "invalid planning_mode: %s (must be implicit, explicit, or auto)"
+error.config.unsupported_version: "unsupported config version %q, expected %q"
+error.config.llm_provider_required: "llm.provider is required"
+error.config.llm_baseurl_required: "llm.base_url is required"
+error.config.llm_model_required: "llm.model is required"
+error.config.invalid_llm_provider: "invalid llm.provider: %s (must be ollama, openai, or anthropic)"
+error.config.invalid_log_level: "invalid log.level: %s (must be debug, info, warn, or error)"
+error.config.feishu_appid_empty: "feishu adapter enabled but app_id is empty"
+error.config.feishu_appsecret_empty: "feishu adapter enabled but app_secret is empty"
+error.config.home_dir: "failed to get home directory: %w"
+error.config.read_file: "failed to read config file: %w"
+error.config.unmarshal: "failed to unmarshal config: %w"
+error.config.create_dir: "failed to create config directory: %w"
+error.config.write_file: "failed to write config file: %w"
+
+# Manager messages (P1-P2)
+error.manager.cast_failed: "failed to cast item to %s type"
+error.manager.field_required: "%s %s is required"
+
+# TUI messages (P2)
+tui.session_create_failed: "Failed to create session: %v"
+tui.session_manager_not_init: "Session manager not initialized"
+tui.session_manager_not_available: "Session manager not available."
+tui.no_session_delete: "No active session to delete."
+tui.subscriptions_title: "Subscriptions (%d):"
+tui.sessions_title: "Sessions (%d):"
+tui.no_subscriptions_delete: "No subscriptions to delete."
+tui.select_subscription_delete: "Select a subscription and press 'd' to delete."
+tui.error_getting_subscriptions: "Error getting subscriptions: %v"
+tui.cannot_add_subscription: "Cannot add subscription: no active session"
+tui.trigger_keyword_required: "Trigger keyword is required"
+tui.failed_add_subscription: "Failed to add subscription: %v"
+tui.subscription_added: "Subscription added: trigger=%q, source=%s"
+tui.cannot_delete_subscription: "Cannot delete subscription: no active session"
+tui.failed_delete_subscription: "Failed to delete subscription: %v"
+tui.subscription_deleted: "Subscription deleted: %q"
+tui.cannot_toggle_subscription: "Cannot toggle subscription: no active session"
+tui.failed_toggle_subscription: "Failed to toggle subscription: %v"
+tui.subscription_toggled: "Subscription toggled: %q is now %s"
+tui.command_not_available: "Command not available."
+tui.done_in: "Done in %s"
+
+# Command execution messages (P2)
+command.skills_not_available: "Skills not available"
+command.skill_management_not_configured: "Skill management not configured"
+command.agent_delegation_not_configured: "Agent delegation not configured"
+command.agent_management_not_configured: "Agent management not configured"
+command.no_sessions_found: "No sessions found."
+command.sessions_subscriptions_title: "Sessions and their subscriptions:\n\n"
+command.session_no_subscriptions: "  No subscriptions\n"
+command.session_subscription_active: "active"
+command.session_subscription_inactive: "inactive"
+command.no_subscriptions_session: "No subscriptions for session %s"
+command.subscriptions_for_session: "Subscriptions for %s [%s]:\n\n"
+command.subscription_added_to_session: "Subscription added to session %s:\n  Trigger: %q\n  Source: %s"
+command.subscription_deleted_from_session: "Subscription %s deleted from session %s"
+command.skill_created: "Skill '%s' created successfully at %s"
+command.skill_updated: "Skill '%s' updated successfully"
+command.skill_deleted: "Skill '%s' deleted successfully"
+command.skills_reloaded: "Reloaded %d skills"
+command.no_skills_available: "No skills available"
+command.available_skills: "Available skills (%d):\n"
+command.skill_info: "Skill: %s\n"
+command.skill_file: "File: %s\n"
+command.skill_body_separator: "\n--- Body ---\n"
+command.agent_created: "Agent '%s' created successfully at %s"
+command.agent_updated: "Agent '%s' updated successfully"
+command.agent_deleted: "Agent '%s' deleted successfully"
+command.agents_reloaded: "Reloaded %d agents"
+command.no_agents_available: "No agents available"
+command.available_agents: "Available agents (%d):\n"
+command.agent_info: "Agent: %s\n"
+command.agent_llm_model: "LLM Model: %s\n"
+command.agent_body_separator: "\n--- Body ---\n"
+command.memory_cleared: "Conversation history cleared."
+command.tasks_cleared: " Tasks cleared."
+command.memory_compacted: "Conversation history compacted."
+command.memory_stats: "Messages: %d, Tokens: %d"
+command.memory_stats_not_available: "Memory statistics not available."
+command.engine_status: "Engine: Ready"
+command.tool_history_not_available: "Tool history not available in this session."
+command.model_info: "Provider: %s, Model: %s"
+command.model_info_not_available: "Model info not available."
+command.no_role_set: "No role set. Use /role to set one."
+command.available_commands: "Available commands:\n"
+
+# Memory compact messages (P2)
+memory.compact.boundary: "[COMPACT_BOUNDARY] %s (pre: %d tokens, post: %d tokens, strategy: %s)"
+memory.compact.compressed: "Earlier conversation context has been compressed"
+memory.compact.tool_result_format: "[tool_result %s: %d chars%s]"
+
+# Content block errors (P2)
+error.content_block.text_missing: "TextBlock missing required field: text"
+error.content_block.thinking_missing: "ThinkingBlock missing required field: thinking"
+error.content_block.tool_use_id_missing: "ToolUseBlock missing required field: id"
+error.content_block.tool_use_name_missing: "ToolUseBlock missing required field: name"
+error.content_block.tool_result_id_missing: "ToolResultBlock missing required field: tool_use_id"
+error.content_block.unknown_type: "unknown content block type: %s"
+error.content_block.index_error: "content block at index %d: %w"
+error.content_block.tool_result_content: "ToolResultBlock content error: %w"
+
+# TUI constants (P2)
+tui.default_user: "User"
+tui.status.thinking: "Thinking..."
+tui.status.processing: "Processing..."
+tui.status.loading: "Loading..."
+tui.status.terminal_small: "Terminal too small. Please resize."
+tui.confirm.enter: "Enter confirm"
+tui.confirm.cancel: "Esc cancel"
+tui.confirm.yes: "Yes"
+tui.confirm.no: "No"
+tui.placeholder.input: "Message Aura... (Enter to send)"
+tui.placeholder.waiting: "Waiting for response..."
+tui.command.no_match: "No matching commands"
+tui.navigate.session: "  ↑/↓ navigate  Enter select  Esc cancel  / filter"
+tui.navigate.subscription: "  ↑/↓ navigate  Enter add  Esc cancel"
+
+# Plan mode messages (P2)
+plan.created: "📝 Plan created with %d steps"
+plan.step_progress: "⚡ Step %d/%d: %s"
+plan.completed: "✓ Plan execution completed!"
+plan.review_phase: "👁 Review phase: Please approve the plan before execution"
+plan.files_to_review: "Files to review:\n"
+plan.enter_mode: "🔍 Entering plan mode. Starting exploration phase..."
+plan.exiting_mode: "⚡ Exiting plan mode. Starting execution..."
+
+# Verification messages (P2)
+verify.started: "✓ Starting verification phase..."
+verify.passed: "✓ Verification passed! All checks completed successfully."
+verify.failed: "✗ Verification failed. Some checks did not pass.\n%s"
+
+# Rollback messages (P2)
+rollback.snapshot_created: "Rollback snapshot created: %s\nFiles tracked: %d"
+rollback.completed: "Rollback completed successfully ✓\nRestored files:\n%s"
+rollback.failed: "Rollback failed. Manual intervention may be required.\n%s"
+rollback.offer: "Execution failed: %s. Rollback to pre-execution state?"
+rollback.goal: "Rollback Changes"
+
+# Engine messages (P2)
+engine.max_steps_exceeded: "⚠ Maximum steps exceeded (%d). Generating best-effort answer from gathered context."
+
+# Session memory errors (P2)
+error.memory.load_failed: "failed to load messages: %w"
+error.memory.summarizer_not_configured: "summarizer not configured"
+error.memory.not_enough_messages: "not enough messages to summarize (have %d, need %d)"
+error.memory.no_new_messages: "no new messages to summarize"
+error.memory.summary_failed: "failed to generate summary: %w"
+
+# Command matched messages (P2)
+command.matched: "Command recognized: %s"
+command.exit: "Goodbye!"
