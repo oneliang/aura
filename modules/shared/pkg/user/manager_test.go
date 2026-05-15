@@ -42,16 +42,15 @@ func TestNewManager(t *testing.T) {
 
 func TestManagerCreateUser(t *testing.T) {
 	tmpDir := t.TempDir()
-	_ = tmpDir // Could use for custom baseDir if needed
 
 	cfg := &config.UsersConfig{
 		Default:     "default",
 		Definitions: []config.UserConfig{},
 	}
 
-	m, err := NewManager(cfg)
+	m, err := NewManagerWithBaseDir(cfg, tmpDir)
 	if err != nil {
-		t.Fatalf("NewManager() error = %v", err)
+		t.Fatalf("NewManagerWithBaseDir() error = %v", err)
 	}
 
 	user, err := m.CreateUser("测试用户")
@@ -83,6 +82,8 @@ func TestManagerCreateUser(t *testing.T) {
 }
 
 func TestManagerDeleteUser(t *testing.T) {
+	tmpDir := t.TempDir()
+
 	cfg := &config.UsersConfig{
 		Default: "user_001",
 		Definitions: []config.UserConfig{
@@ -94,9 +95,9 @@ func TestManagerDeleteUser(t *testing.T) {
 		},
 	}
 
-	m, err := NewManager(cfg)
+	m, err := NewManagerWithBaseDir(cfg, tmpDir)
 	if err != nil {
-		t.Fatalf("NewManager() error = %v", err)
+		t.Fatalf("NewManagerWithBaseDir() error = %v", err)
 	}
 
 	// Delete the user
@@ -115,6 +116,8 @@ func TestManagerDeleteUser(t *testing.T) {
 }
 
 func TestManagerSwitchUser(t *testing.T) {
+	tmpDir := t.TempDir()
+
 	cfg := &config.UsersConfig{
 		Default: "user_001",
 		Definitions: []config.UserConfig{
@@ -123,9 +126,9 @@ func TestManagerSwitchUser(t *testing.T) {
 		},
 	}
 
-	m, err := NewManager(cfg)
+	m, err := NewManagerWithBaseDir(cfg, tmpDir)
 	if err != nil {
-		t.Fatalf("NewManager() error = %v", err)
+		t.Fatalf("NewManagerWithBaseDir() error = %v", err)
 	}
 
 	// Switch to user_002
@@ -147,6 +150,8 @@ func TestManagerSwitchUser(t *testing.T) {
 }
 
 func TestManagerListUsers(t *testing.T) {
+	tmpDir := t.TempDir()
+
 	cfg := &config.UsersConfig{
 		Default: "user_001",
 		Definitions: []config.UserConfig{
@@ -155,9 +160,9 @@ func TestManagerListUsers(t *testing.T) {
 		},
 	}
 
-	m, err := NewManager(cfg)
+	m, err := NewManagerWithBaseDir(cfg, tmpDir)
 	if err != nil {
-		t.Fatalf("NewManager() error = %v", err)
+		t.Fatalf("NewManagerWithBaseDir() error = %v", err)
 	}
 
 	users := m.ListUsers()

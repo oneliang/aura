@@ -41,8 +41,8 @@ func TestNewClient(t *testing.T) {
 	if client == nil {
 		t.Fatal("New() returned nil")
 	}
-	if client.baseURL != "https://api.openai.com" {
-		t.Errorf("default baseURL = %v, want 'https://api.openai.com'", client.baseURL)
+	if client.baseURL != "https://api.openai.com/v1" {
+		t.Errorf("default baseURL = %v, want 'https://api.openai.com/v1'", client.baseURL)
 	}
 	if client.model != "gpt-4o-mini" {
 		t.Errorf("default model = %v, want 'gpt-4o-mini'", client.model)
@@ -80,7 +80,7 @@ func TestComplete(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request
-		if r.URL.Path != "/v1/chat/completions" {
+		if r.URL.Path != "/chat/completions" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
 		if r.Method != "POST" {
@@ -402,7 +402,7 @@ func TestStreamCancelledContext(t *testing.T) {
 // Test Embed
 func TestEmbed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/embeddings" {
+		if r.URL.Path != "/embeddings" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
 

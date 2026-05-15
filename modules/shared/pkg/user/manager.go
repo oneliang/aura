@@ -35,7 +35,12 @@ type Manager struct {
 // NewManager creates a new user manager.
 func NewManager(cfg *config.UsersConfig) (*Manager, error) {
 	baseDir := ffp.MustAuraHomePath(constants.DirUsers)
+	return NewManagerWithBaseDir(cfg, baseDir)
+}
 
+// NewManagerWithBaseDir creates a new user manager with a custom base directory.
+// Use this for testing to avoid writing to the real ~/.aura/users/ directory.
+func NewManagerWithBaseDir(cfg *config.UsersConfig, baseDir string) (*Manager, error) {
 	m := &Manager{
 		users:     make(map[string]*config.UserConfig),
 		tokens:    make(map[string]string),

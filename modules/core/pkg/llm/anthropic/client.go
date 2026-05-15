@@ -54,7 +54,7 @@ func WithHTTPClient(client *http.Client) Option {
 // New creates a new Anthropic client.
 func New(opts ...Option) *Client {
 	c := &Client{
-		baseURL:    "https://api.anthropic.com",
+		baseURL:    "https://api.anthropic.com/v1",
 		model:      "claude-sonnet-4-20250514",
 		apiVersion: "2024-10-22",
 		httpClient: httpclient.DefaultLLMClient(),
@@ -129,7 +129,7 @@ func (c *Client) Complete(ctx context.Context, req *llm.Request) (*llm.Response,
 		return nil, err
 	}
 
-	url := c.baseURL + "/v1/messages"
+	url := c.baseURL + "/messages"
 	httpReq, err := internal.BuildHTTPRequest(ctx, "POST", url, "application/json", body, c.buildHeaders())
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 		return nil, err
 	}
 
-	url := c.baseURL + "/v1/messages"
+	url := c.baseURL + "/messages"
 	httpReq, err := internal.BuildHTTPRequest(ctx, "POST", url, "application/json", body, c.buildHeaders())
 	if err != nil {
 		return nil, err
