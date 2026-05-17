@@ -335,6 +335,7 @@ func TestAgentRuntime_convertEvent_WithExtra(t *testing.T) {
 // TestAgentRuntime_buildSystemPrompt tests buildSystemPrompt method.
 func TestAgentRuntime_buildSystemPrompt(t *testing.T) {
 	cfg := DefaultRuntimeConfig()
+	cfg.EnableSubAgent = true // Enable sub-agent for normal behavior
 
 	// Test with explicit system prompt
 	cfg.SystemPrompt = "Custom system prompt"

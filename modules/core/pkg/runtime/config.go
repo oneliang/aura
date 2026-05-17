@@ -23,6 +23,10 @@ type RuntimeConfig struct {
 	// Disable tools
 	DisableTools bool
 
+	// Enable sub-agent delegation (default: true)
+	// When false, LLM cannot delegate tasks to other agents (single-agent mode).
+	EnableSubAgent bool
+
 	// Message source for persistence (cli/tui/api/feishu/etc.)
 	MessageSource string
 
@@ -35,14 +39,17 @@ type RuntimeConfig struct {
 
 // DefaultRuntimeConfig returns a default runtime configuration.
 func DefaultRuntimeConfig() *RuntimeConfig {
+	cfg := config.DefaultConfig()
 	return &RuntimeConfig{
-		Config: config.DefaultConfig(),
+		Config:         cfg,
+		EnableSubAgent: cfg.Agent.EnableSubAgent, // Read from embedded config (default: true)
 	}
 }
 
 // FromConfig creates a runtime config from the main app config.
 func FromConfig(cfg *config.Config) *RuntimeConfig {
 	return &RuntimeConfig{
-		Config: cfg,
+		Config:          cfg,
+		EnableSubAgent:  cfg.Agent.EnableSubAgent,
 	}
 }

@@ -195,10 +195,11 @@ type SkillsConfig struct {
 
 // AgentConfig represents agent configuration.
 type AgentConfig struct {
-	PlanningMode string     `mapstructure:"planning_mode" yaml:"planning_mode"` // planning mode: implicit, explicit, or auto
-	Temperature  float64    `mapstructure:"temperature" yaml:"temperature"`     // LLM temperature for generation (0.0-1.0)
-	SummaryTemp  float64    `mapstructure:"summary_temp" yaml:"summary_temp"`   // LLM temperature for summarization
-	Plan         PlanConfig `mapstructure:"plan"`                               // plan-specific settings
+	PlanningMode   string     `mapstructure:"planning_mode" yaml:"planning_mode"` // planning mode: implicit, explicit, or auto
+	Temperature    float64    `mapstructure:"temperature" yaml:"temperature"`     // LLM temperature for generation (0.0-1.0)
+	SummaryTemp    float64    `mapstructure:"summary_temp" yaml:"summary_temp"`   // LLM temperature for summarization
+	EnableSubAgent bool       `mapstructure:"enable_sub_agent" yaml:"enable_sub_agent"` // enable sub-agent delegation (default: true)
+	Plan           PlanConfig `mapstructure:"plan"`                               // plan-specific settings
 }
 
 // PlanConfig represents plan system configuration.
@@ -452,9 +453,10 @@ func DefaultConfig() *Config {
 			},
 		},
 		Agent: AgentConfig{
-			PlanningMode: defaultPlanningMode,
-			Temperature:  0.7,
-			SummaryTemp:  0.3,
+			PlanningMode:   defaultPlanningMode,
+			Temperature:    0.7,
+			SummaryTemp:    0.3,
+			EnableSubAgent: true,
 			Plan: PlanConfig{
 				EnableReview:       true,
 				VerifyCommands:     []string{"make test"},

@@ -381,7 +381,8 @@ func (r *AgentRuntime) initPostSetup(ctx context.Context) error {
 	}
 
 	// Set up agent delegation function if command provider supports it
-	if r.commandProvider != nil {
+	// Skip if sub-agent is disabled (single-agent mode)
+	if r.commandProvider != nil && r.config.EnableSubAgent {
 		r.agentDelegateFn = r.createAgentDelegateFn(ctx)
 		if cp, ok := r.commandProvider.(*commands.CommandProvider); ok {
 			cp.SetAgentDelegateFn(r.agentDelegateFn)
@@ -570,9 +571,14 @@ func (r *AgentRuntime) buildSystemPrompt() string {
 		prompt += skillbuilder.BuildSystemPromptSection(r.skillLoader.GetSkills())
 	}
 
-	// Append agents section if agents are loaded
-	if r.agentLoader != nil && len(r.agentLoader.GetAgents()) > 0 {
+	// Append agents section if agents are loaded and sub-agent is enabled
+	if r.agentLoader != nil && len(r.agentLoader.GetAgents()) > 0 && r.config.EnableSubAgent {
 		prompt += agentbuilder.BuildSystemPromptSection(r.agentLoader.GetAgents())
+	}
+
+	// Append single-agent mode notice if sub-agent is disabled
+	if !r.config.EnableSubAgent {
+		prompt += "\n\n## Single-Agent Mode\n\nYou are operating in single-agent mode. Do not attempt to delegate tasks to other agents or invoke sub-agents. Complete all tasks yourself using the available tools.\n"
 	}
 
 	// Append project-level AURA.md if exists

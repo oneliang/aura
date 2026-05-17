@@ -211,6 +211,11 @@ agent:
   temperature: 0.7      # Temperature for general conversation (0.0-1.0)
   summary_temp: 0.3     # Temperature for summarization (lower = more focused)
 
+  # Sub-agent delegation (default: true)
+  # When enabled, LLM can delegate tasks to specialized sub-agents
+  # When disabled, forces single-agent mode - LLM completes all tasks itself
+  enable_sub_agent: true
+
   # Plan system settings
   plan:
     enable_review: true       # Show plan review prompt before execution
