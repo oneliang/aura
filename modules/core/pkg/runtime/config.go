@@ -27,6 +27,11 @@ type RuntimeConfig struct {
 	// When false, LLM cannot delegate tasks to other agents (single-agent mode).
 	EnableSubAgent bool
 
+	// Auto-approve all tool executions (default: false)
+	// When true, all permissions default to "allow" - no confirmation required.
+	// Useful for SDK usage without interactive environment.
+	AutoApprove bool
+
 	// Message source for persistence (cli/tui/api/feishu/etc.)
 	MessageSource string
 
@@ -43,13 +48,15 @@ func DefaultRuntimeConfig() *RuntimeConfig {
 	return &RuntimeConfig{
 		Config:         cfg,
 		EnableSubAgent: cfg.Agent.EnableSubAgent, // Read from embedded config (default: true)
+		AutoApprove:    cfg.Agent.AutoApprove,    // Read from embedded config (default: false)
 	}
 }
 
 // FromConfig creates a runtime config from the main app config.
 func FromConfig(cfg *config.Config) *RuntimeConfig {
 	return &RuntimeConfig{
-		Config:          cfg,
-		EnableSubAgent:  cfg.Agent.EnableSubAgent,
+		Config:         cfg,
+		EnableSubAgent: cfg.Agent.EnableSubAgent,
+		AutoApprove:    cfg.Agent.AutoApprove,
 	}
 }

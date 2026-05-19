@@ -199,6 +199,7 @@ type AgentConfig struct {
 	Temperature    float64    `mapstructure:"temperature" yaml:"temperature"`     // LLM temperature for generation (0.0-1.0)
 	SummaryTemp    float64    `mapstructure:"summary_temp" yaml:"summary_temp"`   // LLM temperature for summarization
 	EnableSubAgent bool       `mapstructure:"enable_sub_agent" yaml:"enable_sub_agent"` // enable sub-agent delegation (default: true)
+	AutoApprove    bool       `mapstructure:"auto_approve" yaml:"auto_approve"`   // auto-approve all tool executions (default: false)
 	Plan           PlanConfig `mapstructure:"plan"`                               // plan-specific settings
 }
 
@@ -457,6 +458,7 @@ func DefaultConfig() *Config {
 			Temperature:    0.7,
 			SummaryTemp:    0.3,
 			EnableSubAgent: true,
+			AutoApprove:    false, // Explicit default for security clarity
 			Plan: PlanConfig{
 				EnableReview:       true,
 				VerifyCommands:     []string{"make test"},

@@ -216,6 +216,12 @@ agent:
   # When disabled, forces single-agent mode - LLM completes all tasks itself
   enable_sub_agent: true
 
+  # Auto-approve mode (default: false)
+  # When enabled, all tool executions are automatically approved without confirmation
+  # Useful for SDK usage or non-interactive environments (background automation)
+  # Note: When true, overrides permissions.default_level to "allow"
+  auto_approve: false
+
   # Plan system settings
   plan:
     enable_review: true       # Show plan review prompt before execution

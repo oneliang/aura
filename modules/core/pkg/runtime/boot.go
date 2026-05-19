@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oneliang/aura/shared/pkg/config"
 	"github.com/oneliang/aura/shared/pkg/httpclient"
 	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/oneliang/aura/shared/pkg/user"
@@ -129,9 +130,24 @@ func (r *AgentRuntime) initClients(ctx context.Context) error {
 
 	// Create permission manager
 	permFactory := factory.NewPermissionManagerFactory()
-	r.permMgr, err = permFactory.Create(&r.config.Permissions)
-	if err != nil {
-		r.logger.Warn().Err(err).Msg("Failed to create permission manager")
+	if r.config.AutoApprove {
+		// Auto-approve mode: create permission manager with default_level=allow
+		// BUT preserve safety restrictions from original config
+		autoApprovePermCfg := &config.PermissionsConfig{
+			DefaultLevel:      "allow",
+			ShellRestrictions: r.config.Permissions.ShellRestrictions,
+			SSHRestrictions:   r.config.Permissions.SSHRestrictions,
+			TrustedDirs:       r.config.Permissions.TrustedDirs,
+		}
+		r.permMgr, err = permFactory.Create(autoApprovePermCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create auto-approve permission manager: %w", err)
+		}
+	} else {
+		r.permMgr, err = permFactory.Create(&r.config.Permissions)
+		if err != nil {
+			return fmt.Errorf("failed to create permission manager: %w", err)
+		}
 	}
 
 	// Create SharedResources component

@@ -189,6 +189,13 @@ func WithMCPManager(mgr *MCPManager) RuntimeOption {
 	return runtime.WithMCPManager(mgr)
 }
 
+// WithAutoApprove enables auto-approve mode for all tool executions.
+// When enabled, all permissions default to "allow" - no confirmation required.
+// Useful for SDK usage without interactive environment.
+func WithAutoApprove() RuntimeOption {
+	return runtime.WithAutoApprove()
+}
+
 // NewMCPManager creates an MCP manager from the default config file (~/.aura/mcp.json).
 // Returns nil if the config file does not exist or has no servers configured.
 func NewMCPManager() *MCPManager {

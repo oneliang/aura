@@ -202,6 +202,15 @@ func WithMCPManager(mgr *mcpmanager.Manager) RuntimeOption {
 	}
 }
 
+// WithAutoApprove enables auto-approve mode for all tool executions.
+// When enabled, all permissions default to "allow" - no confirmation required.
+// Useful for SDK usage without interactive environment.
+func WithAutoApprove() RuntimeOption {
+	return func(r *AgentRuntime) {
+		r.config.AutoApprove = true
+	}
+}
+
 // New creates a new agent runtime.
 func New(cfg *RuntimeConfig, opts ...RuntimeOption) (*AgentRuntime, error) {
 	r := &AgentRuntime{
