@@ -32,18 +32,21 @@ run: build
 # Run tests
 test:
 	@echo "Running tests..."
-	$(GO) test -v ./...
+	@for dir in adapters agent api cli commands core habit knowledge mcp personality session shared skill storage tools; do \
+		(cd $$dir && $(GO) test -v ./...); \
+	done
 
 # Run tests with coverage
 test-coverage:
 	@echo "Running tests with coverage..."
-	$(GO) test -coverprofile=coverage.out ./...
-	$(GO) tool cover -html=coverage.out -o coverage.html
+	@for dir in adapters agent api cli commands core habit knowledge mcp personality session shared skill storage tools; do \
+		(cd $$dir && $(GO) test -coverprofile=coverage.out ./... && $(GO) tool cover -html=coverage.out -o coverage.html); \
+	done
 
 # Check coverage threshold
 check-coverage:
 	@echo "Checking coverage threshold..."
-	@coverage=$$($(GO) test -cover ./modules/... 2>&1 | grep -oE '[0-9]+\.[0-9]+%' | tr -d '%' | head -1); \
+	@coverage=$$($(GO) test -cover ./adapters/... ./agent/... ./api/... ./cli/... ./commands/... ./core/... ./habit/... ./knowledge/... ./mcp/... ./personality/... ./session/... ./shared/... ./skill/... ./storage/... ./tools/... 2>&1 | grep -oE '[0-9]+\.[0-9]+%' | tr -d '%' | head -1); \
 	if [ -z "$$coverage" ]; then \
 		echo "No coverage data found"; \
 		exit 1; \
@@ -75,18 +78,24 @@ install: build
 # Format code
 fmt:
 	@echo "Formatting code..."
-	$(GO) fmt ./...
+	@for dir in adapters agent api cli commands core habit knowledge mcp personality session shared skill storage tools; do \
+		(cd $$dir && $(GO) fmt ./...); \
+	done
 
 # Lint code
 lint:
 	@echo "Linting code..."
 	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
-	golangci-lint run ./...
+	@for dir in adapters agent api cli commands core habit knowledge mcp personality session shared skill storage tools; do \
+		(cd $$dir && golangci-lint run ./...); \
+	done
 
 # Generate documentation
 docs:
 	@echo "Generating documentation..."
-	$(GO) doc -all ./...
+	@for dir in adapters agent api cli commands core habit knowledge mcp personality session shared skill storage tools; do \
+		(cd $$dir && $(GO) doc -all ./...); \
+	done
 
 # Development mode with hot reload
 dev:
