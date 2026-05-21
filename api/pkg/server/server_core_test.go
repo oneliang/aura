@@ -559,7 +559,7 @@ func TestServer_SessionServiceInterface(t *testing.T) {
 	}
 
 	// Test ListSessions
-	sessions, err := server.ListSessions()
+	sessions, err := server.ListSessions("")
 	if err != nil {
 		t.Errorf("ListSessions() error = %v", err)
 	}
@@ -568,7 +568,7 @@ func TestServer_SessionServiceInterface(t *testing.T) {
 	}
 
 	// Test GetSession
-	s, err := server.GetSession(session.ID)
+	s, err := server.GetSession(session.ID, "")
 	if err != nil {
 		t.Errorf("GetSession() error = %v", err)
 	}
@@ -577,13 +577,13 @@ func TestServer_SessionServiceInterface(t *testing.T) {
 	}
 
 	// Test UpdateSession
-	err = server.UpdateSession(session.ID, stringPtr("Updated prompt"), nil)
+	err = server.UpdateSession(session.ID, "", stringPtr("Updated prompt"), nil)
 	if err != nil {
 		t.Errorf("UpdateSession() error = %v", err)
 	}
 
 	// Test DeleteSession
-	err = server.DeleteSession(session.ID)
+	err = server.DeleteSession(session.ID, "")
 	if err != nil {
 		t.Errorf("DeleteSession() error = %v", err)
 	}

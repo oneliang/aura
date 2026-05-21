@@ -41,9 +41,21 @@ func createTestMessage(sessionID, role, content string, timestamp int64) *messag
 	return &message.Message{
 		SessionID: sessionID,
 		Role:      role,
-		Content:   content,
+		ContentBlocks: []memory.ContentBlock{
+			memory.TextBlock{Type: memory.BlockTypeText, Text: content},
+		},
 		Timestamp: timestamp,
 	}
+}
+
+// getTextContent extracts text content from a message's ContentBlocks.
+func getTextContent(m *message.Message) string {
+	for _, block := range m.ContentBlocks {
+		if tb, ok := block.(memory.TextBlock); ok {
+			return tb.Text
+		}
+	}
+	return ""
 }
 
 func TestNewMessageStore(t *testing.T) {
@@ -481,8 +493,8 @@ func TestMessageStoreIntegration(t *testing.T) {
 			if messages[i].Role != exp.role {
 				t.Errorf("Message %d role = %q, want %q", i, messages[i].Role, exp.role)
 			}
-			if messages[i].Content != exp.content {
-				t.Errorf("Message %d content = %q, want %q", i, messages[i].Content, exp.content)
+			if getTextContent(&messages[i]) != exp.content {
+				t.Errorf("Message %d content = %q, want %q", i, getTextContent(&messages[i]), exp.content)
 			}
 			if messages[i].Timestamp != exp.ts {
 				t.Errorf("Message %d timestamp = %d, want %d", i, messages[i].Timestamp, exp.ts)
@@ -536,7 +548,9 @@ func TestMessageStoreAppend_ErrorCases(t *testing.T) {
 		msg := &message.Message{
 			SessionID: "session-1",
 			Role:      "user",
-			Content:   "test",
+			ContentBlocks: []memory.ContentBlock{
+				memory.TextBlock{Type: memory.BlockTypeText, Text: "test"},
+			},
 			Timestamp: 1000,
 		}
 		// Normal message should work
@@ -746,8 +760,8 @@ func TestMessageStoreContentBlocks(t *testing.T) {
 	}
 
 	// Verify Content field (backward compatibility)
-	if messages[0].Content != "Here is my response" {
-		t.Errorf("Content = %q, want %q", messages[0].Content, "Here is my response")
+	if getTextContent(&messages[0]) != "Here is my response" {
+		t.Errorf("Content = %q, want %q", getTextContent(&messages[0]), "Here is my response")
 	}
 
 	// Verify ContentBlocks
@@ -883,7 +897,9 @@ func TestMessageStoreMixedContent(t *testing.T) {
 	msg1 := &message.Message{
 		SessionID: sessionID,
 		Role:       "user",
-		Content:    "Legacy content",
+		ContentBlocks: []memory.ContentBlock{
+			memory.TextBlock{Type: memory.BlockTypeText, Text: "Legacy content"},
+		},
 		Timestamp:  1000,
 	}
 
@@ -919,8 +935,8 @@ func TestMessageStoreMixedContent(t *testing.T) {
 	}
 
 	// Verify legacy message
-	if messages[0].Content != "Legacy content" {
-		t.Errorf("msg1 Content = %q, want %q", messages[0].Content, "Legacy content")
+	if getTextContent(&messages[0]) != "Legacy content" {
+		t.Errorf("msg1 Content = %q, want %q", getTextContent(&messages[0]), "Legacy content")
 	}
 	blocks1 := messages[0].GetContentBlocks()
 	if len(blocks1) != 1 {
@@ -930,8 +946,8 @@ func TestMessageStoreMixedContent(t *testing.T) {
 	}
 
 	// Verify new format message
-	if messages[1].Content != "New format content" {
-		t.Errorf("msg2 Content = %q, want %q", messages[1].Content, "New format content")
+	if getTextContent(&messages[1]) != "New format content" {
+		t.Errorf("msg2 Content = %q, want %q", getTextContent(&messages[1]), "New format content")
 	}
 	blocks2 := messages[1].GetContentBlocks()
 	if len(blocks2) != 1 {

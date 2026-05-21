@@ -89,8 +89,8 @@ func TestSearchToolExecute(t *testing.T) {
 	if err != nil {
 		t.Errorf("Execute() error = %v", err)
 	}
-	if !strings.Contains(result, "Go is a programming language") {
-		t.Errorf("Execute() result should contain document content, got: %s", result)
+	if !strings.Contains(result.Content, "Go is a programming language") {
+		t.Errorf("Execute() result should contain document content, got: %s", result.Content)
 	}
 }
 
@@ -145,8 +145,8 @@ func TestSearchToolExecuteNoResults(t *testing.T) {
 	if err != nil {
 		t.Errorf("Execute() error = %v", err)
 	}
-	if result != "No relevant knowledge found." {
-		t.Errorf("Execute() with no results = %q, want 'No relevant knowledge found.'", result)
+	if result.Content != "No relevant knowledge found." {
+		t.Errorf("Execute() with no results = %q, want 'No relevant knowledge found.'", result.Content)
 	}
 }
 
@@ -233,8 +233,8 @@ func TestImportToolExecuteNonExistentPath(t *testing.T) {
 		t.Errorf("Error should mention 'import failed', got: %v", err)
 	}
 	// If no error, result should mention 0 chunks
-	if err == nil && !strings.Contains(result, "imported 0 chunks") {
-		t.Logf("Execute() returned result for non-existent path: %s", result)
+	if err == nil && !strings.Contains(result.Content, "imported 0 chunks") {
+		t.Logf("Execute() returned result for non-existent path: %s", result.Content)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/oneliang/aura/session/pkg/model"
 	"github.com/oneliang/aura/session/pkg/storage"
 	"github.com/oneliang/aura/session/pkg/trigger"
+	"github.com/oneliang/aura/shared/pkg/memory"
 )
 
 // setupTestHandler creates a temporary storage and manager for handler tests.
@@ -195,14 +196,18 @@ func TestHandleGetSessionMessages(t *testing.T) {
 	msg1 := &model.Message{
 		SessionID: session.ID,
 		Role:      "user",
-		Content:   "Hello",
+		ContentBlocks: []memory.ContentBlock{
+			memory.TextBlock{Type: memory.BlockTypeText, Text: "Hello"},
+		},
 		Timestamp: 1234567890,
 		Source:    "test",
 	}
 	msg2 := &model.Message{
 		SessionID: session.ID,
 		Role:      "assistant",
-		Content:   "Hi there",
+		ContentBlocks: []memory.ContentBlock{
+			memory.TextBlock{Type: memory.BlockTypeText, Text: "Hi there"},
+		},
 		Timestamp: 1234567891,
 		Source:    "test",
 	}
@@ -599,32 +604,32 @@ type testSessionService struct {
 	appendMessageFunc func(ctx context.Context, sessionID, role, content, source string) error
 }
 
-func (s *testSessionService) ListSessions() ([]*model.Session, error) {
+func (s *testSessionService) ListSessions(userID string) ([]*model.Session, error) {
 	if s.mgr == nil {
 		return []*model.Session{}, nil
 	}
-	return s.mgr.ListSessions("")
+	return s.mgr.ListSessions(userID)
 }
 
-func (s *testSessionService) CreateSession(name string, subscriptions []model.Subscription, systemPrompt string) (*model.Session, error) {
+func (s *testSessionService) CreateSession(userID string, name string, subscriptions []model.Subscription, systemPrompt string) (*model.Session, error) {
 	if s.mgr == nil {
 		return nil, nil
 	}
-	return s.mgr.CreateSession(name, subscriptions, systemPrompt, "")
+	return s.mgr.CreateSession(name, subscriptions, systemPrompt, userID)
 }
 
-func (s *testSessionService) GetSession(id string) (*model.Session, error) {
+func (s *testSessionService) GetSession(id string, userID string) (*model.Session, error) {
 	if s.mgr == nil {
 		return nil, nil
 	}
-	return s.mgr.GetSession(id, "")
+	return s.mgr.GetSession(id, userID)
 }
 
-func (s *testSessionService) UpdateSession(id string, systemPrompt *string, role *string) error {
+func (s *testSessionService) UpdateSession(id string, userID string, systemPrompt *string, role *string) error {
 	if s.mgr == nil {
 		return nil
 	}
-	session, err := s.mgr.GetSession(id, "")
+	session, err := s.mgr.GetSession(id, userID)
 	if err != nil {
 		return err
 	}
@@ -636,11 +641,11 @@ func (s *testSessionService) UpdateSession(id string, systemPrompt *string, role
 	return s.store.SaveSession(session)
 }
 
-func (s *testSessionService) DeleteSession(id string) error {
+func (s *testSessionService) DeleteSession(id string, userID string) error {
 	if s.mgr == nil {
 		return nil
 	}
-	return s.mgr.DeleteSession(id, "")
+	return s.mgr.DeleteSession(id, userID)
 }
 
 func (s *testSessionService) GetMessages(ctx context.Context, sessionID string, limit int, userID string) ([]model.Message, error) {

@@ -14,11 +14,11 @@ import (
 
 // MockSessionService implements SessionService interface for testing.
 type MockSessionService struct {
-	listSessionsFunc  func() ([]*model.Session, error)
-	createSessionFunc func(name string, subs []model.Subscription, prompt string) (*model.Session, error)
-	getSessionFunc    func(id string) (*model.Session, error)
-	updateSessionFunc func(id string, prompt *string, role *string) error
-	deleteSessionFunc func(id string) error
+	listSessionsFunc  func(userID string) ([]*model.Session, error)
+	createSessionFunc func(userID string, name string, subs []model.Subscription, prompt string) (*model.Session, error)
+	getSessionFunc    func(id string, userID string) (*model.Session, error)
+	updateSessionFunc func(id string, userID string, prompt *string, role *string) error
+	deleteSessionFunc func(id string, userID string) error
 	getMessagesFunc   func(ctx context.Context, sessionID string, limit int, userID string) ([]model.Message, error)
 	sendMessageFunc   func(ctx context.Context, sessionID, content string) error
 	addSubFunc        func(sessionID string, sub model.Subscription) error
@@ -26,23 +26,23 @@ type MockSessionService struct {
 	appendMessageFunc func(ctx context.Context, sessionID, role, content, source string) error
 }
 
-func (m *MockSessionService) ListSessions() ([]*model.Session, error) {
+func (m *MockSessionService) ListSessions(userID string) ([]*model.Session, error) {
 	if m.listSessionsFunc != nil {
-		return m.listSessionsFunc()
+		return m.listSessionsFunc(userID)
 	}
 	return []*model.Session{}, nil
 }
 
-func (m *MockSessionService) CreateSession(name string, subs []model.Subscription, prompt string) (*model.Session, error) {
+func (m *MockSessionService) CreateSession(userID string, name string, subs []model.Subscription, prompt string) (*model.Session, error) {
 	if m.createSessionFunc != nil {
-		return m.createSessionFunc(name, subs, prompt)
+		return m.createSessionFunc(userID, name, subs, prompt)
 	}
 	return &model.Session{ID: "test-id", Name: name}, nil
 }
 
-func (m *MockSessionService) GetSession(id string) (*model.Session, error) {
+func (m *MockSessionService) GetSession(id string, userID string) (*model.Session, error) {
 	if m.getSessionFunc != nil {
-		return m.getSessionFunc(id)
+		return m.getSessionFunc(id, userID)
 	}
 	if id == "not-found" {
 		return nil, http.ErrMissingFile
@@ -50,16 +50,16 @@ func (m *MockSessionService) GetSession(id string) (*model.Session, error) {
 	return &model.Session{ID: id, Name: "test"}, nil
 }
 
-func (m *MockSessionService) UpdateSession(id string, prompt *string, role *string) error {
+func (m *MockSessionService) UpdateSession(id string, userID string, prompt *string, role *string) error {
 	if m.updateSessionFunc != nil {
-		return m.updateSessionFunc(id, prompt, role)
+		return m.updateSessionFunc(id, userID, prompt, role)
 	}
 	return nil
 }
 
-func (m *MockSessionService) DeleteSession(id string) error {
+func (m *MockSessionService) DeleteSession(id string, userID string) error {
 	if m.deleteSessionFunc != nil {
-		return m.deleteSessionFunc(id)
+		return m.deleteSessionFunc(id, userID)
 	}
 	return nil
 }
@@ -102,7 +102,7 @@ func (m *MockSessionService) AppendMessage(ctx context.Context, sessionID, role,
 // TestSessionHandler_HandleListSessions tests HandleListSessions method.
 func TestSessionHandler_HandleListSessions(t *testing.T) {
 	service := &MockSessionService{
-		listSessionsFunc: func() ([]*model.Session, error) {
+		listSessionsFunc: func(userID string) ([]*model.Session, error) {
 			return []*model.Session{{ID: "1", Name: "Test Session"}}, nil
 		},
 	}
@@ -138,7 +138,7 @@ func TestSessionHandler_HandleListSessions_MethodNotAllowed(t *testing.T) {
 // TestSessionHandler_HandleListSessions_Error tests HandleListSessions with error.
 func TestSessionHandler_HandleListSessions_Error(t *testing.T) {
 	service := &MockSessionService{
-		listSessionsFunc: func() ([]*model.Session, error) {
+		listSessionsFunc: func(userID string) ([]*model.Session, error) {
 			return nil, http.ErrMissingFile
 		},
 	}
