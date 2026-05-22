@@ -108,6 +108,9 @@ type (
 
 // New creates a new TUI model.
 func New(ctx context.Context, runFn RunFunc, config Config, sessionMgr *sdk.SessionManager, summarizer *sdk.Summarizer, modelProvider *ModelProvider, commandProvider commands.Command, mcpManager *sdk.MCPManager) Model {
+	// Initialize i18n constants (must be called after i18n.Init)
+	InitI18nConstants()
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	styles := DefaultStyles()
@@ -280,6 +283,11 @@ func (m Model) sendMessage(input string) tea.Cmd {
 				log.Debug().Err(err).Msg("sendMessage: error")
 				select {
 				case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
+				default:
+				}
+				// Send Done event to unlock input
+				select {
+				case m.eventChan <- ChatEvent{Type: EventTypeDone}:
 				default:
 				}
 				return

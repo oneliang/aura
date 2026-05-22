@@ -220,14 +220,19 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleSubmit()
 	}
 
-	// Ignore input during processing
+	// Allow input during processing (queue input), but block Enter submission
 	if m.state.Waiting() {
-		// Still allow scrolling during processing — fn+up/fn+down (PageUp/PageDown on macOS)
+		// Allow scrolling during processing
 		switch msg.Code {
 		case tea.KeyPgUp, tea.KeyPgDown:
 			return m.handleViewportScroll(msg)
+		case tea.KeyEnter:
+			// Block Enter submission while processing
+			return m, nil
 		}
-		return m, nil
+		// Allow other keyboard input for queue typing
+		cmd := m.input.Update(msg)
+		return m, cmd
 	}
 
 	// Intercept scroll keys before textarea handles them
@@ -554,8 +559,9 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	// Add to input history (before clearing)
 	m.input.AddToHistory(input)
 
-	// Clear input and disable immediately (prevent ghost text)
-	m.input.DisableAndClear()
+	// Clear input but keep it enabled for queue input
+	m.input.SetValue("")
+	m.input.Focus()
 
 	// Handle commands
 	if strings.HasPrefix(input, "/") {

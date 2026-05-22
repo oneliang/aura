@@ -465,6 +465,8 @@ func tuiRunFunc(rt *sdk.Runtime, sl *tui.SessionLearner, ctx *CommandContext) tu
 				}
 				out <- chatEvent
 			}
+			// Explicitly send Done event before closing channel
+			out <- tui.ChatEvent{Type: tui.EventTypeDone}
 		}()
 
 		return out, nil

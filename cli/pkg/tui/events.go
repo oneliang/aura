@@ -361,7 +361,11 @@ func (m Model) handleEventResult(msg ChatEvent) (tea.Model, tea.Cmd) {
 // handleEventError handles the error event.
 func (m Model) handleEventError(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeError, msg.Content, nil, renderMessage, m.renderer, m.styles)
+	// Reset state and enable input on error to prevent input lock
+	m.stopWidgets()
+	m.state.ResetForNewInteraction()
 	return m, tea.Sequence(
+		m.input.EnableAndFocus(),
 		m.scrollToBottom(),
 		m.processEvents(),
 	)

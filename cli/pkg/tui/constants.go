@@ -156,13 +156,10 @@ var (
 	SubscriptionAddHelp      string
 )
 
-func init() {
+func InitI18nConstants() {
 	DefaultUserName = i18n.T("tui.default_user")
-	AuraDisplayName = "[Aura]:"
-	IdleStatusText = "/help for commands • Ctrl+C to exit"
 	ThinkingStatusText = i18n.T("tui.status.thinking")
 	ProcessingStatusText = i18n.T("tui.status.processing")
-	ThinkingIcon = "💭 "
 	ConfirmEnterHint = i18n.T("tui.confirm.enter")
 	ConfirmEscHint = i18n.T("tui.confirm.cancel")
 	ConfirmYesLabel = "[" + i18n.T("tui.confirm.yes") + "]"
@@ -174,7 +171,7 @@ func init() {
 	InputPlaceholder = i18n.T("tui.placeholder.input")
 	InputWaitingPlaceholder = i18n.T("tui.placeholder.waiting")
 	CommandNoMatching = i18n.T("tui.command.no_match")
-	CommandCountFormat = "  %d/%d " + i18n.T("tui.default_user") // commands pattern
+	CommandCountFormat = "  %d/%d " + i18n.T("tui.default_user")
 	SessionPopupHelp = i18n.T("tui.navigate.session")
 	SubscriptionAddHelp = i18n.T("tui.navigate.subscription")
 }

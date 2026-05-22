@@ -159,6 +159,16 @@ func (r *AgentRuntime) Process(ctx context.Context, input string) (<-chan Event,
 		}
 
 		r.logger.Debug().Msg("Runtime: agentEvents closed")
+
+			// Explicitly send Done event before closing
+			doneEv := NewEvent(EventTypeDone, "")
+			r.handlerMu.RLock()
+			handler := r.onEvent
+			r.handlerMu.RUnlock()
+			if handler != nil {
+				handler(doneEv)
+			}
+			out <- doneEv
 	}()
 
 	return out, nil
