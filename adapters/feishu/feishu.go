@@ -165,6 +165,15 @@ func (a *Adapter) setupClients(ctx context.Context) error {
 		a.logger.Debug().Str("module", "feishu").Msg("Ignored message_read event")
 		return nil
 	})
+	// Reaction events - log as warning for future implementation
+	eventDispatcher.OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
+		a.logger.Warn().Str("module", "feishu").Str("event_type", "im.message.reaction.created_v1").Msg("Event received but not implemented")
+		return nil
+	})
+	eventDispatcher.OnP2MessageReactionDeletedV1(func(ctx context.Context, event *larkim.P2MessageReactionDeletedV1) error {
+		a.logger.Warn().Str("module", "feishu").Str("event_type", "im.message.reaction.deleted_v1").Msg("Event received but not implemented")
+		return nil
+	})
 
 	// Create WebSocket client
 	a.wsClient = ws.NewClient(a.config.AppID, a.config.AppSecret, ws.WithEventHandler(eventDispatcher))

@@ -50,147 +50,147 @@ const (
 // New subsystems should add their own nested struct here,
 // NOT top-level fields, to keep the config tree balanced.
 type Config struct {
-	Version      string             `mapstructure:"version"` // Config schema version, default "1"
-	LLM          LLMConfig          `mapstructure:"llm"`
-	Memory       MemoryConfig       `mapstructure:"memory"`
-	Tools        ToolsConfig        `mapstructure:"tools"`
-	Log          LogConfig          `mapstructure:"log"`
-	SSH          SSHConfig          `mapstructure:"ssh"`
-	Permissions  PermissionsConfig  `mapstructure:"permissions"`
-	Skills       SkillsConfig       `mapstructure:"skills"`
-	Agent        AgentConfig        `mapstructure:"agent"`
-	API          APIConfig          `mapstructure:"api"`
-	Debug        DebugConfig        `mapstructure:"debug"`
-	TUI          TUIConfig          `mapstructure:"tui"`
-	Adapters     AdaptersConfig     `mapstructure:"adapters"`
-	Knowledge    KnowledgeConfig    `mapstructure:"knowledge"`
-	I18n         I18nConfig         `mapstructure:"i18n"`
-	Orchestrator OrchestratorConfig `mapstructure:"orchestrator"`
-	Agents       AgentsConfig       `mapstructure:"agents"`
-	Intent       IntentConfig       `mapstructure:"intent"`
-	Users        UsersConfig        `mapstructure:"users"`
-	Habit        HabitConfig        `mapstructure:"habit"`
-	Location     LocationConfig     `mapstructure:"location"`
-	LSP          LSPConfig          `mapstructure:"lsp"`
+	Version      string             `mapstructure:"version" yaml:"version"` // Config schema version, default "1"
+	LLM          LLMConfig          `mapstructure:"llm" yaml:"llm"`
+	Memory       MemoryConfig       `mapstructure:"memory" yaml:"memory"`
+	Tools        ToolsConfig        `mapstructure:"tools" yaml:"tools"`
+	Log          LogConfig          `mapstructure:"log" yaml:"log"`
+	SSH          SSHConfig          `mapstructure:"ssh" yaml:"ssh"`
+	Permissions  PermissionsConfig  `mapstructure:"permissions" yaml:"permissions"`
+	Skills       SkillsConfig       `mapstructure:"skills" yaml:"skills"`
+	Agent        AgentConfig        `mapstructure:"agent" yaml:"agent"`
+	API          APIConfig          `mapstructure:"api" yaml:"api"`
+	Debug        DebugConfig        `mapstructure:"debug" yaml:"debug"`
+	TUI          TUIConfig          `mapstructure:"tui" yaml:"tui"`
+	Adapters     AdaptersConfig     `mapstructure:"adapters" yaml:"adapters"`
+	Knowledge    KnowledgeConfig    `mapstructure:"knowledge" yaml:"knowledge"`
+	I18n         I18nConfig         `mapstructure:"i18n" yaml:"i18n"`
+	Orchestrator OrchestratorConfig `mapstructure:"orchestrator" yaml:"orchestrator"`
+	Agents       AgentsConfig       `mapstructure:"agents" yaml:"agents"`
+	Intent       IntentConfig       `mapstructure:"intent" yaml:"intent"`
+	Users        UsersConfig        `mapstructure:"users" yaml:"users"`
+	Habit        HabitConfig        `mapstructure:"habit" yaml:"habit"`
+	Location     LocationConfig     `mapstructure:"location" yaml:"location"`
+	LSP          LSPConfig          `mapstructure:"lsp" yaml:"lsp"`
 }
 
 // APIConfig represents API server configuration.
 type APIConfig struct {
-	Port string `mapstructure:"port"` // Port to listen on (default: 8080)
+	Port string `mapstructure:"port" yaml:"port"` // Port to listen on (default: 8080)
 }
 
 // LLMConfig represents LLM provider configuration.
 type LLMConfig struct {
-	Provider         string         `mapstructure:"provider"` // ollama, openai, anthropic
-	BaseURL          string         `mapstructure:"base_url"`
-	Model            string         `mapstructure:"model"`
-	APIKey           string         `mapstructure:"api_key"`         // optional for local providers
-	EmbeddingModel   string         `mapstructure:"embedding_model"` // model used for embeddings
-	Retry            RetryConfig    `mapstructure:"retry"`           // retry configuration for LLM requests
-	Thinking         ThinkingConfig `mapstructure:"thinking"`        // thinking/reasoning configuration
-	EnablePromptCache bool          `mapstructure:"enable_prompt_cache"` // enable prompt caching
+	Provider         string         `mapstructure:"provider" yaml:"provider"` // ollama, openai, anthropic
+	BaseURL          string         `mapstructure:"base_url" yaml:"base_url"`
+	Model            string         `mapstructure:"model" yaml:"model"`
+	APIKey           string         `mapstructure:"api_key" yaml:"api_key"`         // optional for local providers
+	EmbeddingModel   string         `mapstructure:"embedding_model" yaml:"embedding_model"` // model used for embeddings
+	Retry            RetryConfig    `mapstructure:"retry" yaml:"retry"`           // retry configuration for LLM requests
+	Thinking         ThinkingConfig `mapstructure:"thinking" yaml:"thinking"`        // thinking/reasoning configuration
+	EnablePromptCache bool          `mapstructure:"enable_prompt_cache" yaml:"enable_prompt_cache"` // enable prompt caching
 }
 
 // RetryConfig represents retry configuration for LLM requests.
 type RetryConfig struct {
-	MaxRetries   int           `mapstructure:"max_retries"`   // maximum number of retries (0 = disabled)
-	InitialDelay time.Duration `mapstructure:"initial_delay"` // initial backoff delay
-	MaxDelay     time.Duration `mapstructure:"max_delay"`     // maximum backoff delay
+	MaxRetries   int           `mapstructure:"max_retries" yaml:"max_retries"`   // maximum number of retries (0 = disabled)
+	InitialDelay time.Duration `mapstructure:"initial_delay" yaml:"initial_delay"` // initial backoff delay
+	MaxDelay     time.Duration `mapstructure:"max_delay" yaml:"max_delay"`     // maximum backoff delay
 }
 
 // ThinkingConfig represents thinking/reasoning configuration for LLM requests.
 type ThinkingConfig struct {
-	Enabled         bool   `mapstructure:"enabled"`          // enable native thinking mode
-	ReasoningEffort string `mapstructure:"reasoning_effort"` // low/medium/high (OpenAI)
-	BudgetTokens    int    `mapstructure:"budget_tokens"`    // max thinking tokens (Anthropic)
+	Enabled         bool   `mapstructure:"enabled" yaml:"enabled"`          // enable native thinking mode
+	ReasoningEffort string `mapstructure:"reasoning_effort" yaml:"reasoning_effort"` // low/medium/high (OpenAI)
+	BudgetTokens    int    `mapstructure:"budget_tokens" yaml:"budget_tokens"`    // max thinking tokens (Anthropic)
 }
 
 // MemoryConfig represents memory system configuration.
 type MemoryConfig struct {
-	Type             string        `mapstructure:"type"`              // sqlite, memory
-	StorageDir       string        `mapstructure:"storage_dir"`       // data/memory
-	MaxContext       int           `mapstructure:"max_context"`       // max context messages (legacy, use max_tokens)
-	MaxTokens        int           `mapstructure:"max_tokens"`        // max tokens (0=use max_context fallback)
-	TokenEstimator   string        `mapstructure:"token_estimator"`   // simple, tiktoken
-	SummaryThreshold float64       `mapstructure:"summary_threshold"` // token ratio to trigger summarization (0.0-1.0)
-	ContextThreshold float64       `mapstructure:"context_threshold"` // token ratio for context window (0.0-1.0)
-	Retention        RetentionConfig `mapstructure:"retention"`         // retention policy for staleness
+	Type             string        `mapstructure:"type" yaml:"type"`              // sqlite, memory
+	StorageDir       string        `mapstructure:"storage_dir" yaml:"storage_dir"`       // data/memory
+	MaxContext       int           `mapstructure:"max_context" yaml:"max_context"`       // max context messages (legacy, use max_tokens)
+	MaxTokens        int           `mapstructure:"max_tokens" yaml:"max_tokens"`        // max tokens (0=use max_context fallback)
+	TokenEstimator   string        `mapstructure:"token_estimator" yaml:"token_estimator"`   // simple, tiktoken
+	SummaryThreshold float64       `mapstructure:"summary_threshold" yaml:"summary_threshold"` // token ratio to trigger summarization (0.0-1.0)
+	ContextThreshold float64       `mapstructure:"context_threshold" yaml:"context_threshold"` // token ratio for context window (0.0-1.0)
+	Retention        RetentionConfig `mapstructure:"retention" yaml:"retention"`         // retention policy for staleness
 }
 
 // RetentionConfig represents memory retention policy configuration.
 type RetentionConfig struct {
-	MaxAge          time.Duration `mapstructure:"max_age"`           // Maximum message age before cleanup (0 = no limit)
-	MaxInactiveAge  time.Duration `mapstructure:"max_inactive_age"`  // Maximum inactive time before stale (0 = no staleness check)
-	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`  // Background cleanup interval (0 = no cleanup)
+	MaxAge          time.Duration `mapstructure:"max_age" yaml:"max_age"`           // Maximum message age before cleanup (0 = no limit)
+	MaxInactiveAge  time.Duration `mapstructure:"max_inactive_age" yaml:"max_inactive_age"`  // Maximum inactive time before stale (0 = no staleness check)
+	CleanupInterval time.Duration `mapstructure:"cleanup_interval" yaml:"cleanup_interval"`  // Background cleanup interval (0 = no cleanup)
 }
 
 // DebugConfig represents debug configuration.
 type DebugConfig struct {
-	ShowTokens         bool `mapstructure:"show_tokens"`          // Show token usage in TUI
-	LogTokens          bool `mapstructure:"log_tokens"`           // Log token changes
-	LogLLMInteractions bool `mapstructure:"log_llm_interactions"` // Log LLM requests/responses to file
+	ShowTokens         bool `mapstructure:"show_tokens" yaml:"show_tokens"`          // Show token usage in TUI
+	LogTokens          bool `mapstructure:"log_tokens" yaml:"log_tokens"`           // Log token changes
+	LogLLMInteractions bool `mapstructure:"log_llm_interactions" yaml:"log_llm_interactions"` // Log LLM requests/responses to file
 }
 
 // ToolsConfig represents tools configuration.
 type ToolsConfig struct {
-	Enabled        []string      `mapstructure:"enabled"`
-	DefaultTimeout time.Duration `mapstructure:"default_timeout"` // default tool execution timeout
-	ShellTimeout   time.Duration `mapstructure:"shell_timeout"`   // shell command timeout
-	SSHTimeout     time.Duration `mapstructure:"ssh_timeout"`     // SSH command timeout
-	WebTimeout     time.Duration `mapstructure:"web_timeout"`     // web fetch/search timeout
+	Enabled        []string      `mapstructure:"enabled" yaml:"enabled"`
+	DefaultTimeout time.Duration `mapstructure:"default_timeout" yaml:"default_timeout"` // default tool execution timeout
+	ShellTimeout   time.Duration `mapstructure:"shell_timeout" yaml:"shell_timeout"`   // shell command timeout
+	SSHTimeout     time.Duration `mapstructure:"ssh_timeout" yaml:"ssh_timeout"`     // SSH command timeout
+	WebTimeout     time.Duration `mapstructure:"web_timeout" yaml:"web_timeout"`     // web fetch/search timeout
 }
 
 // LogConfig represents logging configuration.
 type LogConfig struct {
-	Level  string `mapstructure:"level"`  // debug, info, warn, error
-	Format string `mapstructure:"format"` // json, text
-	Output string `mapstructure:"output"` // stdout, file
-	Path   string `mapstructure:"path"`   // log file path
+	Level  string `mapstructure:"level" yaml:"level"`  // debug, info, warn, error
+	Format string `mapstructure:"format" yaml:"format"` // json, text
+	Output string `mapstructure:"output" yaml:"output"` // stdout, file
+	Path   string `mapstructure:"path" yaml:"path"`   // log file path
 }
 
 // SSHConfig represents SSH configuration.
 type SSHConfig struct {
-	Servers []SSHServerConfig `mapstructure:"servers"`
+	Servers []SSHServerConfig `mapstructure:"servers" yaml:"servers"`
 }
 
 // SSHServerConfig represents a single SSH server configuration.
 type SSHServerConfig struct {
-	Name     string `mapstructure:"name"`
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	KeyPath  string `mapstructure:"key_path"`
-	Password string `mapstructure:"password"` // Consider using environment variable instead
+	Name     string `mapstructure:"name" yaml:"name"`
+	Host     string `mapstructure:"host" yaml:"host"`
+	Port     int    `mapstructure:"port" yaml:"port"`
+	User     string `mapstructure:"user" yaml:"user"`
+	KeyPath  string `mapstructure:"key_path" yaml:"key_path"`
+	Password string `mapstructure:"password" yaml:"password"` // Consider using environment variable instead
 }
 
 // PermissionsConfig represents permissions configuration.
 type PermissionsConfig struct {
-	DefaultLevel      string              `mapstructure:"default_level"`
-	Tools             map[string]string   `mapstructure:"tools"`
-	ShellRestrictions CommandRestrictions `mapstructure:"shell_restrictions"`
-	SSHRestrictions   SSHRestrictions     `mapstructure:"ssh"`
-	TrustedDirs       []string            `mapstructure:"trusted_dirs"`   // List of trusted directory paths
-	AutoAskTrust      bool                `mapstructure:"auto_ask_trust"` // Auto-ask trust in CLI/TUI modes
+	DefaultLevel      string              `mapstructure:"default_level" yaml:"default_level"`
+	Tools             map[string]string   `mapstructure:"tools" yaml:"tools"`
+	ShellRestrictions CommandRestrictions `mapstructure:"shell_restrictions" yaml:"shell_restrictions"`
+	SSHRestrictions   SSHRestrictions     `mapstructure:"ssh" yaml:"ssh"`
+	TrustedDirs       []string            `mapstructure:"trusted_dirs" yaml:"trusted_dirs"`   // List of trusted directory paths
+	AutoAskTrust      bool                `mapstructure:"auto_ask_trust" yaml:"auto_ask_trust"` // Auto-ask trust in CLI/TUI modes
 }
 
 // CommandRestrictions holds command whitelist/blacklist.
 type CommandRestrictions struct {
-	AllowedCommands []string `mapstructure:"allowed_commands"`
-	DeniedCommands  []string `mapstructure:"denied_commands"`
+	AllowedCommands []string `mapstructure:"allowed_commands" yaml:"allowed_commands"`
+	DeniedCommands  []string `mapstructure:"denied_commands" yaml:"denied_commands"`
 }
 
 // SSHRestrictions holds SSH-specific restrictions.
 type SSHRestrictions struct {
-	AllowedHosts    []string `mapstructure:"allowed_hosts"`
-	DeniedHosts     []string `mapstructure:"denied_hosts"`
-	AllowedCommands []string `mapstructure:"allowed_commands"`
-	DeniedCommands  []string `mapstructure:"denied_commands"`
+	AllowedHosts    []string `mapstructure:"allowed_hosts" yaml:"allowed_hosts"`
+	DeniedHosts     []string `mapstructure:"denied_hosts" yaml:"denied_hosts"`
+	AllowedCommands []string `mapstructure:"allowed_commands" yaml:"allowed_commands"`
+	DeniedCommands  []string `mapstructure:"denied_commands" yaml:"denied_commands"`
 }
 
 // SkillsConfig represents skills configuration.
 type SkillsConfig struct {
-	Enabled     bool     `mapstructure:"enabled"`
-	Directories []string `mapstructure:"directories"`
+	Enabled     bool     `mapstructure:"enabled" yaml:"enabled"`
+	Directories []string `mapstructure:"directories" yaml:"directories"`
 }
 
 // AgentConfig represents agent configuration.
@@ -200,16 +200,16 @@ type AgentConfig struct {
 	SummaryTemp    float64    `mapstructure:"summary_temp" yaml:"summary_temp"`   // LLM temperature for summarization
 	EnableSubAgent bool       `mapstructure:"enable_sub_agent" yaml:"enable_sub_agent"` // enable sub-agent delegation (default: true)
 	AutoApprove    bool       `mapstructure:"auto_approve" yaml:"auto_approve"`   // auto-approve all tool executions (default: false)
-	Plan           PlanConfig `mapstructure:"plan"`                               // plan-specific settings
+	Plan           PlanConfig `mapstructure:"plan" yaml:"plan"`                               // plan-specific settings
 }
 
 // PlanConfig represents plan system configuration.
 type PlanConfig struct {
-	EnableReview      bool     `mapstructure:"enable_review"`      // enable plan review before execution
-	VerifyCommands    []string `mapstructure:"verify_commands"`    // commands to run in verify phase (e.g., "make test")
-	UseReviewerAgent  bool     `mapstructure:"use_reviewer_agent"` // delegate to code-reviewer agent in verify phase
-	ParallelExplore   bool     `mapstructure:"parallel_explore"`   // enable parallel exploration with multiple agents
-	MaxParallelExplore int     `mapstructure:"max_parallel_explore"` // max concurrent exploration agents (default: 3)
+	EnableReview      bool     `mapstructure:"enable_review" yaml:"enable_review"`      // enable plan review before execution
+	VerifyCommands    []string `mapstructure:"verify_commands" yaml:"verify_commands"`    // commands to run in verify phase (e.g., "make test")
+	UseReviewerAgent  bool     `mapstructure:"use_reviewer_agent" yaml:"use_reviewer_agent"` // delegate to code-reviewer agent in verify phase
+	ParallelExplore   bool     `mapstructure:"parallel_explore" yaml:"parallel_explore"`   // enable parallel exploration with multiple agents
+	MaxParallelExplore int     `mapstructure:"max_parallel_explore" yaml:"max_parallel_explore"` // max concurrent exploration agents (default: 3)
 }
 
 // ValidateAgentConfig validates agent configuration parameters.
@@ -248,103 +248,103 @@ func (c *AgentConfig) Validate() error {
 
 // TUIConfig represents terminal UI configuration.
 type TUIConfig struct {
-	DebugMode bool `mapstructure:"debug_mode"` // Show step counters and detailed logs
+	DebugMode bool `mapstructure:"debug_mode" yaml:"debug_mode"` // Show step counters and detailed logs
 }
 
 // AdaptersConfig represents external platform adapters configuration.
 type AdaptersConfig struct {
-	Enabled         bool                `mapstructure:"enabled"`          // Master switch for all adapters
-	EnabledAdapters []string            `mapstructure:"enabled_adapters"` // List of enabled adapter names
-	DataDir         string              `mapstructure:"data_dir"`         // Data directory for adapter storage
-	Feishu          FeishuAdapterConfig `mapstructure:"feishu"`           // Feishu adapter configuration
+	Enabled         bool                `mapstructure:"enabled" yaml:"enabled"`          // Master switch for all adapters
+	EnabledAdapters []string            `mapstructure:"enabled_adapters" yaml:"enabled_adapters"` // List of enabled adapter names
+	DataDir         string              `mapstructure:"data_dir" yaml:"data_dir"`         // Data directory for adapter storage
+	Feishu          FeishuAdapterConfig `mapstructure:"feishu" yaml:"feishu"`           // Feishu adapter configuration
 }
 
 // FeishuAdapterConfig represents Feishu adapter configuration.
 type FeishuAdapterConfig struct {
-	Enabled                 bool   `mapstructure:"enabled"`                   // Enable/disable Feishu adapter
-	AppID                   string `mapstructure:"app_id"`                    // Feishu App ID
-	AppSecret               string `mapstructure:"app_secret"`                // Feishu App Secret
-	EncryptKey              string `mapstructure:"encrypt_key"`               // Message encryption key (optional)
-	VerificationToken       string `mapstructure:"verification_token"`        // Webhook verification token (optional)
-	WebhookPath             string `mapstructure:"webhook_path"`              // Webhook endpoint path
-	Port                    string `mapstructure:"port"`                      // HTTP server port
-	AsyncProcessing         bool   `mapstructure:"async_processing"`          // Process messages asynchronously
-	AutoReply               bool   `mapstructure:"auto_reply"`                // Automatically reply to messages
-	ShowProcessingIndicator bool   `mapstructure:"show_processing_indicator"` // Show "processing" indicator message
+	Enabled                 bool   `mapstructure:"enabled" yaml:"enabled"`                   // Enable/disable Feishu adapter
+	AppID                   string `mapstructure:"app_id" yaml:"app_id"`                    // Feishu App ID
+	AppSecret               string `mapstructure:"app_secret" yaml:"app_secret"`                // Feishu App Secret
+	EncryptKey              string `mapstructure:"encrypt_key" yaml:"encrypt_key"`               // Message encryption key (optional)
+	VerificationToken       string `mapstructure:"verification_token" yaml:"verification_token"`        // Webhook verification token (optional)
+	WebhookPath             string `mapstructure:"webhook_path" yaml:"webhook_path"`              // Webhook endpoint path
+	Port                    string `mapstructure:"port" yaml:"port"`                      // HTTP server port
+	AsyncProcessing         bool   `mapstructure:"async_processing" yaml:"async_processing"`          // Process messages asynchronously
+	AutoReply               bool   `mapstructure:"auto_reply" yaml:"auto_reply"`                // Automatically reply to messages
+	ShowProcessingIndicator bool   `mapstructure:"show_processing_indicator" yaml:"show_processing_indicator"` // Show "processing" indicator message
 }
 
 // KnowledgeConfig represents knowledge base configuration.
 type KnowledgeConfig struct {
-	TopK          int     `mapstructure:"top_k"`           // number of results to retrieve from knowledge base
-	RAGTokenRatio float64 `mapstructure:"rag_token_ratio"` // max ratio of context tokens for RAG results
+	TopK          int     `mapstructure:"top_k" yaml:"top_k"`           // number of results to retrieve from knowledge base
+	RAGTokenRatio float64 `mapstructure:"rag_token_ratio" yaml:"rag_token_ratio"` // max ratio of context tokens for RAG results
 }
 
 // I18nConfig represents internationalization configuration.
 type I18nConfig struct {
-	Locale     string `mapstructure:"locale"`      // current locale (e.g., en, zh-CN)
-	LocalesDir string `mapstructure:"locales_dir"` // custom locales directory (optional)
-	Fallback   string `mapstructure:"fallback"`    // fallback locale (default: en)
+	Locale     string `mapstructure:"locale" yaml:"locale"`      // current locale (e.g., en, zh-CN)
+	LocalesDir string `mapstructure:"locales_dir" yaml:"locales_dir"` // custom locales directory (optional)
+	Fallback   string `mapstructure:"fallback" yaml:"fallback"`    // fallback locale (default: en)
 }
 
 // OrchestratorConfig represents multi-agent orchestrator configuration.
 type OrchestratorConfig struct {
-	Enabled             bool          `mapstructure:"enabled"`              // Enable orchestrator mode
-	MaxSubAgents        int           `mapstructure:"max_sub_agents"`       // Maximum number of sub-agents
-	WorkspaceDir        string        `mapstructure:"workspace_dir"`        // Base directory for agent workspaces
-	SupervisionInterval time.Duration `mapstructure:"supervision_interval"` // Interval for supervision checks
-	StaleDocThreshold   time.Duration `mapstructure:"stale_doc_threshold"`  // Time threshold for stale document detection
-	AutoCleanup         bool          `mapstructure:"auto_cleanup"`         // Auto-cleanup finished agents
-	SubAgentLLM         *LLMConfig    `mapstructure:"sub_agent_llm"`        // LLM config for sub-agents (nil = inherit)
+	Enabled             bool          `mapstructure:"enabled" yaml:"enabled"`              // Enable orchestrator mode
+	MaxSubAgents        int           `mapstructure:"max_sub_agents" yaml:"max_sub_agents"`       // Maximum number of sub-agents
+	WorkspaceDir        string        `mapstructure:"workspace_dir" yaml:"workspace_dir"`        // Base directory for agent workspaces
+	SupervisionInterval time.Duration `mapstructure:"supervision_interval" yaml:"supervision_interval"` // Interval for supervision checks
+	StaleDocThreshold   time.Duration `mapstructure:"stale_doc_threshold" yaml:"stale_doc_threshold"`  // Time threshold for stale document detection
+	AutoCleanup         bool          `mapstructure:"auto_cleanup" yaml:"auto_cleanup"`         // Auto-cleanup finished agents
+	SubAgentLLM         *LLMConfig    `mapstructure:"sub_agent_llm" yaml:"sub_agent_llm"`        // LLM config for sub-agents (nil = inherit)
 }
 
 // AgentsConfig represents LLM-triggered SubAgent configuration.
 type AgentsConfig struct {
-	Enabled     bool     `mapstructure:"enabled"`
-	Directories []string `mapstructure:"directories"`
+	Enabled     bool     `mapstructure:"enabled" yaml:"enabled"`
+	Directories []string `mapstructure:"directories" yaml:"directories"`
 }
 
 // IntentConfig represents intent recognition configuration.
 type IntentConfig struct {
-	Enabled             bool    `mapstructure:"enabled"`              // Enable intent recognition
-	ConfidenceThreshold float64 `mapstructure:"confidence_threshold"` // Minimum confidence threshold (0.0-1.0)
+	Enabled             bool    `mapstructure:"enabled" yaml:"enabled"`              // Enable intent recognition
+	ConfidenceThreshold float64 `mapstructure:"confidence_threshold" yaml:"confidence_threshold"` // Minimum confidence threshold (0.0-1.0)
 }
 
 // HabitConfig represents habit tracking configuration.
 type HabitConfig struct {
-	Enabled          bool    `mapstructure:"enabled"`             // Enable habit tracking
-	MinOccurrences   int     `mapstructure:"min_occurrences"`     // Minimum pattern appearances to form a habit
-	ConfThreshold    float64 `mapstructure:"conf_threshold"`      // Minimum confidence for valid habit
-	MaxActionAgeDays int     `mapstructure:"max_action_age_days"` // Max action age in days
-	AnalysisLimit    int     `mapstructure:"analysis_limit"`      // Max actions to analyze
+	Enabled          bool    `mapstructure:"enabled" yaml:"enabled"`             // Enable habit tracking
+	MinOccurrences   int     `mapstructure:"min_occurrences" yaml:"min_occurrences"`     // Minimum pattern appearances to form a habit
+	ConfThreshold    float64 `mapstructure:"conf_threshold" yaml:"conf_threshold"`      // Minimum confidence for valid habit
+	MaxActionAgeDays int     `mapstructure:"max_action_age_days" yaml:"max_action_age_days"` // Max action age in days
+	AnalysisLimit    int     `mapstructure:"analysis_limit" yaml:"analysis_limit"`      // Max actions to analyze
 }
 
 // LocationConfig represents location detection configuration.
 type LocationConfig struct {
-	FixedCity    string `mapstructure:"fixed_city"`    // Fixed city name (overrides auto-detection)
-	FixedCountry string `mapstructure:"fixed_country"` // Fixed country name
-	AutoDetect   bool   `mapstructure:"auto_detect"`   // Enable IP-based auto-detection
+	FixedCity    string `mapstructure:"fixed_city" yaml:"fixed_city"`    // Fixed city name (overrides auto-detection)
+	FixedCountry string `mapstructure:"fixed_country" yaml:"fixed_country"` // Fixed country name
+	AutoDetect   bool   `mapstructure:"auto_detect" yaml:"auto_detect"`   // Enable IP-based auto-detection
 }
 
 // LSPConfig represents LSP server configuration.
 type LSPConfig struct {
-	Enabled         bool                      `mapstructure:"enabled"`          // Enable LSP support
-	Servers         map[string]LSPServerEntry `mapstructure:"servers"`          // language → config
-	DefaultTimeout  time.Duration             `mapstructure:"default_timeout"`  // default timeout for LSP operations
+	Enabled         bool                      `mapstructure:"enabled" yaml:"enabled"`          // Enable LSP support
+	Servers         map[string]LSPServerEntry `mapstructure:"servers" yaml:"servers"`          // language → config
+	DefaultTimeout  time.Duration             `mapstructure:"default_timeout" yaml:"default_timeout"`  // default timeout for LSP operations
 }
 
 // LSPServerEntry represents a single LSP server configuration.
 type LSPServerEntry struct {
-	Command    string            `mapstructure:"command"`           // LSP server command (e.g., "gopls")
-	Args       []string          `mapstructure:"args"`              // Additional arguments
-	Env        map[string]string `mapstructure:"env,omitempty"`     // Environment variables
-	Extensions []string          `mapstructure:"extensions"`        // File extensions (e.g., [".go"])
-	Disabled   bool              `mapstructure:"disabled,omitempty"` // Disable this server
+	Command    string            `mapstructure:"command" yaml:"command"`           // LSP server command (e.g., "gopls")
+	Args       []string          `mapstructure:"args" yaml:"args"`              // Additional arguments
+	Env        map[string]string `mapstructure:"env,omitempty" yaml:"env,omitempty"`     // Environment variables
+	Extensions []string          `mapstructure:"extensions" yaml:"extensions"`        // File extensions (e.g., [".go"])
+	Disabled   bool              `mapstructure:"disabled,omitempty" yaml:"disabled,omitempty"` // Disable this server
 }
 
 // UsersConfig represents multi-user configuration.
 type UsersConfig struct {
-	Default     string       `mapstructure:"default"`     // Default user ID (for CLI mode)
-	Definitions []UserConfig `mapstructure:"definitions"` // User definitions
+	Default     string       `mapstructure:"default" yaml:"default"`     // Default user ID (for CLI mode)
+	Definitions []UserConfig `mapstructure:"definitions" yaml:"definitions"` // User definitions
 }
 
 // UserConfig represents a single user configuration.
