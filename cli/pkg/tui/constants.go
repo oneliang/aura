@@ -159,6 +159,7 @@ var (
 func InitI18nConstants() {
 	DefaultUserName = i18n.T("tui.default_user")
 	AuraDisplayName = "[" + i18n.T("tui.aura_display") + "]:"
+	IdleStatusText = i18n.T("tui.status.idle")
 	ThinkingStatusText = i18n.T("tui.status.thinking")
 	ProcessingStatusText = i18n.T("tui.status.processing")
 	ConfirmEnterHint = i18n.T("tui.confirm.enter")
