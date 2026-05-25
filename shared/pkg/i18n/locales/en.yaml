@@ -389,6 +389,7 @@ error.content_block.tool_result_content: "ToolResultBlock content error: %w"
 
 # TUI constants (P2)
 tui.default_user: "User"
+tui.aura_display: " Aura"
 tui.status.thinking: "Thinking..."
 tui.status.processing: "Processing..."
 tui.status.loading: "Loading..."

@@ -95,6 +95,15 @@ type Model struct {
 	// Greeting and session info — fixed header above chat area, not cleared by /clear
 	greeting    string
 	sessionInfo string
+
+	// Queue input state
+	pendingMessages []PendingMessage // 待发送的排队消息
+}
+
+// PendingMessage represents a message waiting to be sent.
+type PendingMessage struct {
+	Content   string
+	Timestamp time.Time
 }
 
 // Ensure Model implements tea.Model.

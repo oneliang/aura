@@ -413,6 +413,7 @@ error.content_block.tool_result_content: "工具结果块内容错误：%w"
 
 # TUI constants (P2)
 tui.default_user: "用户"
+tui.aura_display: " Aura"
 tui.status.thinking: "思考中..."
 tui.status.processing: "处理中..."
 tui.status.loading: "加载中..."

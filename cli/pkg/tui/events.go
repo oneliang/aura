@@ -163,6 +163,33 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.plan.Reset()
 	m.state.ResetForNewInteraction()
 
+	// Check for pending messages - auto-send after done
+	if len(m.pendingMessages) > 0 {
+		// Combine all pending messages
+		combined := combinePendingMessages(m.pendingMessages)
+		m.pendingMessages = nil
+		log.Debug().Str("combined", combined).Msg("handleEventDone: sending pending messages")
+
+		// Add user message to store for the pending messages
+		m.messages.Add(MessageTypeUser, combined, nil, renderMessage, m.renderer, m.styles)
+
+		// Set UI state for new request
+		m.state.SetWaiting(true)
+		m.state.SetStartTime(time.Now())
+		m.state.SetDisplayState(DisplayThinking)
+		m.thinking.Reset()
+		m.processing.Reset()
+		_, thinkingCmd := m.thinking.StartAndRender()
+		m.autoScroll = true
+
+		return m, tea.Batch(
+			m.sendMessage(combined),
+			thinkingCmd,
+			m.scrollToBottom(),
+			m.processEvents(),
+		)
+	}
+
 	// Re-enable input and scroll to bottom
 	return m, tea.Sequence(
 		m.input.EnableAndFocus(),
@@ -1051,4 +1078,20 @@ func (m Model) handleEventMaxStepsExceeded(msg ChatEvent) (tea.Model, tea.Cmd) {
 		m.scrollToBottom(),
 		m.processEvents(),
 	)
+}
+
+// combinePendingMessages combines all pending messages into a single message.
+// Format: "[补充信息 1] content1\n[补充信息 2] content2"
+func combinePendingMessages(messages []PendingMessage) string {
+	var b strings.Builder
+	for i, msg := range messages {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString("[补充信息 ")
+		b.WriteString(fmt.Sprintf("%d", i+1))
+		b.WriteString("] ")
+		b.WriteString(msg.Content)
+	}
+	return b.String()
 }

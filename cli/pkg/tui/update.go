@@ -568,6 +568,16 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		return m.handleCommand(input)
 	}
 
+	// If already processing, add to pending queue instead of sending
+	if m.state.Waiting() {
+		m.pendingMessages = append(m.pendingMessages, PendingMessage{
+			Content:   input,
+			Timestamp: time.Now(),
+		})
+		log.Debug().Str("input", input).Int("pending_count", len(m.pendingMessages)).Msg("handleSubmit: added to pending queue")
+		return m, nil
+	}
+
 	// Reset state for new interaction
 	m.state.ResetForNewInteraction()
 

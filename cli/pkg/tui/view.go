@@ -368,6 +368,12 @@ func (m Model) buildChatContent() string {
 func (m Model) buildBottomArea(width int) string {
 	var b strings.Builder
 
+	// Pending messages queue (above input)
+	if len(m.pendingMessages) > 0 {
+		b.WriteString(m.renderPendingMessages(width))
+		b.WriteByte('\n')
+	}
+
 	// Input widget (includes top/bottom separators)
 	b.WriteString(m.input.Render())
 	b.WriteByte('\n')
@@ -378,5 +384,16 @@ func (m Model) buildBottomArea(width int) string {
 	// Empty line for IME candidate space (Chinese input)
 	b.WriteByte('\n')
 
+	return b.String()
+}
+
+// renderPendingMessages renders the pending messages queue.
+func (m Model) renderPendingMessages(width int) string {
+	var b strings.Builder
+	b.WriteString(m.styles.Help.Render("⏳ Pending messages:"))
+	for i, msg := range m.pendingMessages {
+		b.WriteByte('\n')
+		b.WriteString(fmt.Sprintf("  %d. %s", i+1, utils.Truncate(msg.Content, 50)))
+	}
 	return b.String()
 }
