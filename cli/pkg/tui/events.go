@@ -224,7 +224,9 @@ func (m Model) handleEventThinkingStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 
 	_, tickCmd := m.thinking.StartAndRender()
 	// Thinking widget renders inline in chat area via buildChatContent()
-	return m, tea.Sequence(m.processEvents(), tickCmd)
+	// IMPORTANT: tickCmd must execute BEFORE processEvents to start the tick chain
+	// processEvents is blocking - it waits for next event from channel
+	return m, tea.Sequence(tickCmd, m.processEvents())
 }
 
 // handleEventThinkingEnd handles the thinking end event.
