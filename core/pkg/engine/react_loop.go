@@ -13,7 +13,6 @@ import (
 	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/hooks"
-	"github.com/oneliang/aura/shared/pkg/i18n"
 	"github.com/oneliang/aura/shared/pkg/memory"
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 	tools "github.com/oneliang/aura/tools/pkg"
@@ -437,8 +436,8 @@ func (e *Engine) getReActLLMResponse(ctx context.Context, eventsCh chan<- events
 	messages := e.buildReActMessages(ctx)
 	e.logger.Info().Str("phase", "build_messages").Dur("duration", time.Since(buildStart)).Int("message_count", len(messages)).Msg("[DIAG] buildReActMessages completed")
 
-	// Emit thinking event
-	eventsCh <- events.NewEvent(events.EventTypeThinkingStart, i18n.T("tui.thinking"), requestID)
+	// Note: ThinkingStart event is now managed inside streamAndBufferResponse
+	// to avoid duplicate events and ensure proper lifecycle management
 
 	llmStart := time.Now()
 	response, toolCalls, thinkingContent, err := e.streamAndBufferResponse(ctx, eventsCh, messages, requestID, "")
@@ -450,7 +449,6 @@ func (e *Engine) getReActLLMResponse(ctx context.Context, eventsCh chan<- events
 	}
 
 	e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Int("response_length", len(response)).Msg("runReActLoop: LLM response received")
-	// thinking_end is now sent inside streamAndBufferResponse
 	return response, toolCalls, thinkingContent, true
 }
 

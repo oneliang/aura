@@ -11,16 +11,23 @@ import (
 
 // SessionHandler handles session commands.
 type SessionHandler struct {
-	sessionMgr *manager.SessionManager
-	userID     string
+	sessionMgr        *manager.SessionManager
+	userID            string
+	currentSessionID  string // Current active session ID for show command
 }
 
 // NewSessionHandler creates a new session handler.
 func NewSessionHandler(sessionMgr *manager.SessionManager, userID string) *SessionHandler {
 	return &SessionHandler{
-		sessionMgr: sessionMgr,
-		userID:     userID,
+		sessionMgr:       sessionMgr,
+		userID:           userID,
+		currentSessionID: "",
 	}
+}
+
+// SetCurrentSessionID sets the current active session ID.
+func (h *SessionHandler) SetCurrentSessionID(sessionID string) {
+	h.currentSessionID = sessionID
 }
 
 // ExecuteCommand executes a session command.
@@ -84,7 +91,16 @@ func (h *SessionHandler) deleteSession(id string) (string, error) {
 }
 
 // showSession shows session details.
+// If id is empty, uses the current active session.
 func (h *SessionHandler) showSession(id string) (string, error) {
+	// Use current session if id is empty
+	if id == "" {
+		if h.currentSessionID == "" {
+			return "", fmt.Errorf("no session ID specified and no current session available")
+		}
+		id = h.currentSessionID
+	}
+
 	session, err := h.sessionMgr.GetSession(id, h.userID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get session: %w", err)

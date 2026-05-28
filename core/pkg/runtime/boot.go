@@ -349,6 +349,10 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 	// Register command provider as a tool if available
 	if r.commandProvider != nil {
 		r.agent.AddTool(factory.NewCommandTool(r.commandProvider))
+		// Set current session ID for session_show command
+		if cp, ok := r.commandProvider.(*commands.CommandProvider); ok {
+			cp.SetCurrentSessionID(r.sessionID)
+		}
 	}
 
 	// Register skill_activate tool if skills are loaded

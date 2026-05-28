@@ -156,6 +156,13 @@ func (c *CommandProvider) SetMCPListFunc(fn func() []MCPInfo) {
 	c.mcpHandler.SetListServersFunc(fn)
 }
 
+// SetCurrentSessionID sets the current session ID for session_show command.
+func (c *CommandProvider) SetCurrentSessionID(sessionID string) {
+	if c.sessionHandler != nil {
+		c.sessionHandler.SetCurrentSessionID(sessionID)
+	}
+}
+
 // GetCommands returns all available commands.
 func (c *CommandProvider) GetCommands() []CommandInfo {
 	cmds := GetInternalCommands()
