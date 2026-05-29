@@ -111,9 +111,9 @@ func (m *SessionMemory) AddWithType(role, content string, msgType sharedmemory.M
 		m.trimByCount()
 	}
 
-	// Persist to storage based on type (async)
+	// Persist to storage based on type (sync to ensure completion before exit)
 	if m.store != nil && shouldPersistByType(msgType) {
-		go m.persistWithType(role, content, msgType)
+		m.persistWithType(role, content, msgType)
 	}
 }
 
@@ -220,9 +220,9 @@ func (m *SessionMemory) AddWithBlocks(role string, blocks []sharedmemory.Content
 		m.trimByCount()
 	}
 
-	// Persist to storage based on type (async)
+	// Persist to storage based on type (sync to ensure completion before exit)
 	if m.store != nil && shouldPersistByType(msgType) {
-		go m.persistWithBlocks(role, blocks, msgType)
+		m.persistWithBlocks(role, blocks, msgType)
 	}
 }
 
