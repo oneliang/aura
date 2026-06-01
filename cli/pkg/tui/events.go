@@ -157,12 +157,6 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 		m.updateTokenUsage()
 	}
 
-	// Reset all state for new interaction
-	m.stopWidgets()
-	m.tasks.Reset()
-	m.plan.Reset()
-	m.state.ResetForNewInteraction()
-
 	// Check for pending messages - auto-send after done
 	if len(m.pendingMessages) > 0 {
 		// Combine all pending messages
@@ -173,15 +167,21 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 		// Add user message to store for the pending messages
 		m.messages.Add(MessageTypeUser, combined, nil, renderMessage, m.renderer, m.styles)
 
-		// Set UI state for new request
+		// IMMEDIATE thinking transition - skip old "思考了X秒" display
+		// Reset and start new thinking right away (same as handleSubmit)
+		m.thinking.Reset()
+		m.processing.Reset()
+		m.tasks.Reset()
+		m.plan.Reset()
+
+		// Set UI state and start thinking IMMEDIATELY
 		m.state.SetWaiting(true)
 		m.state.SetStartTime(time.Now())
 		m.state.SetDisplayState(DisplayThinking)
-		m.thinking.Reset()
-		m.processing.Reset()
 		_, thinkingCmd := m.thinking.StartAndRender()
 		m.autoScroll = true
 
+		// Use tea.Batch for concurrent execution (same as handleSubmit)
 		return m, tea.Batch(
 			m.sendMessage(combined),
 			thinkingCmd,
@@ -189,6 +189,12 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 			m.processEvents(),
 		)
 	}
+
+	// No pending messages - complete current interaction
+	m.stopWidgets()
+	m.tasks.Reset()
+	m.plan.Reset()
+	m.state.ResetForNewInteraction()
 
 	// Re-enable input and scroll to bottom
 	return m, tea.Sequence(
@@ -1083,16 +1089,14 @@ func (m Model) handleEventMaxStepsExceeded(msg ChatEvent) (tea.Model, tea.Cmd) {
 }
 
 // combinePendingMessages combines all pending messages into a single message.
-// Format: "[补充信息 1] content1\n[补充信息 2] content2"
+// Preserves original user input without adding extra formatting.
+// Format: "content1\ncontent2" (newline-separated if multiple)
 func combinePendingMessages(messages []PendingMessage) string {
 	var b strings.Builder
 	for i, msg := range messages {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString("[补充信息 ")
-		b.WriteString(fmt.Sprintf("%d", i+1))
-		b.WriteString("] ")
 		b.WriteString(msg.Content)
 	}
 	return b.String()

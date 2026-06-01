@@ -9,6 +9,16 @@ import (
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Debug: log paste-related messages (temporary)
+	switch msg := msg.(type) {
+	case tea.PasteMsg:
+		log.Debug().Int("len", len(msg.Content)).Str("content_preview", msg.Content[:min(50, len(msg.Content))]).Msg("收到PasteMsg")
+	case tea.KeyPressMsg:
+		if msg.Code == tea.KeyEnter {
+			log.Debug().Bool("shift", msg.Mod == tea.ModShift).Msg("收到Enter KeyPressMsg")
+		}
+	}
+
 	// Refresh statusBar model pointer — Bubble Tea MVU returns new Model
 	// values on each Update, so the pointer captured in New() becomes stale.
 	m.statusBar.model = &m
@@ -22,6 +32,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return m.handleKeyMsg(msg)
+
+	case tea.PasteMsg:
+		// 粘贴内容直接传递给textarea处理
+		// textarea内部会正确处理多行文本，插入换行符而不是触发提交
+		if cmd := m.input.Update(msg); cmd != nil {
+			return m, cmd
+		}
+		// 粘贴后更新输入框高度（多行文本可能增加高度）
+		m.input.updateHeight()
+		m.updateCommandCompletion()
+		return m, m.processEvents()
 
 	case tea.WindowSizeMsg:
 		return m.handleResize(msg)

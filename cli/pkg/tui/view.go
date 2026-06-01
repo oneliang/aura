@@ -388,12 +388,14 @@ func (m Model) buildBottomArea(width int) string {
 }
 
 // renderPendingMessages renders the pending messages queue.
+// Shows original user input without extra formatting.
 func (m Model) renderPendingMessages(width int) string {
 	var b strings.Builder
 	b.WriteString(m.styles.Help.Render("⏳ Pending messages:"))
-	for i, msg := range m.pendingMessages {
+	for _, msg := range m.pendingMessages {
 		b.WriteByte('\n')
-		b.WriteString(fmt.Sprintf("  %d. %s", i+1, utils.Truncate(msg.Content, 50)))
+		b.WriteString("  ")
+		b.WriteString(utils.Truncate(msg.Content, 50))
 	}
 	return b.String()
 }

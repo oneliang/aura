@@ -81,6 +81,8 @@ func (t *TaskTool) SetRequest(eventsCh chan<- events.Event, requestID string) {
 }
 
 const toolDescription = `Track progress on multi-step tasks.
+
+When to use: For complex tasks requiring 3+ steps or careful planning.
 Usage: call with action parameter set to one of: create, update, list.
 Examples:
 - Action: {"tool": "task", "parameters": {"action": "create", "content": "Research the codebase"}}
