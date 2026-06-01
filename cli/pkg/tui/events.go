@@ -131,7 +131,7 @@ func (m Model) handleChatEvent(msg ChatEvent) (tea.Model, tea.Cmd) {
 		model, cmd = m.handleEventMaxStepsExceeded(msg)
 
 	default:
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	return model, cmd
@@ -186,7 +186,7 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 			m.sendMessage(combined),
 			thinkingCmd,
 			m.scrollToBottom(),
-			m.processEvents(),
+			nil,
 		)
 	}
 
@@ -200,7 +200,7 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 	return m, tea.Sequence(
 		m.input.EnableAndFocus(),
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -218,11 +218,11 @@ func (m *Model) stopWidgets() {
 // Creates an empty Thinking message for streaming chunks to accumulate into.
 func (m Model) handleEventThinkingStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 	if m.thinking == nil {
-		return m, m.processEvents()
+		return m, nil
 	}
 	// Skip if thinking already started by handleSubmit (avoids restart on late engine event)
 	if m.thinking.IsActive() {
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	// Create empty Thinking message for streaming chunks
@@ -232,14 +232,14 @@ func (m Model) handleEventThinkingStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 	// Thinking widget renders inline in chat area via buildChatContent()
 	// IMPORTANT: tickCmd must execute BEFORE processEvents to start the tick chain
 	// processEvents is blocking - it waits for next event from channel
-	return m, tea.Sequence(tickCmd, m.processEvents())
+	return m, tea.Sequence(tickCmd, nil)
 }
 
 // handleEventThinkingEnd handles the thinking end event.
 // Renders any accumulated thinking content.
 func (m Model) handleEventThinkingEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 	if m.thinking == nil {
-		return m, m.processEvents()
+		return m, nil
 	}
 	// Complete thinking widget — stops tick animation chain
 	m.thinking.Complete()
@@ -248,20 +248,20 @@ func (m Model) handleEventThinkingEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.RenderLastWithTypeAndComplete(MessageTypeThinking, m.renderer, m.styles, renderMessage)
 
 	// Continue listening for events
-	return m, m.processEvents()
+	return m, nil
 }
 
 // handleEventThinkingChunk handles the thinking_chunk event.
 // Accumulates thinking content chunks into a single MessageTypeThinking message.
 func (m Model) handleEventThinkingChunk(msg ChatEvent) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(msg.Content) == "" {
-		return m, m.processEvents()
+		return m, nil
 	}
 	// Accumulate into a single thinking message
 	m.messages.AppendToLastTyped(msg.Content, MessageTypeThinking)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -270,7 +270,7 @@ func (m Model) handleEventThinkingChunk(msg ChatEvent) (tea.Model, tea.Cmd) {
 func (m Model) handleEventResponseStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 	// Create empty assistant message for streaming
 	m.messages.AddEmpty(MessageTypeAssistant)
-	return m, m.processEvents()
+	return m, nil
 }
 
 // handleEventResponseEnd handles the response_end event.
@@ -283,7 +283,7 @@ func (m Model) handleEventResponseEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.updateTokenUsage()
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -297,7 +297,7 @@ func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 	// Skip empty responses
 	if strings.TrimSpace(msg.Content) == "" {
 		log.Debug().Msg("handleEventResponse: empty content, skipping")
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	// If we already have an assistant message (from accumulated streaming chunks),
@@ -305,7 +305,7 @@ func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 	lastMsg := m.messages.GetLastAssistantMessage()
 	if lastMsg != nil && lastMsg.Content != "" {
 		log.Debug().Msg("handleEventResponse: skipping — content already accumulated from streaming")
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	// Non-streaming: add new message with response (glamour rendered)
@@ -318,7 +318,7 @@ func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -327,13 +327,13 @@ func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 // Displayed in muted gray italic without [Aura]: prefix.
 func (m Model) handleEventThinkingContent(msg ChatEvent) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(msg.Content) == "" {
-		return m, m.processEvents()
+		return m, nil
 	}
 	// Accumulate into a single thinking message
 	m.messages.AppendToLastTyped(msg.Content, MessageTypeThinking)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -348,7 +348,7 @@ func (m Model) handleEventStreamChunk(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.AppendToLast(msg.Content)
 
 	// Continue listening for next event (including Done)
-	return m, m.processEvents()
+	return m, nil
 }
 
 // handleEventAction handles the action event.
@@ -359,14 +359,14 @@ func (m Model) handleEventAction(msg ChatEvent) (tea.Model, tea.Cmd) {
 		m.messages.Add(MessageTypeToolStart, toolName, msg.Extra, renderMessage, m.renderer, m.styles)
 		return m, tea.Sequence(
 			m.scrollToBottom(),
-			m.processEvents(),
+			nil,
 		)
 	}
 	// Fallback: display raw content if parsing fails
 	m.messages.Add(MessageTypeToolStart, msg.Content, msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -389,7 +389,7 @@ func (m Model) handleEventResult(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeToolEnd, msg.Content, msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -402,7 +402,7 @@ func (m Model) handleEventError(msg ChatEvent) (tea.Model, tea.Cmd) {
 	return m, tea.Sequence(
 		m.input.EnableAndFocus(),
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -411,7 +411,7 @@ func (m Model) handleEventStep(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, msg.Content, nil, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -433,7 +433,7 @@ func (m Model) handleEventPlanCreated(msg ChatEvent) (tea.Model, tea.Cmd) {
 
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -441,7 +441,7 @@ func (m Model) handleEventPlanCreated(msg ChatEvent) (tea.Model, tea.Cmd) {
 // PlanWidget shows checkbox progress — when step N starts, steps 0..N-1 are marked done.
 func (m Model) handleEventPlanStep(msg ChatEvent) (tea.Model, tea.Cmd) {
 	if msg.Extra == nil {
-		return m, tea.Sequence(m.scrollToBottom(), m.processEvents())
+		return m, tea.Sequence(m.scrollToBottom(), nil)
 	}
 	stepNum := 0
 	if n, ok := msg.Extra["step_num"].(int); ok {
@@ -475,7 +475,7 @@ func (m Model) handleEventPlanStep(msg ChatEvent) (tea.Model, tea.Cmd) {
 
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -491,7 +491,7 @@ func (m Model) handleEventPlanComplete(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, i18n.T("plan.completed"), msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -502,7 +502,7 @@ func (m Model) handleEventPlanReviewStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, i18n.T("plan.review_phase"), msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -516,7 +516,7 @@ func (m Model) handleEventPlanReviewFiles(msg ChatEvent) (tea.Model, tea.Cmd) {
 	}
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -527,7 +527,7 @@ func (m Model) handleEventPlanModeExit(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, i18n.T("plan.exiting_mode"), msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -535,6 +535,13 @@ func (m Model) handleEventPlanModeExit(msg ChatEvent) (tea.Model, tea.Cmd) {
 // Adds a ToolStart message with executionID for precise matching when tool ends.
 // Note: "task" tool events are handled by handleEventTaskCreate/Update — skip to avoid duplicate output.
 func (m Model) handleEventToolStart(msg ChatEvent) (tea.Model, tea.Cmd) {
+	// Log execution_id for debugging
+	if msg.Extra != nil {
+		if id, ok := msg.Extra["execution_id"].(string); ok {
+			log.Debug().Str("execution_id", id).Str("tool", msg.Content).Msg("handleEventToolStart: 接收")
+		}
+	}
+
 	// Get params from Extra
 	params := ""
 	if msg.Extra != nil {
@@ -549,7 +556,7 @@ func (m Model) handleEventToolStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 		if m.processing != nil {
 			m.processing.UpdateTool(msg.Content)
 		}
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	// Add ToolStart message with executionID (message appears in flow order)
@@ -561,7 +568,7 @@ func (m Model) handleEventToolStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 		m.processing.AddTool(msg.Content, params)
 		return m, tea.Sequence(
 			m.scrollToBottom(),
-			m.processEvents(),
+			nil,
 		)
 	}
 
@@ -576,7 +583,7 @@ func (m Model) handleEventToolStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 	return m, tea.Sequence(
 		m.scrollToBottom(),
 		tickCmd,
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -594,6 +601,11 @@ func (m Model) handleEventToolEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 		if t, ok := msg.Extra["tool"].(string); ok {
 			toolName = t
 		}
+	}
+
+	// Log execution_id for debugging
+	if executionID != "" {
+		log.Debug().Str("execution_id", executionID).Str("tool", toolName).Msg("handleEventToolEnd: 接收")
 	}
 
 	// Extract duration - compatible with multiple types (JSON serialization converts to float64)
@@ -616,7 +628,7 @@ func (m Model) handleEventToolEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 		if toolName != "" {
 			m.state.EndTool(toolName, msg.Content)
 		}
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	// Merge with ToolStart message using executionID (appears in flow order)
@@ -638,7 +650,7 @@ func (m Model) handleEventToolEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -654,7 +666,7 @@ func (m Model) handleEventCommandMatched(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, fmt.Sprintf(i18n.T("command.matched"), msg.Content), nil, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -673,7 +685,7 @@ func (m Model) handleEventCommandResult(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeAssistant, msg.Content, nil, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -901,7 +913,7 @@ func (m Model) handleEventEnterPlanMode(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, i18n.T("plan.enter_mode"), msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -912,7 +924,7 @@ func (m Model) handleEventPlanVerifyStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, i18n.T("verify.started"), msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -936,7 +948,7 @@ func (m Model) handleEventPlanVerifyResult(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, content, msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -967,7 +979,7 @@ func (m Model) handleEventPlanVerifyEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 	return m, tea.Sequence(
 		m.input.EnableAndFocus(),
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -990,7 +1002,7 @@ func (m Model) handleEventSnapshotCreated(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.messages.Add(MessageTypeSystem, content, msg.Extra, renderMessage, m.renderer, m.styles)
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -1065,7 +1077,7 @@ func (m Model) handleEventRollbackComplete(msg ChatEvent) (tea.Model, tea.Cmd) {
 	return m, tea.Sequence(
 		m.input.EnableAndFocus(),
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 
@@ -1084,7 +1096,7 @@ func (m Model) handleEventMaxStepsExceeded(msg ChatEvent) (tea.Model, tea.Cmd) {
 
 	return m, tea.Sequence(
 		m.scrollToBottom(),
-		m.processEvents(),
+		nil,
 	)
 }
 

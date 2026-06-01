@@ -78,17 +78,21 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.1fs", seconds)
 }
 
-// renderToolHeader renders the tool block header with a green dot and bold tool name.
-func renderToolHeader(toolName string, styles UIStyles) string {
+// renderToolHeader renders the tool block header with a green dot, bold tool name, and execution ID.
+func renderToolHeader(toolName string, executionID string, styles UIStyles) string {
+	// Show full execution ID (8 chars) for debugging
+	if executionID != "" {
+		return "  " + styles.ToolBlockHeader.Render("● "+toolName) + " " + styles.Help.Render("["+executionID+"]")
+	}
 	return "  " + styles.ToolBlockHeader.Render("● "+toolName)
 }
 
 // renderToolStartBlock renders the tool execution start block: header + IN line with subtle background.
-func renderToolStartBlock(toolName string, params string, styles UIStyles) string {
+func renderToolStartBlock(toolName string, params string, executionID string, styles UIStyles) string {
 	var b strings.Builder
 
-	// Header
-	b.WriteString(renderToolHeader(toolName, styles))
+	// Header with execution ID
+	b.WriteString(renderToolHeader(toolName, executionID, styles))
 	b.WriteByte('\n')
 
 	// IN line with subtle background
@@ -105,7 +109,7 @@ func renderToolStartBlock(toolName string, params string, styles UIStyles) strin
 }
 
 // renderToolEndBlock renders the tool execution end block: OUT line (no background) + Done.
-func renderToolEndBlock(result string, duration time.Duration, styles UIStyles) string {
+func renderToolEndBlock(result string, duration time.Duration, executionID string, styles UIStyles) string {
 	var b strings.Builder
 
 	// OUT line — no background, just label + plain content
@@ -115,7 +119,12 @@ func renderToolEndBlock(result string, duration time.Duration, styles UIStyles) 
 		outContent = "(no output)"
 	}
 	outLabel := styles.ToolBlockOut.Render("OUT ")
-	b.WriteString(outLabel + outContent)
+	// Show full execution ID next to OUT label for debugging
+	if executionID != "" {
+		b.WriteString(outLabel + styles.Help.Render("["+executionID+"] ") + outContent)
+	} else {
+		b.WriteString(outLabel + outContent)
+	}
 	b.WriteByte('\n')
 
 	// Done line
@@ -128,15 +137,15 @@ func renderToolEndBlock(result string, duration time.Duration, styles UIStyles) 
 // renderToolBlockComplete renders a complete tool block by combining start and end blocks.
 // Reuses existing renderToolStartBlock and renderToolEndBlock to avoid code duplication.
 // Applies left border for visual separation.
-func renderToolBlockComplete(toolName string, params string, result string, duration time.Duration, styles UIStyles) string {
+func renderToolBlockComplete(toolName string, params string, result string, duration time.Duration, executionID string, styles UIStyles) string {
 	var b strings.Builder
 
 	// Reuse start block (header + IN line)
-	b.WriteString(renderToolStartBlock(toolName, params, styles))
+	b.WriteString(renderToolStartBlock(toolName, params, executionID, styles))
 	b.WriteByte('\n')
 
 	// Reuse end block (OUT line + Done)
-	b.WriteString(renderToolEndBlock(result, duration, styles))
+	b.WriteString(renderToolEndBlock(result, duration, executionID, styles))
 
 	// Apply left border
 	return styles.ToolBlockBorder.Render(b.String())
@@ -178,21 +187,29 @@ func renderMessage(msg *Message, renderer *MarkdownRenderer, styles UIStyles, us
 
 	case MessageTypeToolStart:
 		params := ""
+		executionID := ""
 		if msg.Extra != nil {
 			if p, ok := msg.Extra["params"].(string); ok {
 				params = p
 			}
+			if id, ok := msg.Extra["execution_id"].(string); ok {
+				executionID = id
+			}
 		}
-		return renderToolStartBlock(msg.Content, params, styles)
+		return renderToolStartBlock(msg.Content, params, executionID, styles)
 
 	case MessageTypeToolEnd:
 		duration := time.Duration(0)
+		executionID := ""
 		if msg.Extra != nil {
 			if d, ok := msg.Extra["duration"].(time.Duration); ok {
 				duration = d
 			}
+			if id, ok := msg.Extra["execution_id"].(string); ok {
+				executionID = id
+			}
 		}
-		return renderToolEndBlock(msg.Content, duration, styles)
+		return renderToolEndBlock(msg.Content, duration, executionID, styles)
 
 	case MessageTypeError:
 		return styles.Error.Render(ToolErrorIcon + msg.Content)

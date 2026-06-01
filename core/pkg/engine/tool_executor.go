@@ -14,6 +14,7 @@ import (
 	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/hooks"
 	"github.com/oneliang/aura/shared/pkg/i18n"
+	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/oneliang/aura/shared/pkg/utils"
 	tools "github.com/oneliang/aura/tools/pkg"
 )
@@ -434,8 +435,9 @@ func generateExecutionID() string {
 }
 
 // emitToolStartEvent emits a tool start event with execution ID for precise tracking.
-func emitToolStartEvent(eventsCh chan<- events.Event, toolName string, params map[string]any, requestID, executionID string) {
+func emitToolStartEvent(log *logger.Logger, eventsCh chan<- events.Event, toolName string, params map[string]any, requestID, executionID string) {
 	paramsJSON, _ := json.Marshal(params)
+	// 发送事件（先发送，后记录日志以验证实际发送顺序）
 	eventsCh <- events.NewEventWithExtra(
 		events.EventTypeToolStart,
 		toolName,
@@ -445,10 +447,12 @@ func emitToolStartEvent(eventsCh chan<- events.Event, toolName string, params ma
 		},
 		requestID,
 	)
+	log.Debug().Str("execution_id", executionID).Str("tool", toolName).Str("params", string(paramsJSON)).Msg("emitToolStartEvent: 发送完成")
 }
 
 // emitToolEndEvent emits a tool end event with execution ID for precise matching.
-func emitToolEndEvent(eventsCh chan<- events.Event, toolName, result string, duration time.Duration, requestID, executionID string) {
+func emitToolEndEvent(log *logger.Logger, eventsCh chan<- events.Event, toolName, result string, duration time.Duration, requestID, executionID string) {
+	// 发送事件（先发送，后记录日志以验证实际发送顺序）
 	eventsCh <- events.NewEventWithExtra(
 		events.EventTypeToolEnd,
 		utils.Truncate(result, toolEndEventTruncateLen),
@@ -460,19 +464,20 @@ func emitToolEndEvent(eventsCh chan<- events.Event, toolName, result string, dur
 		},
 		requestID,
 	)
+	log.Debug().Str("execution_id", executionID).Str("tool", toolName).Msg("emitToolEndEvent: 发送完成")
 }
 
 // executeToolWithEvents executes a single tool action, emitting start/end events
 // with execution ID and returning the result. On failure, emits an error event.
 func (e *Engine) executeToolWithEvents(ctx context.Context, action *ToolAction, eventsCh chan<- events.Event, requestID string) (*tools.ToolResult, error) {
 	executionID := generateExecutionID()
-	emitToolStartEvent(eventsCh, action.Tool, action.Parameters, requestID, executionID)
+	emitToolStartEvent(e.logger, eventsCh, action.Tool, action.Parameters, requestID, executionID)
 	startTime := time.Now()
 	result, err := e.executeTool(ctx, action)
 	duration := time.Since(startTime)
 	if err != nil {
 		eventsCh <- events.NewEvent(events.EventTypeError, fmt.Sprintf("Error: %v", err), requestID)
-		emitToolEndEvent(eventsCh, action.Tool, err.Error(), duration, requestID, executionID)
+		emitToolEndEvent(e.logger, eventsCh, action.Tool, err.Error(), duration, requestID, executionID)
 		return nil, err
 	}
 	content := ""
@@ -483,7 +488,7 @@ func (e *Engine) executeToolWithEvents(ctx context.Context, action *ToolAction, 
 			content = result.Content
 		}
 	}
-	emitToolEndEvent(eventsCh, action.Tool, content, duration, requestID, executionID)
+	emitToolEndEvent(e.logger, eventsCh, action.Tool, content, duration, requestID, executionID)
 	return result, nil
 }
 

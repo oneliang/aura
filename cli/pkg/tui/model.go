@@ -206,7 +206,7 @@ func New(ctx context.Context, runFn RunFunc, config Config, sessionMgr *sdk.Sess
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	// Start event processing
-	return tea.Batch(m.input.Focus(), m.tick(), m.processEvents())
+	return tea.Batch(m.input.Focus(), m.tick(), m.eventLoop())
 }
 
 // loadSessionHistory loads the current session's message history.

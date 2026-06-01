@@ -196,17 +196,20 @@ func (s *MessageStore) RenderLastWithTypeAndComplete(msgType MessageType, render
 // This creates a complete IN/OUT block for each tool instead of separate IN and OUT messages.
 // Uses executionID for precise matching of concurrent tool executions.
 func (s *MessageStore) MergeToolBlockByExecID(executionID, toolName, result string, duration time.Duration, styles UIStyles) {
+	log.Debug().Str("execution_id", executionID).Str("tool", toolName).Msg("MergeToolBlockByExecID: 开始查找")
 	startMsg := s.findToolStartByExecID(executionID)
 	if startMsg == nil {
 		// No matching ToolStart found - add as standalone ToolEnd
-		extra := map[string]any{"duration": duration, "tool": toolName}
+		log.Debug().Str("execution_id", executionID).Msg("MergeToolBlockByExecID: 未找到对应ToolStart，添加独立ToolEnd")
+		extra := map[string]any{"duration": duration, "tool": toolName, "execution_id": executionID}
 		s.Add(MessageTypeToolEnd, result, extra, renderMessage, nil, styles)
 		return
 	}
 
 	// Merge: update the ToolStart message to include OUT content
+	log.Debug().Str("execution_id", executionID).Msg("MergeToolBlockByExecID: 找到对应ToolStart，合并")
 	params := s.extractParams(startMsg)
-	startMsg.Rendered = renderToolBlockComplete(toolName, params, result, duration, styles)
+	startMsg.Rendered = renderToolBlockComplete(toolName, params, result, duration, executionID, styles)
 	// Mark as merged so renderMessage won't re-render as IN-only block on width change
 	if startMsg.Extra == nil {
 		startMsg.Extra = make(map[string]any)

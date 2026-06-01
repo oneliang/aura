@@ -42,13 +42,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 粘贴后更新输入框高度（多行文本可能增加高度）
 		m.input.updateHeight()
 		m.updateCommandCompletion()
-		return m, m.processEvents()
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		return m.handleResize(msg)
 
 	case ChatEvent:
-		return m.handleChatEvent(msg)
+		model, cmd := m.handleChatEvent(msg)
+		// Use returned model to call eventLoop, ensuring correct Model instance
+		if tuiModel, ok := model.(Model); ok {
+			return tuiModel, tea.Batch(cmd, tuiModel.eventLoop())
+		}
+		return model, tea.Batch(cmd, m.eventLoop())
 
 	case tickMsg:
 		return m, m.tick()
@@ -56,7 +61,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Scroll to bottom command
 	case scrollBottomMsg:
 		m.viewport.GotoBottom()
-		return m, m.processEvents()
+		return m, nil
 
 	// Print message - print content to stdout
 	case printMsg:
@@ -87,19 +92,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.thinking != nil && m.thinking.IsActive() {
 			_, nextCmd := m.thinking.Update(msg)
 			if nextCmd != nil {
-				return m, tea.Sequence(nextCmd, m.processEvents())
+				return m, nextCmd
 			}
 		}
-		return m, m.processEvents()
+		return m, nil
 
 	case processingTickMsg:
 		if m.processing != nil && m.processing.IsActive() {
 			_, nextCmd := m.processing.Update(msg)
 			if nextCmd != nil {
-				return m, tea.Sequence(nextCmd, m.processEvents())
+				return m, nextCmd
 			}
 		}
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	// Delegate to viewport for mouse wheel and keyboard scroll
@@ -114,7 +119,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	return m, m.processEvents()
+	return m, nil
 }
 
 // syncViewport updates the viewport's content and dimensions so that scroll
@@ -318,7 +323,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirmState.Request = nil
 		// Reset display state and continue listening for events
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 
 	case tea.KeyEsc:
 		// Cancel
@@ -328,7 +333,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	// Handle Y/N key presses
@@ -341,7 +346,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 	case "n", "N":
 		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
 			m.confirmState.Request.ResponseCh <- false
@@ -349,7 +354,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	return m, nil
@@ -400,7 +405,7 @@ func (m Model) handleTextQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirmState.Request = nil
 		m.confirmState.TextInput = ""
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 
 	case tea.KeyEsc:
 		// Cancel
@@ -413,7 +418,7 @@ func (m Model) handleTextQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirmState.Request = nil
 		m.confirmState.TextInput = ""
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 
 	case tea.KeyBackspace:
 		// Delete last character
@@ -466,7 +471,7 @@ func (m Model) handleChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		m.confirmState.Request = nil
 		m.confirmState.Selected = 0
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 
 	case tea.KeyEsc:
 		// Cancel
@@ -479,7 +484,7 @@ func (m Model) handleChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		m.confirmState.Request = nil
 		m.confirmState.Selected = 0
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	return m, nil
@@ -545,7 +550,7 @@ func (m Model) handleMultiChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea
 		m.confirmState.Selected = 0
 		m.confirmState.SelectedOptions = nil
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 
 	case tea.KeyEsc:
 		// Cancel
@@ -559,7 +564,7 @@ func (m Model) handleMultiChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea
 		m.confirmState.Selected = 0
 		m.confirmState.SelectedOptions = nil
 		m.state.SetDisplayState(DisplayProcessing)
-		return m, m.processEvents()
+		return m, nil
 	}
 
 	return m, nil
@@ -632,7 +637,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		m.sendMessage(input),
 		thinkingCmd,
 		m.scrollToBottom(),
-		m.processEvents(),
+		m.eventLoop(),
 	)
 }
 
@@ -692,11 +697,11 @@ func (m Model) scrollToBottom() tea.Cmd {
 	}
 }
 
-// processEvents returns a cmd that waits for events.
-func (m Model) processEvents() tea.Cmd {
+// eventLoop returns a cmd that waits for events.
+func (m Model) eventLoop() tea.Cmd {
 	return func() tea.Msg {
 		ev := <-m.eventChan
-		log.Debug().Str("type", string(ev.Type)).Msg("processEvents: received event")
+		log.Debug().Str("type", string(ev.Type)).Msg("eventLoop: received event")
 		return ev
 	}
 }
