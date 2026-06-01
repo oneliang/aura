@@ -15,6 +15,7 @@ import (
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 	"github.com/oneliang/aura/shared/pkg/user"
 	"github.com/oneliang/aura/shared/pkg/version"
+	storagemessage "github.com/oneliang/aura/storage/pkg/message"
 )
 
 // Model is the main Bubble Tea model.
@@ -254,6 +255,10 @@ func (m *Model) loadSessionHistory() bool {
 
 	// Add messages to store for viewport rendering
 	for _, msg := range msgs {
+		// Skip observation messages - they're tool results, not user input
+		if msg.Type == storagemessage.MessageTypeObservation {
+			continue
+		}
 		timestamp := time.UnixMilli(msg.Timestamp)
 		// Extract text from ContentBlocks
 		var textContent string
@@ -262,6 +267,10 @@ func (m *Model) loadSessionHistory() bool {
 				textContent = tb.Text
 				break
 			}
+		}
+		// Skip messages without actual text content (e.g., tool_use, pure thinking)
+		if textContent == "" {
+			continue
 		}
 		switch msg.Role {
 		case "user":

@@ -36,6 +36,10 @@ func NewInputManager(styles UIStyles) *InputManager {
 	ta.SetHeight(InputHeight)
 	ta.ShowLineNumbers = false
 	ta.Prompt = "> "
+	// Enable dynamic height to auto-grow/shrink with content
+	ta.DynamicHeight = true
+	ta.MinHeight = 1
+	ta.MaxHeight = InputMaxHeight
 	// Add macOS Cmd+Left/Right as LineStart/LineEnd bindings
 	km := ta.KeyMap
 	km.LineStart.SetKeys("home", "ctrl+a", "super+left", "alt+left")

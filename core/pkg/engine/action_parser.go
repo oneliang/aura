@@ -454,13 +454,14 @@ Observation: [result of the tool]
 When you have a final answer, respond directly without using Action format.
 
 Important rules:
-1. Only use tools when necessary
-2. Actions MUST use the exact JSON format shown above: Action: {valid JSON}
-3. NEVER use XML-style tags, function wrappers, or any other format (e.g., NEVER output <tool>, <function>, {{, or similar)
-4. After receiving an observation, continue thinking or provide final answer
-5. Be concise in your responses
-6. When multiple independent tools can be called at once, output multiple Action: lines consecutively. They will execute in parallel.
-7. Tool observations may contain "Structured Data" sections with JSON — use this structured data to make more informed decisions about next steps.`, basePrompt, toolDescriptions)
+1. For complex multi-step tasks (3+ steps), CREATE TASKS FIRST using the 'task' tool
+2. Only use tools when necessary for the actual work
+3. Actions MUST use the exact JSON format shown above: Action: {valid JSON}
+4. NEVER use XML-style tags, function wrappers, or any other format (e.g., NEVER output <tool>, <function>, {{, or similar)
+5. After receiving an observation, continue thinking or provide final answer
+6. Be concise in your responses
+7. When multiple independent tools can be called at once, output multiple Action: lines consecutively. They will execute in parallel.
+8. Tool observations may contain "Structured Data" sections with JSON — use this structured data to make more informed decisions about next steps.`, basePrompt, toolDescriptions)
 
 		return prompt
 	}
@@ -474,13 +475,14 @@ You have access to the following tools:
 %s
 
 Important rules:
-1. Only use tools when necessary
-2. Actions MUST use the exact JSON format shown above: Action: {valid JSON}
-3. NEVER use XML-style tags, function wrappers, or any other format (e.g., NEVER output <tool>, <function>, {{, or similar)
-4. After receiving an observation, continue thinking or provide final answer
-5. Be concise in your responses
-6. When multiple independent tools can be called at once, output multiple Action: lines consecutively. They will execute in parallel.
-7. Tool observations may contain "Structured Data" sections with JSON — use this structured data to make more informed decisions about next steps.`,
+1. For complex multi-step tasks (3+ steps), CREATE TASKS FIRST using the 'task' tool
+2. Only use tools when necessary for the actual work
+3. Actions MUST use the exact JSON format shown above: Action: {valid JSON}
+4. NEVER use XML-style tags, function wrappers, or any other format (e.g., NEVER output <tool>, <function>, {{, or similar)
+5. After receiving an observation, continue thinking or provide final answer
+6. Be concise in your responses
+7. When multiple independent tools can be called at once, output multiple Action: lines consecutively. They will execute in parallel.
+8. Tool observations may contain "Structured Data" sections with JSON — use this structured data to make more informed decisions about next steps.`,
 		basePrompt, toolDescriptions, reactFormat)
 }
 

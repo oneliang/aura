@@ -301,6 +301,12 @@ func (c *CommandProvider) Execute(ctx context.Context, cmd string, params map[st
 	case cmd == CmdNameRole:
 		return c.executeCommand(ctx, events.CommandTypeSessionRole, params)
 
+	case cmd == CmdNameDelegateToAgent:
+		if c.agentHandler == nil {
+			return i18n.T("command.agent_delegation_not_configured"), nil
+		}
+		return c.agentHandler.ExecuteCommand(ctx, "delegate_to_agent", params)
+
 	default:
 		// Check if it's a skill command
 		if c.skillCommand != nil {
