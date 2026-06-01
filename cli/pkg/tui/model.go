@@ -15,7 +15,6 @@ import (
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 	"github.com/oneliang/aura/shared/pkg/user"
 	"github.com/oneliang/aura/shared/pkg/version"
-	storagemessage "github.com/oneliang/aura/storage/pkg/message"
 )
 
 // Model is the main Bubble Tea model.
@@ -256,7 +255,7 @@ func (m *Model) loadSessionHistory() bool {
 	// Add messages to store for viewport rendering
 	for _, msg := range msgs {
 		// Skip observation messages - they're tool results, not user input
-		if msg.Type == storagemessage.MessageTypeObservation {
+		if msg.Type == sharedmemory.MessageTypeObservation {
 			continue
 		}
 		timestamp := time.UnixMilli(msg.Timestamp)

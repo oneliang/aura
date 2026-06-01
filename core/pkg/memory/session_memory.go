@@ -145,7 +145,7 @@ func (m *SessionMemory) persistWithType(role, content string, msgType sharedmemo
 
 	sessionMsg := message.Message{
 		SessionID: m.sessionID,
-		Type:      message.MessageType(msgType),
+		Type:      msgType,
 		Role:      role,
 		ContentBlocks: []sharedmemory.ContentBlock{
 			sharedmemory.TextBlock{Type: sharedmemory.BlockTypeText, Text: content},
@@ -243,7 +243,7 @@ func (m *SessionMemory) persistWithBlocks(role string, blocks []sharedmemory.Con
 
 	sessionMsg := message.Message{
 		SessionID:     m.sessionID,
-		Type:          message.MessageType(msgType),
+		Type:          msgType,
 		Role:          role,
 		ContentBlocks: blocks,
 		Timestamp:     time.Now().UnixMilli(),
@@ -303,7 +303,7 @@ func (m *SessionMemory) loadFromStore() error {
 	m.messages = make([]llm.Message, 0, len(messages))
 	for _, msg := range messages {
 		// Skip compact boundary messages - they're metadata markers only
-		if msg.Type == message.MessageTypeCompact {
+		if msg.Type == sharedmemory.MessageTypeCompact {
 			continue
 		}
 
@@ -456,7 +456,7 @@ func (m *SessionMemory) persistCompactBoundary(ctx context.Context, preTokens, p
 
 	boundaryMsg := message.Message{
 		SessionID: m.sessionID,
-		Type:      message.MessageTypeCompact,
+		Type:      sharedmemory.MessageTypeCompact,
 		Role:      sharedmemory.RoleSystem,
 		Subtype:   "compact_boundary",
 		Timestamp: time.Now().UnixMilli(),

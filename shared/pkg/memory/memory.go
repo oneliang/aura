@@ -30,11 +30,15 @@ const (
 	MessageTypeObservation MessageType = "observation"
 
 	// Tool execution messages (not persisted by default)
-	MessageTypeToolStart MessageType = "tool_start"
-	MessageTypeToolEnd   MessageType = "tool_end"
+	MessageTypeToolStart  MessageType = "tool_start"
+	MessageTypeToolEnd    MessageType = "tool_end"
+	MessageTypeToolResult MessageType = "tool_result"
 
 	// Error messages (not persisted)
 	MessageTypeError MessageType = "error"
+
+	// Compact messages (summarized/compacted content)
+	MessageTypeCompact MessageType = "compact"
 )
 
 // Message represents a chat message in the conversation.

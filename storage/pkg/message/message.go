@@ -7,32 +7,6 @@ import (
 	"github.com/oneliang/aura/shared/pkg/memory"
 )
 
-// MessageType defines the type of a message for filtering and business logic.
-type MessageType string
-
-const (
-	// Conversation messages (persisted to session storage)
-	MessageTypeUser      MessageType = "user"      // User input
-	MessageTypeAssistant MessageType = "assistant" // AI response
-	MessageTypeSystem    MessageType = "system"    // System message
-
-	// Internal reasoning messages (not persisted to session storage)
-	MessageTypeThought     MessageType = "thought"     // LLM thinking/reasoning
-	MessageTypeAction      MessageType = "action"      // LLM action decision
-	MessageTypeObservation MessageType = "observation" // Tool execution result
-
-	// Tool execution messages (not persisted by default)
-	MessageTypeToolStart MessageType = "tool_start" // Tool execution started
-	MessageTypeToolEnd   MessageType = "tool_end"   // Tool execution completed
-
-	// Error messages (persisted for debugging, can be filtered)
-	MessageTypeError MessageType = "error" // Error message
-
-	// Additional message types
-	MessageTypeToolResult MessageType = "tool_result" // Tool result message
-	MessageTypeCompact    MessageType = "compact"    // Compacted message
-)
-
 // Usage represents token usage statistics for a message.
 type Usage struct {
 	InputTokens  int `json:"input_tokens,omitempty"`
@@ -55,7 +29,7 @@ type CompactMetadata struct {
 type Message struct {
 	SessionID     string                 `json:"session_id"`
 	UserID        string                 `json:"user_id,omitempty"` // User ID for multi-user isolation
-	Type          MessageType            `json:"type,omitempty"`    // Message type for filtering
+	Type          memory.MessageType     `json:"type,omitempty"`    // Message type for filtering
 	Role          string                 `json:"role"`              // user/assistant/system
 	ContentBlocks []memory.ContentBlock  `json:"content_blocks"`    // Content blocks for structured content
 	Timestamp     int64                  `json:"timestamp"`         // Unix timestamp in milliseconds
@@ -80,7 +54,7 @@ type Message struct {
 type rawMessage struct {
 	SessionID       string                   `json:"session_id,omitempty"`
 	UserID          string                   `json:"user_id,omitempty"`
-	Type            MessageType              `json:"type,omitempty"`
+	Type            memory.MessageType       `json:"type,omitempty"`
 	Role            string                   `json:"role"`
 	ContentBlocks   []memory.RawContentBlock `json:"content_blocks,omitempty"`
 	Timestamp       int64                    `json:"timestamp"`
