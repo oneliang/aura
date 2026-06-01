@@ -367,6 +367,11 @@ func NewSubAgentRuntime(parent *AgentRuntime, subCfg *RuntimeConfig, disabledToo
 // Sub-agent runtimes (skipInitialize=true) do NOT stop MCP servers as they
 // are owned by the parent runtime.
 func (r *AgentRuntime) Shutdown() {
+	// Wait for all pending memory persistence operations to complete
+	if r.memory != nil {
+		r.memory.Shutdown()
+	}
+
 	// Fire SessionEnd hook via component (non-blocking)
 	sessionID := r.sessionID
 	if r.session != nil {

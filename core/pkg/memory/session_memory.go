@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/oneliang/aura/core/pkg/llm"
@@ -40,6 +41,7 @@ type SessionMemory struct {
 	store               *jsonl.MessageStore
 	hookEngine          *hooks.Engine
 	selectiveCompressor *SelectiveCompressor
+	persistWg           sync.WaitGroup // WaitGroup for pending persistence operations
 }
 
 // SetHookEngine sets the hooks engine for this memory instance.
@@ -111,9 +113,13 @@ func (m *SessionMemory) AddWithType(role, content string, msgType sharedmemory.M
 		m.trimByCount()
 	}
 
-	// Persist to storage based on type (sync to ensure completion before exit)
+	// Persist to storage based on type (async with WaitGroup for shutdown sync)
 	if m.store != nil && shouldPersistByType(msgType) {
-		m.persistWithType(role, content, msgType)
+		m.persistWg.Add(1)
+		go func() {
+			defer m.persistWg.Done()
+			m.persistWithType(role, content, msgType)
+		}()
 	}
 }
 
@@ -220,9 +226,13 @@ func (m *SessionMemory) AddWithBlocks(role string, blocks []sharedmemory.Content
 		m.trimByCount()
 	}
 
-	// Persist to storage based on type (sync to ensure completion before exit)
+	// Persist to storage based on type (async with WaitGroup for shutdown sync)
 	if m.store != nil && shouldPersistByType(msgType) {
-		m.persistWithBlocks(role, blocks, msgType)
+		m.persistWg.Add(1)
+		go func() {
+			defer m.persistWg.Done()
+			m.persistWithBlocks(role, blocks, msgType)
+		}()
 	}
 }
 
@@ -244,6 +254,12 @@ func (m *SessionMemory) persistWithBlocks(role string, blocks []sharedmemory.Con
 	if err := m.store.Append(ctx, &sessionMsg); err != nil {
 		logger.Default().Warn().Err(err).Str("sessionID", m.sessionID).Msg("Failed to persist session message with blocks")
 	}
+}
+
+// Shutdown waits for all pending persistence operations to complete.
+// This should be called before program exit to ensure all messages are persisted.
+func (m *SessionMemory) Shutdown() {
+	m.persistWg.Wait()
 }
 
 // Clear clears all messages from memory and truncates the JSONL file.

@@ -355,9 +355,10 @@ func (e *Engine) runReActLoop(ctx context.Context, eventsCh chan<- events.Event,
 				"request_id": requestID,
 				"response":   response,
 			})
-			if e.hookEngine.ShouldBlock(hookResult) {
+			// Check if hookResult is valid before using it
+			if hookResult != nil && e.hookEngine.ShouldBlock(hookResult) {
 				// Hook blocked the response
-				e.logger.Info().Str("requestID", requestID).Str("reason", hookResult.Parsed.StopReason).Msg("PreResponse hook blocked response")
+				e.logger.Info().Str("requestID", requestID).Msg("PreResponse hook blocked response")
 				if hookResult.Parsed != nil && hookResult.Parsed.RetryReason != "" {
 					eventsCh <- events.NewEvent(events.EventTypeResponse, fmt.Sprintf("Response blocked: %s", hookResult.Parsed.RetryReason), requestID)
 				} else {
@@ -366,13 +367,13 @@ func (e *Engine) runReActLoop(ctx context.Context, eventsCh chan<- events.Event,
 				return
 			}
 			// Check if hook provides reflection feedback
-			if hookResult.Parsed != nil && hookResult.Parsed.ReflectionFeedback != "" {
+			if hookResult != nil && hookResult.Parsed != nil && hookResult.Parsed.ReflectionFeedback != "" {
 				finalResponse = fmt.Sprintf("%s\n\n[Reflection feedback: %s]", response, hookResult.Parsed.ReflectionFeedback)
 				hookProvidedReflection = true
 				e.logger.Debug().Str("requestID", requestID).Msg("Using hook-provided reflection feedback, skipping internal reflection")
 			}
 			// Check if hook requests retry (logged for awareness, retry requires loop restart)
-			if hookResult.Parsed != nil && hookResult.Parsed.ShouldRetry {
+			if hookResult != nil && hookResult.Parsed != nil && hookResult.Parsed.ShouldRetry {
 				e.logger.Info().Str("requestID", requestID).Str("reason", hookResult.Parsed.RetryReason).Msg("PreResponse hook signaled retry request")
 				// Note: Full retry would require restarting ReAct loop - currently logged but proceeds
 			}
@@ -397,6 +398,11 @@ func (e *Engine) handleReActLoopPanic(eventsCh chan<- events.Event, requestID st
 			"request_id":  requestID,
 			"panic_value": r,
 		})
+
+		// Send error event to user (避免静默失败)
+		eventsCh <- events.NewEvent(events.EventTypeError, fmt.Sprintf("Internal error occurred: %v. Please retry.", r), requestID)
+		// Send Done event to unlock UI (必须发送，否则UI会卡住)
+		eventsCh <- events.NewEvent(events.EventTypeDone, "", requestID)
 	}
 }
 
