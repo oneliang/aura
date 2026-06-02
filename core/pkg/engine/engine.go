@@ -249,7 +249,6 @@ type Engine struct {
 	// Session-scoped task list and persistence
 	taskList  *tasks.TaskList
 	taskStore *taskstore.TaskStore
-	taskTool  *tasktool.TaskTool
 
 	// Tool allowlist for phase-based execution control (nil = all tools allowed)
 	toolAllowlist []string
@@ -467,10 +466,6 @@ func New(opts ...Option) (*Engine, error) {
 	e.ctx, e.cancel = context.WithCancel(context.Background())
 	go e.processInputQueue()
 
-	// Register task tool permanently for this session (uses shared taskList)
-	e.taskTool = tasktool.New(nil, "", e.taskList, e.saveTasks, e.hookEngine)
-	e.regTools["task"] = e.taskTool
-
 	return e, nil
 }
 
@@ -508,6 +503,17 @@ func (e *Engine) LoadTasks() error {
 		e.taskList.Restore(saved)
 	}
 	return nil
+}
+
+// GetTaskList returns the shared task list for tool registration.
+func (e *Engine) GetTaskList() *tasks.TaskList {
+	return e.taskList
+}
+
+// GetSaveTasksFunc returns the callback for persisting tasks.
+// Used by task tool to save after changes.
+func (e *Engine) GetSaveTasksFunc() func() {
+	return e.saveTasks
 }
 
 // Run submits an input to the processing queue.
@@ -573,8 +579,10 @@ func (e *Engine) processInputQueue() {
 			}()
 			defer procCancel()
 
-			// Update task tool with per-request event channel
-			e.taskTool.SetRequest(eventCh, request.RequestID)
+			// Update task tool with per-request event channel (if registered)
+			if taskTool, ok := e.regTools["task"].(*tasktool.TaskTool); ok {
+				taskTool.SetRequest(eventCh, request.RequestID)
+			}
 
 			// Send current task list to TUI at start of each request.
 			// Only send incomplete tasks — completed tasks are hidden to avoid clutter.

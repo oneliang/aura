@@ -26,6 +26,7 @@ import (
 	skillbuilder "github.com/oneliang/aura/skill/pkg/builder"
 	"github.com/oneliang/aura/skill/pkg/loader"
 	tools "github.com/oneliang/aura/tools/pkg"
+	"github.com/oneliang/aura/tools/pkg/tasktool"
 
 	"github.com/oneliang/aura/habit/pkg/manager"
 
@@ -336,6 +337,15 @@ func (r *AgentRuntime) initEngine(ctx context.Context) error {
 func (r *AgentRuntime) initTools(ctx context.Context) {
 	if r.config.DisableTools {
 		return
+	}
+
+	// Register task tool FIRST (uses engine's shared taskList)
+	taskList := r.agent.GetTaskList()
+	saveTasksFn := r.agent.GetSaveTasksFunc()
+	if taskList != nil && saveTasksFn != nil {
+		taskTool := tasktool.New(nil, "", taskList, saveTasksFn, r.hookEngine)
+		r.agent.AddTool(taskTool)
+		r.logger.Debug().Str("module", "runtime").Msg("task tool registered")
 	}
 
 	toolReg := factory.NewToolRegistry(

@@ -72,7 +72,7 @@ func (h *Handler) Execute(ctx context.Context, cmd string, params map[string]any
 	}
 
 	// Write AURA.md
-	if err := h.writeClaudeMd(claudeMdPath, result); err != nil {
+	if err := h.writeAuraMd(claudeMdPath, result); err != nil {
 		return "", fmt.Errorf("failed to write AURA.md: %w", err)
 	}
 
@@ -94,7 +94,7 @@ func (h *Handler) executeAnalysis(ctx context.Context, cwd, prompt string) (stri
 	architecture := h.analyzeArchitecture(cwd, projectType)
 
 	// Phase 5: Generate AURA.md content
-	content := h.generateClaudeMdContent(projectType, structure, buildCommands, architecture)
+	content := h.generateAuraMdContent(projectType, structure, buildCommands, architecture)
 
 	return content, nil
 }
@@ -290,8 +290,8 @@ func (h *Handler) hasLayeredGoStructure(cwd string) bool {
 	return foundLayers >= 2
 }
 
-// generateClaudeMdContent generates the AURA.md content.
-func (h *Handler) generateClaudeMdContent(projectType string, structure *ProjectStructure, buildCmds *BuildCommands, arch *Architecture) string {
+// generateAuraMdContent generates the AURA.md content.
+func (h *Handler) generateAuraMdContent(projectType string, structure *ProjectStructure, buildCmds *BuildCommands, arch *Architecture) string {
 	var content strings.Builder
 
 	content.WriteString("# AURA.md\n\n")
@@ -353,8 +353,8 @@ func (h *Handler) generateClaudeMdContent(projectType string, structure *Project
 	return content.String()
 }
 
-// writeClaudeMd writes the content to AURA.md file.
-func (h *Handler) writeClaudeMd(path, content string) error {
+// writeAuraMd writes the content to AURA.md file.
+func (h *Handler) writeAuraMd(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
@@ -364,6 +364,64 @@ func truncatePreview(content string, maxLen int) string {
 		return content
 	}
 	return content[:maxLen] + "..."
+}
+
+// truncateContent truncates content to a maximum length.
+func truncateContent(content string, maxLen int) string {
+	if len(content) <= maxLen {
+		return content
+	}
+	return content[:maxLen] + "\n... (truncated)"
+}
+
+// ReadProjectFilesForPrompt reads key project files and returns formatted content for LLM prompt.
+func (h *Handler) ReadProjectFilesForPrompt(cwd string) string {
+	keyFiles := []string{
+		"README.md", "Makefile", "go.mod", "package.json", "Cargo.toml",
+		"pyproject.toml", "CLAUDE.md", "AURA.md",
+	}
+
+	keyDirs := []string{
+		"cmd", "cli", "core", "api", "commands", "shared",
+		"src", "lib", "app", "pkg",
+	}
+
+	var content strings.Builder
+	maxFileSize := 5000
+
+	// Read key files
+	for _, file := range keyFiles {
+		path := filepath.Join(cwd, file)
+		if data, err := os.ReadFile(path); err == nil {
+			content.WriteString(fmt.Sprintf("\n### %s\n\n```\n%s\n```\n", file, truncateContent(string(data), maxFileSize)))
+		}
+	}
+
+	// List key directories
+	for _, dir := range keyDirs {
+		path := filepath.Join(cwd, dir)
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			entries, err := os.ReadDir(path)
+			if err == nil && len(entries) > 0 {
+				content.WriteString(fmt.Sprintf("\n### %s/\n\n", dir))
+				for _, e := range entries {
+					content.WriteString(fmt.Sprintf("- %s\n", e.Name()))
+				}
+			}
+		}
+	}
+
+	// Read main entry point if exists
+	mainFiles := []string{"main.go", "cmd/main.go", "cmd/aura/main.go"}
+	for _, file := range mainFiles {
+		path := filepath.Join(cwd, file)
+		if data, err := os.ReadFile(path); err == nil {
+			content.WriteString(fmt.Sprintf("\n### %s\n\n```\n%s\n```\n", file, truncateContent(string(data), maxFileSize)))
+			break // Only read one main file
+		}
+	}
+
+	return content.String()
 }
 
 // ProjectStructure holds the scanned project structure.

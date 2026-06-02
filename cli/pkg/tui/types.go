@@ -53,7 +53,9 @@ const (
 )
 
 // CommandHandler handles a slash command.
-type CommandHandler func(m Model, input string) (tea.Model, tea.Cmd)
+// ctx is passed by caller for config extraction, timeout/cancel control.
+// Model.ctx is separate - for UI lifecycle management.
+type CommandHandler func(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd)
 
 // Command represents a slash command.
 type Command struct {

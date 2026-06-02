@@ -300,6 +300,10 @@ func runTUIMode(
 		SkillDirectories: ctx.Config.Skills.Directories,
 		EnableReview:     ctx.Config.Agent.Plan.EnableReview,
 	}
+
+	// Store config in context for command handlers to access
+	runCtx = config.WithConfig(runCtx, ctx.Config)
+
 	if err := tui.RunWithConfig(runCtx, fn, cfg, sessionMgr, summarizer, modelProvider, ctx.CommandProvider, mcpManager); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 	}

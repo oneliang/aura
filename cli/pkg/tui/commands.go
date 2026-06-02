@@ -1,14 +1,19 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	climds "github.com/oneliang/aura/cli/pkg/commands"
 	commands "github.com/oneliang/aura/commands/pkg"
+	initpkg "github.com/oneliang/aura/commands/pkg/init"
 	"github.com/oneliang/aura/core/pkg/sdk"
+	"github.com/oneliang/aura/shared/pkg/config"
 	"github.com/oneliang/aura/shared/pkg/version"
 )
 
@@ -128,15 +133,21 @@ func init() {
 		Description: "Show version",
 		Handler:     cmdVersion,
 	})
+
+	RegisterCommand(&Command{
+		Name:        climds.CmdInit,
+		Description: "Initialize AURA.md with codebase documentation",
+		Handler:     cmdInit,
+	})
 }
 
 // Command handlers
 
-func cmdExit(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdExit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-func cmdClear(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdClear(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	// Execute clear command through CommandProvider (clears SessionMemory)
 	if m.commandProvider != nil {
 		result, err := m.commandProvider.Execute(m.ctx, commands.CmdNameClear, nil)
@@ -155,48 +166,48 @@ func cmdClear(m Model, input string) (tea.Model, tea.Cmd) {
 	return m, m.scrollToBottom()
 }
 
-func cmdHelp(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdHelp(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showHelp())
 	return m, m.scrollToBottom()
 }
 
-func cmdTools(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdTools(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showTools())
 	return m, m.scrollToBottom()
 }
 
-func cmdSkills(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdSkills(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showSkills())
 	return m, m.scrollToBottom()
 }
 
-func cmdStatus(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdStatus(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showStatus())
 	return m, m.scrollToBottom()
 }
 
-func cmdHistory(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdHistory(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showHistory())
 	return m, m.scrollToBottom()
 }
 
-func cmdMemory(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdMemory(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showMemory())
 	return m, m.scrollToBottom()
 }
 
-func cmdCompact(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdCompact(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showCompact())
 	return m, m.scrollToBottom()
 }
 
-func cmdSessions(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdSessions(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	// Sessions uses popup, no text output
 	m.handleSessions()
 	return m, nil
 }
 
-func cmdSession(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdSession(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	parts := strings.Fields(input)
 	if len(parts) > 1 {
 		switch parts[1] {
@@ -217,32 +228,32 @@ func cmdSession(m Model, input string) (tea.Model, tea.Cmd) {
 	return m, m.scrollToBottom()
 }
 
-func cmdRole(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdRole(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showRole())
 	return m, m.scrollToBottom()
 }
 
-func cmdKnowledge(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdKnowledge(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showKnowledge())
 	return m, m.scrollToBottom()
 }
 
-func cmdModel(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdModel(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showModel())
 	return m, m.scrollToBottom()
 }
 
-func cmdProfile(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdProfile(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showProfile())
 	return m, m.scrollToBottom()
 }
 
-func cmdConfig(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdConfig(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.showConfig())
 	return m, m.scrollToBottom()
 }
 
-func cmdSubscription(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdSubscription(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	parts := strings.Fields(input)
 	if len(parts) > 1 {
 		switch parts[1] {
@@ -284,9 +295,17 @@ func (m Model) handleCommand(input string) (tea.Model, tea.Cmd) {
 
 	// Look up command in registry
 	if handler := GetCommand(cmdName); handler != nil && handler.Handler != nil {
-		model, teaCmd := handler.Handler(m, input)
-		// Always re-enable input after command execution
+		model, teaCmd := handler.Handler(m.ctx, m, input) // Pass ctx from Model
+		// Re-enable input after command execution, unless command is waiting for async result
 		if mm, ok := model.(Model); ok {
+			// If command is async (waiting), let the Msg handler manage input state
+			if mm.state.Waiting() {
+				if teaCmd == nil {
+					return model, nil
+				}
+				return model, teaCmd
+			}
+			// Sync command: re-enable input immediately
 			if teaCmd == nil {
 				return model, mm.input.EnableAndFocus()
 			}
@@ -475,7 +494,7 @@ func (m Model) tryExecuteSkill(input string) (tea.Model, tea.Cmd) {
 }
 
 // cmdMcp lists MCP servers.
-func cmdMcp(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdMcp(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	if m.mcpManager == nil {
 		m.messages.AddRaw(m.styles.Help.Render("  No MCP servers configured."))
 		return m, m.scrollToBottom()
@@ -500,7 +519,115 @@ func cmdMcp(m Model, input string) (tea.Model, tea.Cmd) {
 }
 
 // cmdVersion shows version.
-func cmdVersion(m Model, input string) (tea.Model, tea.Cmd) {
+func cmdVersion(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.messages.AddRaw(m.styles.Help.Render("  Aura " + version.FullVersion()))
 	return m, m.scrollToBottom()
+}
+
+// cmdInit initializes AURA.md with codebase documentation using independent LLM runtime.
+func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
+	// Get config from context
+	cfg := config.GetConfig(ctx)
+	if cfg == nil {
+		m.messages.AddRaw(m.styles.Error.Render("  Error: config not available in context"))
+		return m, m.scrollToBottom()
+	}
+
+	// Parse for "force" argument
+	parts := strings.Fields(input)
+	force := len(parts) > 1 && parts[1] == "force"
+
+	cwd, _ := os.Getwd()
+	auraMdPath := filepath.Join(cwd, "AURA.md")
+
+	// Check if AURA.md already exists
+	if !force {
+		if _, err := os.Stat(auraMdPath); err == nil {
+			m.messages.AddRaw(m.styles.Help.Render(fmt.Sprintf("  AURA.md already exists at: %s\n  Use /init force to regenerate.", auraMdPath)))
+			return m, m.scrollToBottom()
+		}
+	}
+
+	// Build init prompt - LLM will explore codebase itself using tools
+	prompt := initpkg.BuildInitPrompt(cwd)
+
+	m.messages.AddRaw(m.styles.Help.Render("  Analyzing project deeply with independent runtime..."))
+	m.state.SetWaiting(true)
+	m.state.SetStartTime(time.Now())
+	m.state.SetDisplayState(DisplayThinking)
+	m.input.SetDisabled(true)
+
+	// Reset widgets for clean state
+	m.thinking.Reset()
+	m.processing.Reset()
+	m.plan.Reset()
+
+	// Set scroll state for proper viewport behavior
+	m.autoScroll = true
+	m.manualScroll = false
+	m.manualScrollOffset = 0
+
+	// Start thinking indicator
+	_, thinkingCmd := m.thinking.StartAndRender()
+
+	// Create async init command
+	initCmd := func() tea.Msg {
+		// Create init-specific runtime config
+		initCfg := sdk.FromConfig(cfg)
+		initCfg.SystemPrompt = initpkg.InitSystemPrompt
+		// Enable tools for LLM to explore codebase independently
+		initCfg.EnableSubAgent = false
+		initCfg.SessionID = "" // No persistence
+
+		// Create independent runtime with TUI logger (suppress console output)
+		initRt, err := sdk.NewRuntime(initCfg,
+			sdk.WithAutoApprove(),
+			sdk.WithLogger(GetLogger()), // Inject TUI file logger
+		)
+		if err != nil {
+			return InitResultMsg{Error: fmt.Errorf("failed to create init runtime: %w", err)}
+		}
+
+		// Initialize runtime
+		if err := initRt.Initialize(m.ctx); err != nil {
+			initRt.Shutdown()
+			return InitResultMsg{Error: fmt.Errorf("failed to initialize init runtime: %w", err)}
+		}
+
+		// Process prompt through independent runtime
+		events, err := initRt.Process(m.ctx, prompt)
+		if err != nil {
+			initRt.Shutdown()
+			return InitResultMsg{Error: err}
+		}
+
+		var result string
+		for ev := range events {
+			if ev.Type() == sdk.EventTypeResponse {
+				result += ev.Content()
+			}
+		}
+
+		// Save to AURA.md
+		if result != "" {
+			if err := os.WriteFile(auraMdPath, []byte(result), 0644); err != nil {
+				initRt.Shutdown()
+				return InitResultMsg{Error: err}
+			}
+		}
+
+		// Cleanup: shutdown init runtime
+		initRt.Shutdown()
+
+		return InitResultMsg{Path: auraMdPath, Content: result}
+	}
+
+	return m, tea.Batch(initCmd, thinkingCmd, m.scrollToBottom())
+}
+
+// InitResultMsg carries the result of init command.
+type InitResultMsg struct {
+	Path    string
+	Content string
+	Error   error
 }

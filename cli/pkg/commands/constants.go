@@ -31,4 +31,5 @@ const (
 	CmdKnowledge          = "/knowledge"
 	CmdMcp                = "/mcp"
 	CmdVersion            = "/version"
+	CmdInit               = "/init"
 )

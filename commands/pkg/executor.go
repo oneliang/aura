@@ -358,7 +358,7 @@ func (c *CommandProvider) executeInitCommand(ctx context.Context, params map[str
 	}
 
 	// Generate basic AURA.md content
-	content := c.generateBasicClaudeMd(cwd)
+	content := c.generateBasicAuraMd(cwd)
 
 	if err := os.WriteFile(claudeMdPath, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("failed to write AURA.md: %w", err)
@@ -367,8 +367,8 @@ func (c *CommandProvider) executeInitCommand(ctx context.Context, params map[str
 	return fmt.Sprintf("Generated AURA.md at: %s\n\nPreview:\n%s", claudeMdPath, truncatePreview(content, 500)), nil
 }
 
-// generateBasicClaudeMd generates basic AURA.md content.
-func (c *CommandProvider) generateBasicClaudeMd(cwd string) string {
+// generateBasicAuraMd generates basic AURA.md content.
+func (c *CommandProvider) generateBasicAuraMd(cwd string) string {
 	var content strings.Builder
 	content.WriteString("# AURA.md\n\n")
 	content.WriteString("This file provides guidance for working with this repository.\n\n")
