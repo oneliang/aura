@@ -341,14 +341,15 @@ func (m Model) handleEventThinkingContent(msg ChatEvent) (tea.Model, tea.Cmd) {
 // Accumulates chunks in MessageStore for final glamour rendering.
 // Does not output anything - Done event will render the accumulated content.
 func (m Model) handleEventStreamChunk(msg ChatEvent) (tea.Model, tea.Cmd) {
-	// Log chunk content
 	log.Debug().Str("content", msg.Content).Msg("streamChunk")
 
 	// Accumulate chunk in MessageStore (no rendering)
 	m.messages.AppendToLast(msg.Content)
 
-	// Continue listening for next event (including Done)
-	return m, nil
+	return m, tea.Sequence(
+		m.scrollToBottom(),
+		nil,
+	)
 }
 
 // handleEventAction handles the action event.

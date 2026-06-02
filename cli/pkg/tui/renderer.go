@@ -81,6 +81,7 @@ func DefaultStyles() UIStyles {
 		ToolBlockOut:     lipglossv2.NewStyle().Foreground(lipglossv2.Color(ColorToolBlockOut)).Bold(true),
 		ToolBlockDone:    lipglossv2.NewStyle().Foreground(lipglossv2.Color(ColorToolDone)),
 		ToolBlockBorder:  lipglossv2.NewStyle().Foreground(lipglossv2.Color(ColorToolBlockBorder)).Border(lipglossv2.Border{Left: "│"}).BorderLeft(true).PaddingLeft(1),
+			Duration:         lipglossv2.NewStyle().Foreground(lipglossv2.Color("241")),
 		// Task widget styles
 		TaskWidgetTitle:  lipglossv2.NewStyle().Foreground(lipglossv2.Color(ColorTaskWidgetTitle)).Bold(true),
 		TaskWidgetBorder: lipglossv2.NewStyle().Foreground(lipglossv2.Color(ColorTaskWidgetBorder)),

@@ -190,6 +190,7 @@ type UIStyles struct {
 	ToolBlockOut     lipglossv2.Style // OUT label style
 	ToolBlockDone    lipglossv2.Style // Done text style
 	ToolBlockBorder  lipglossv2.Style // Left border for complete tool block
+	Duration         lipglossv2.Style // Execution duration style
 	// Task widget styles
 	TaskWidgetTitle  lipglossv2.Style
 	TaskWidgetBorder lipglossv2.Style

@@ -3,7 +3,6 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -72,10 +71,18 @@ func formatToolParams(rawParams string) string {
 	return utils.Truncate(result, MaxParamsPreview)
 }
 
-// formatDuration formats a duration as "X.Xs" (seconds with 1 decimal place).
+// formatDuration formats a duration for display.
+// <1s: shows milliseconds (e.g., "12ms")
+// >=1s and <10s: shows seconds with 1 decimal (e.g., "1.5s")
+// >=10s: shows seconds without decimal (e.g., "15s")
 func formatDuration(d time.Duration) string {
-	seconds := math.Round(d.Seconds()*10) / 10
-	return fmt.Sprintf("%.1fs", seconds)
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	if d < 10*time.Second {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+	return fmt.Sprintf("%ds", int(d.Seconds()))
 }
 
 // renderToolHeader renders the tool block header with a green dot, bold tool name, and execution ID.
@@ -135,17 +142,47 @@ func renderToolEndBlock(result string, duration time.Duration, executionID strin
 }
 
 // renderToolBlockComplete renders a complete tool block by combining start and end blocks.
-// Reuses existing renderToolStartBlock and renderToolEndBlock to avoid code duplication.
+// Shows execution time in header for better visibility.
 // Applies left border for visual separation.
 func renderToolBlockComplete(toolName string, params string, result string, duration time.Duration, executionID string, styles UIStyles) string {
 	var b strings.Builder
 
-	// Reuse start block (header + IN line)
-	b.WriteString(renderToolStartBlock(toolName, params, executionID, styles))
+	// Header with execution ID and duration
+	durationStr := formatDuration(duration)
+	if executionID != "" {
+		b.WriteString("  " + styles.ToolBlockHeader.Render("● "+toolName) + " " + styles.Help.Render("["+executionID+"]") + " " + styles.Duration.Render("["+durationStr+"]"))
+	} else {
+		b.WriteString("  " + styles.ToolBlockHeader.Render("● "+toolName) + " " + styles.Duration.Render("["+durationStr+"]"))
+	}
 	b.WriteByte('\n')
 
-	// Reuse end block (OUT line + Done)
-	b.WriteString(renderToolEndBlock(result, duration, executionID, styles))
+	// IN line with subtle background
+	b.WriteString("  ")
+	inLabel := styles.ToolBlockIn.Render("IN ")
+	if params != "" {
+		formatted := formatToolParams(params)
+		b.WriteString(inLabel + styles.ToolBlockInBg.Render(" "+formatted))
+	} else {
+		b.WriteString(inLabel)
+	}
+	b.WriteByte('\n')
+
+	// OUT line (reuse renderToolEndBlock's OUT portion)
+	b.WriteString("  ")
+	outContent := utils.Truncate(result, ToolBlockMaxContentWidth)
+	if outContent == "" {
+		outContent = "(no output)"
+	}
+	outLabel := styles.ToolBlockOut.Render("OUT ")
+	if executionID != "" {
+		b.WriteString(outLabel + styles.Help.Render("["+executionID+"] ") + outContent)
+	} else {
+		b.WriteString(outLabel + outContent)
+	}
+	b.WriteByte('\n')
+
+	// Done line (without duration since it's now in header)
+	b.WriteString(styles.ToolBlockDone.Render("     ✓ Done"))
 
 	// Apply left border
 	return styles.ToolBlockBorder.Render(b.String())
@@ -336,22 +373,14 @@ func (m Model) buildChatContent() string {
 			b.WriteString(strings.TrimRight(msg.Rendered, "\n"))
 			b.WriteByte('\n')
 		} else if msg.Type == MessageTypeAssistant && msg.Content != "" {
-			// Streaming assistant message
+			// Streaming assistant message (no cursor)
 			b.WriteString(m.styles.AuraMessage.Render(AuraDisplayName))
 			b.WriteString(" ")
 			b.WriteString(msg.Content)
-			// Only show cursor if message is not complete (streaming in progress)
-			if !msg.Complete {
-				b.WriteString(StreamingCursorChar)
-			}
 			b.WriteByte('\n')
 		} else if msg.Type == MessageTypeThinking && msg.Content != "" {
-			// Streaming thinking message
+			// Streaming thinking message (no cursor)
 			b.WriteString(m.styles.Thinking.Render(msg.Content))
-			// Only show cursor if message is not complete (streaming in progress)
-			if !msg.Complete {
-				b.WriteString(StreamingCursorChar)
-			}
 			b.WriteByte('\n')
 		}
 	}
