@@ -214,6 +214,7 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// Tab to autocomplete selected command
 			if m.commandPopup.HasSelection() {
 				m.input.SetValue(m.commandPopup.SelectedName() + " ")
+				m.commandPopup.Hide()
 				m.state.SetShowCommands(false)
 			}
 			return m, nil
