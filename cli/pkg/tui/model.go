@@ -343,6 +343,7 @@ func (m Model) sendMessage(input string) tea.Cmd {
 // sendMessageWithConfig sends a message with a custom runtime config.
 // This is used for special operations like /init that need a different system prompt.
 // Events are still forwarded to eventChan for UI updates.
+// Note: AutoApprove is enabled - all confirmations including plan review are auto-approved.
 func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.Cmd {
 	return func() tea.Msg {
 		m.currentRunCtx, m.currentRunCancel = context.WithCancel(m.ctx)
@@ -350,6 +351,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 		log.Debug().Str("input", input).Msg("sendMessageWithConfig: starting")
 
 		// Create temporary runtime with custom config
+		// AutoApprove will auto-approve all confirmations (tools + plan review)
 		tempRt, err := sdk.NewRuntime(cfg,
 			sdk.WithAutoApprove(),
 			sdk.WithLogger(GetLogger()),

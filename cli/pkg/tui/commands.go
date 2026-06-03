@@ -12,6 +12,7 @@ import (
 	climds "github.com/oneliang/aura/cli/pkg/commands"
 	commands "github.com/oneliang/aura/commands/pkg"
 	initpkg "github.com/oneliang/aura/commands/pkg/init"
+	"github.com/oneliang/aura/core/pkg/engine"
 	"github.com/oneliang/aura/core/pkg/sdk"
 	"github.com/oneliang/aura/shared/pkg/config"
 	"github.com/oneliang/aura/shared/pkg/version"
@@ -554,6 +555,8 @@ func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	initCfg.SystemPrompt = initpkg.InitSystemPrompt
 	initCfg.EnableSubAgent = false
 	initCfg.SessionID = "" // No persistence
+	// Force implicit planning mode - init should not trigger plan review
+	initCfg.Agent.PlanningMode = string(engine.ModeImplicit)
 
 	// Build init prompt - LLM will explore codebase using tools
 	prompt := initpkg.BuildInitPrompt(cwd)

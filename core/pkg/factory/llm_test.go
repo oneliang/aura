@@ -5,6 +5,7 @@ import (
 
 	"github.com/oneliang/aura/core/pkg/llm"
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/constants"
 )
 
 func TestLLMFactory_Create_Ollama(t *testing.T) {
@@ -35,7 +36,7 @@ func TestLLMFactory_Create_Ollama(t *testing.T) {
 func TestLLMFactory_Create_OpenAI(t *testing.T) {
 	cfg := &config.LLMConfig{
 		Provider: "openai",
-		BaseURL:  "https://api.openai.com/v1",
+		BaseURL:  constants.DefaultOpenAIBaseURL,
 		Model:    "gpt-4",
 		APIKey:   "test-key",
 	}

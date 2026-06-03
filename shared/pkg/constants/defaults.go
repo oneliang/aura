@@ -14,8 +14,17 @@ var (
 	DefaultLLMBaseURL  = "http://localhost:11434"
 	DefaultLLMModel    = "qwen3:8b"
 	DefaultOllamaModel = "llama3.2"
-	DefaultOpenAIModel = "gpt-4o-mini"
-	DefaultLLMTimeout  = 120 * time.Second
+
+	// OpenAI
+	DefaultOpenAIBaseURL = "https://api.openai.com/v1"
+	DefaultOpenAIModel   = "gpt-4o-mini"
+
+	// Anthropic
+	DefaultAnthropicBaseURL    = "https://api.anthropic.com/v1"
+	DefaultAnthropicModel      = "claude-sonnet-4-20250514"
+	DefaultAnthropicAPIVersion = "2024-10-22"
+
+	DefaultLLMTimeout = 120 * time.Second
 
 	// Tools related
 	DefaultToolTimeout  = 30 * time.Second

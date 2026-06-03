@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/oneliang/aura/core/pkg/llm"
+	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/memory"
 )
 
@@ -41,11 +42,11 @@ func TestNewClient(t *testing.T) {
 	if client == nil {
 		t.Fatal("New() returned nil")
 	}
-	if client.baseURL != "https://api.openai.com/v1" {
-		t.Errorf("default baseURL = %v, want 'https://api.openai.com/v1'", client.baseURL)
+	if client.baseURL != constants.DefaultOpenAIBaseURL {
+		t.Errorf("default baseURL = %v, want '%s'", client.baseURL, constants.DefaultOpenAIBaseURL)
 	}
-	if client.model != "gpt-4o-mini" {
-		t.Errorf("default model = %v, want 'gpt-4o-mini'", client.model)
+	if client.model != constants.DefaultOpenAIModel {
+		t.Errorf("default model = %v, want '%s'", client.model, constants.DefaultOpenAIModel)
 	}
 	if client.apiKey != "" {
 		t.Error("default apiKey should be empty")

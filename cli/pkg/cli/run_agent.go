@@ -389,13 +389,46 @@ func tuiRunFunc(rt *sdk.Runtime, sl *tui.SessionLearner, ctx *CommandContext) tu
 
 		out := make(chan tui.ChatEvent, 100)
 
-		// Set up TUI confirmation handler
+		// Set up TUI confirmation handler - forward all ConfirmationRequest fields
 		rt.SetConfirmationHandler(func(req sdk.ConfirmationRequest) {
+			// Build extra with all confirmation fields
+			extra := map[string]any{
+				"confirmType": req.Type,
+				"toolName":    req.ToolName,
+				"params":      req.Params,
+				"ResponseCh":  req.ResponseCh,
+			}
+
+			// Add plan review fields if present
+			if req.PlanGoal != "" {
+				extra["planGoal"] = req.PlanGoal
+				extra["planSteps"] = req.PlanSteps
+			}
+
+			// Add question fields if present
+			if req.Question != "" {
+				extra["question"] = req.Question
+				extra["questionType"] = req.QuestionType
+				extra["options"] = req.Options
+				extra["defaultAnswer"] = req.DefaultAnswer
+				extra["questionRespCh"] = req.QuestionRespCh
+			}
+
+			// Build content based on confirmation type
+			var content string
+			switch req.Type {
+			case "plan_review":
+				content = i18n.T("engine.review_phase")
+			case "question":
+				content = req.Question
+			default:
+				content = fmt.Sprintf("%s %s", i18n.T("cli.sensitive_operation"), req.ToolName)
+			}
+
 			event := tui.ChatEvent{
-				Type:       tui.EventTypeConfirmationRequest,
-				Content:    fmt.Sprintf("%s %s", i18n.T("cli.sensitive_operation"), req.ToolName),
-				Extra:      map[string]any{"toolName": req.ToolName, "params": req.Params},
-				ResponseCh: req.ResponseCh,
+				Type:    tui.EventTypeConfirmationRequest,
+				Content: content,
+				Extra:   extra,
 			}
 			out <- event
 		})

@@ -539,8 +539,15 @@ func (r *AgentRuntime) SetConfirmationHandler(handler EventConfirmationHandler) 
 
 // PlanReviewHandler returns a handler that triggers plan review confirmation
 // via the onConfirm callback and blocks waiting for user approval.
+// If AutoApprove is enabled, returns true immediately without triggering confirmation.
 func (r *AgentRuntime) PlanReviewHandler() func(ctx context.Context, goal string, steps []string) (bool, error) {
 	return func(ctx context.Context, goal string, steps []string) (bool, error) {
+		// AutoApprove: skip confirmation and return true immediately
+		if r.config.AutoApprove {
+			r.logger.Debug().Str("module", "runtime").Msg("PlanReviewHandler: auto-approving plan (AutoApprove enabled)")
+			return true, nil
+		}
+
 		respCh := make(chan bool, 1)
 		r.handlerMu.RLock()
 		handler := r.onConfirm

@@ -64,7 +64,7 @@ func WithHTTPClient(client *http.Client) Option {
 // New creates a new OpenAI compatible client.
 func New(opts ...Option) *Client {
 	c := &Client{
-		baseURL:    "https://api.openai.com/v1",
+		baseURL:    constants.DefaultOpenAIBaseURL,
 		model:      constants.DefaultOpenAIModel,
 		httpClient: httpclient.DefaultLLMClient(),
 	}

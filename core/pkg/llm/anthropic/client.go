@@ -10,6 +10,7 @@ import (
 
 	"github.com/oneliang/aura/core/pkg/llm"
 	"github.com/oneliang/aura/core/pkg/llm/internal"
+	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/httpclient"
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 )
@@ -54,9 +55,9 @@ func WithHTTPClient(client *http.Client) Option {
 // New creates a new Anthropic client.
 func New(opts ...Option) *Client {
 	c := &Client{
-		baseURL:    "https://api.anthropic.com/v1",
-		model:      "claude-sonnet-4-20250514",
-		apiVersion: "2024-10-22",
+		baseURL:    constants.DefaultAnthropicBaseURL,
+		model:      constants.DefaultAnthropicModel,
+		apiVersion: constants.DefaultAnthropicAPIVersion,
 		httpClient: httpclient.DefaultLLMClient(),
 	}
 	for _, opt := range opts {
