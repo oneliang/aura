@@ -665,6 +665,7 @@ func (r *AgentRuntime) Start(ctx context.Context) error {
 	r.runMu.Unlock()
 
 	// 启动输入处理goroutine（顺序处理，避免嵌套）
+	r.processWg.Add(1) // Add before go to avoid race
 	go r.processInputQueue(ctx)
 
 	// 发送启动事件
@@ -861,35 +862,50 @@ func (r *AgentRuntime) sendEvent(event Event) {
 // processInputQueue 顺序处理输入队列
 // 这避免了嵌套事件循环问题，确保一个请求完成后再处理下一个
 func (r *AgentRuntime) processInputQueue(ctx context.Context) {
-	r.processWg.Add(1)
 	defer r.processWg.Done()
 
-	for req := range r.inputQueue {
-		// 处理单个请求
-		r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", req.RequestID))
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req, ok := <-r.inputQueue:
+			if !ok {
+				return
+			}
+			// 处理单个请求
+			r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", req.RequestID))
 
-		// 直接调用Engine.Run而非Process包装器
-		eventsCh, err := r.agent.Run(ctx, req.Input)
-		if err != nil {
-			r.sendEvent(events.NewEvent(events.EventTypeError, err.Error(), req.RequestID))
-			r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
-			continue
-		}
+			// 直接调用Engine.Run而非Process包装器
+			eventsCh, err := r.agent.Run(ctx, req.Input)
+			if err != nil {
+				r.sendEvent(events.NewEvent(events.EventTypeError, err.Error(), req.RequestID))
+				r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
+				continue
+			}
 
-		// 转发事件到OUT通道
-		for ev := range eventsCh {
-			// 设置RequestID以确保事件流匹配
-			if ev.RequestID() == "" {
-				ev = events.NewEvent(ev.Type(), ev.Content(), req.RequestID)
-				if extra := ev.Extra(); extra != nil {
-					ev = events.NewEventWithExtra(ev.Type(), ev.Content(), extra, req.RequestID)
+			// 转发事件到OUT通道，同时响应context取消
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case ev, ok := <-eventsCh:
+					if !ok {
+						break
+					}
+					// 设置RequestID以确保事件流匹配
+					if ev.RequestID() == "" {
+						ev = events.NewEvent(ev.Type(), ev.Content(), req.RequestID)
+						if extra := ev.Extra(); extra != nil {
+							ev = events.NewEventWithExtra(ev.Type(), ev.Content(), extra, req.RequestID)
+						}
+					}
+					r.sendEvent(ev)
 				}
 			}
-			r.sendEvent(ev)
-		}
 
-		// 确保发送Done事件
-		r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
+			// 确保发送Done事件
+			r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
+		}
 	}
 }
 

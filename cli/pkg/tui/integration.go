@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/oneliang/aura/commands/pkg"
@@ -56,7 +57,8 @@ func Run(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.Se
 	p := tea.NewProgram(m)
 	_, err := p.Run()
 
-	// Close TUI channels first, then stop runtime
+	// Stop orchestrator first (wait for goroutines), then close TUI channels, then stop runtime
+	orchestrator.Stop()
 	m.Close()
 	rt.Stop(ctx)
 
@@ -72,6 +74,7 @@ func RunWithConfig(ctx context.Context, rt *sdk.Runtime, config Config, sessionM
 type Orchestrator struct {
 	runtime *sdk.Runtime
 	model   *Model
+	wg      sync.WaitGroup // WaitGroup for goroutine lifecycle
 }
 
 // NewOrchestrator creates an orchestrator for event stream integration.
@@ -88,7 +91,9 @@ func (o *Orchestrator) Run(ctx context.Context) {
 	agentEvents := o.runtime.Events()
 
 	// Forward: Runtime.out → TUI.in
+	o.wg.Add(1)
 	go func() {
+		defer o.wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
@@ -103,7 +108,9 @@ func (o *Orchestrator) Run(ctx context.Context) {
 	}()
 
 	// Forward: TUI.out → Runtime.in
+	o.wg.Add(1)
 	go func() {
+		defer o.wg.Done()
 		uiEvents := o.model.Events()
 		for {
 			select {
@@ -119,6 +126,12 @@ func (o *Orchestrator) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// Stop waits for all goroutines to complete before returning.
+// Call this before closing channels to prevent panic from sending to closed channel.
+func (o *Orchestrator) Stop() {
+	o.wg.Wait()
 }
 
 // Adapter provides utilities to adapt SDK events to TUI events.

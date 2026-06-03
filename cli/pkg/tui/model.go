@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"charm.land/bubbles/v2/viewport"
@@ -47,6 +48,10 @@ type Model struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
 	eventChan  chan ChatEvent // Internal channel for Bubble Tea event loop
+
+	// Channel lifecycle protection
+	closed  bool
+	closeMu sync.Mutex
 
 	getSystemPromptFunc GetSystemPromptFunc // Optional: function to get system prompt
 
@@ -630,6 +635,14 @@ func (m *Model) sendInteractionResponse(approved bool) {
 // Close 关闭Model的所有channel，释放资源
 // 应在TUI退出后调用，确保Orchestrator goroutine能正确退出
 func (m *Model) Close() {
+	m.closeMu.Lock()
+	if m.closed {
+		m.closeMu.Unlock()
+		return
+	}
+	m.closed = true
+	m.closeMu.Unlock()
+
 	m.cancelFunc()
 
 	// 关闭所有channel，确保接收方能正确退出
