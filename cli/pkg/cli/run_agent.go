@@ -186,45 +186,6 @@ func createCLIEventHandler() func(sdk.Event) {
 	}
 }
 
-// createCLIConfirmHandler creates a confirmation handler for CLI mode.
-func createCLIConfirmHandler(runCtx context.Context) func(sdk.ConfirmationRequest) {
-	return func(req sdk.ConfirmationRequest) {
-		cmdCtx := getCommandContext()
-		if cmdCtx == nil || cmdCtx.PermissionMgr == nil {
-			req.ResponseCh <- true
-			return
-		}
-
-		allowed, requiresConfirm, reason := cmdCtx.PermissionMgr.CheckPermission(runCtx, req.ToolName, req.Params)
-		if !allowed {
-			fmt.Fprintf(os.Stderr, "\033[31mPermission denied: %s\033[0m\n", reason)
-			req.ResponseCh <- false
-			return
-		}
-
-		if requiresConfirm && !autoConfirm {
-			// Ask user for confirmation in CLI mode
-			fmt.Printf("\n\033[33m%s\033[0m\n", i18n.T("cli.sensitive_operation"))
-			fmt.Printf("  Tool: %s\n", req.ToolName)
-			if params, ok := req.Params["command"]; ok {
-				fmt.Printf("  Command: %v\n", params)
-			}
-			if params, ok := req.Params["path"]; ok {
-				fmt.Printf("  Path: %v\n", params)
-			}
-
-			if readUserConfirmation("Do you want to proceed? (y/n): ") {
-				req.ResponseCh <- true
-			} else {
-				req.ResponseCh <- false
-			}
-			return
-		}
-
-		req.ResponseCh <- true
-	}
-}
-
 // setupCommandProviderHandlers registers command handlers on the event bus.
 // This is the event-driven approach - handlers are registered on the bus,
 // and commands send events that get processed by these handlers.
@@ -273,6 +234,7 @@ func runSingleMessage(runCtx context.Context, rt *sdk.Runtime, args []string, ev
 }
 
 // runTUIMode starts the TUI mode.
+// 新架构：直接传递runtime，使用事件流模式
 func runTUIMode(
 	runCtx context.Context,
 	rt *sdk.Runtime,
@@ -283,8 +245,6 @@ func runTUIMode(
 	profName string,
 	mcpManager *sdk.MCPManager,
 ) {
-	fn := tuiRunFunc(rt, sl, ctx)
-
 	modelProvider := tui.NewModelProvider()
 
 	summarizer := rt.GetSummarizer()
@@ -305,7 +265,8 @@ func runTUIMode(
 	// Store config in context for command handlers to access
 	runCtx = config.WithConfig(runCtx, ctx.Config)
 
-	if err := tui.RunWithConfig(runCtx, fn, cfg, sessionMgr, summarizer, modelProvider, ctx.CommandProvider, mcpManager); err != nil {
+	// 新架构：直接传递runtime，不再创建runFn adapter
+	if err := tui.RunWithConfig(runCtx, rt, cfg, sessionMgr, summarizer, modelProvider, ctx.CommandProvider, mcpManager); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 	}
 }
@@ -337,7 +298,7 @@ func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.Comm
 
 	// Build runtime options
 	opts := []sdk.RuntimeOption{
-		sdk.WithConfirmationHandler(createCLIConfirmHandler(context.Background())),
+		sdk.WithAutoApprove(),
 		sdk.WithCommands(cmdProvider),
 		sdk.WithIntentService(intentSvc),
 		sdk.WithSessionStore(sessionStore),
@@ -346,9 +307,9 @@ func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.Comm
 		sdk.WithDataDir(ctx.DataDir),
 	}
 
-	// TUI mode: inject unified logger and set mode
+	// TUI mode: inject unified logger
 	if !useCLI {
-		opts = append(opts, sdk.WithLogger(tui.GetLogger()), sdk.WithMode(sdk.RuntimeModeTUI))
+		opts = append(opts, sdk.WithLogger(tui.GetLogger()))
 	}
 
 	// Create MCP manager if config exists
@@ -379,134 +340,4 @@ func createLogger(cfg *config.Config) *logger.Logger {
 		Output: cfg.Log.Output,
 		Module: "cli",
 	})
-}
-
-// tuiRunFunc adapts an agent runtime into a tui.RunFunc.
-func tuiRunFunc(rt *sdk.Runtime, sl *tui.SessionLearner, ctx *CommandContext) tui.RunFunc {
-	return func(runtimeCtx context.Context, input string) (<-chan tui.ChatEvent, error) {
-		if sl != nil {
-			sl.Observe(input)
-		}
-
-		out := make(chan tui.ChatEvent, 100)
-
-		// Set up TUI confirmation handler - forward all ConfirmationRequest fields
-		rt.SetConfirmationHandler(func(req sdk.ConfirmationRequest) {
-			// Build extra with all confirmation fields
-			extra := map[string]any{
-				"confirmType": req.Type,
-				"toolName":    req.ToolName,
-				"params":      req.Params,
-				"ResponseCh":  req.ResponseCh,
-			}
-
-			// Add plan review fields if present
-			if req.PlanGoal != "" {
-				extra["planGoal"] = req.PlanGoal
-				extra["planSteps"] = req.PlanSteps
-			}
-
-			// Add question fields if present
-			if req.Question != "" {
-				extra["question"] = req.Question
-				extra["questionType"] = req.QuestionType
-				extra["options"] = req.Options
-				extra["defaultAnswer"] = req.DefaultAnswer
-				extra["questionRespCh"] = req.QuestionRespCh
-			}
-
-			// Build content based on confirmation type
-			var content string
-			switch req.Type {
-			case "plan_review":
-				content = i18n.T("engine.review_phase")
-			case "question":
-				content = req.Question
-			default:
-				content = fmt.Sprintf("%s %s", i18n.T("cli.sensitive_operation"), req.ToolName)
-			}
-
-			event := tui.ChatEvent{
-				Type:    tui.EventTypeConfirmationRequest,
-				Content: content,
-				Extra:   extra,
-			}
-			out <- event
-		})
-
-		// Run Process() in background goroutine so out channel events
-		// (like confirmation requests) flow immediately.
-		go func() {
-			defer close(out)
-
-			events, err := rt.Process(runtimeCtx, input)
-			if err != nil {
-				out <- tui.ChatEvent{Type: tui.EventTypeError, Content: err.Error()}
-				return
-			}
-
-			for ev := range events {
-				var chatEvent tui.ChatEvent
-				switch ev.Type() {
-				case sdk.EventTypeThinkingStart:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeThinkingStart, Content: ev.Content()}
-				case sdk.EventTypeThinkingChunk:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeThinkingChunk, Content: ev.Content()}
-				case sdk.EventTypeThinkingEnd:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeThinkingEnd, Content: ev.Content()}
-				case sdk.EventTypeThinkingContent:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeThinkingContent, Content: ev.Content()}
-				case sdk.EventTypeResponseStart:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeResponseStart, Content: ev.Content()}
-				case sdk.EventTypeResponseChunk:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeResponseChunk, Content: ev.Content()}
-				case sdk.EventTypeResponseEnd:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeResponseEnd, Content: ev.Content()}
-				case sdk.EventTypeAction:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeAction, Content: ev.Content()}
-				case sdk.EventTypeResult:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeResult, Content: ev.Content()}
-				case sdk.EventTypeResponse:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeResponse, Content: ev.Content()}
-				case sdk.EventTypeError:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeError, Content: ev.Content()}
-				case sdk.EventTypeStep:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeStep, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypeToolStart:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeToolStart, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypeToolEnd:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeToolEnd, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypeCommandMatched:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeCommandMatched, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypeCommandResult:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeCommandResult, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypeTaskCreate:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeTaskCreate, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypeTaskUpdate:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeTaskUpdate, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypeTaskList:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeTaskList, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypePlanCreated:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypePlanCreated, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypePlanReviewStart:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypePlanReviewStart, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypePlanReviewFiles:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypePlanReviewFiles, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypePlanStep:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypePlanStep, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypePlanModeExit:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypePlanModeExit, Content: ev.Content(), Extra: ev.Extra()}
-				case sdk.EventTypePlanComplete:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypePlanComplete, Content: ev.Content(), Extra: ev.Extra()}
-				default:
-					chatEvent = tui.ChatEvent{Type: tui.EventTypeResponse, Content: ev.Content()}
-				}
-				out <- chatEvent
-			}
-			// Explicitly send Done event before closing channel
-			out <- tui.ChatEvent{Type: tui.EventTypeDone}
-		}()
-
-		return out, nil
-	}
 }

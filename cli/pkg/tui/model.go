@@ -11,6 +11,7 @@ import (
 	lipglossv2 "charm.land/lipgloss/v2"
 	commands "github.com/oneliang/aura/commands/pkg"
 	"github.com/oneliang/aura/core/pkg/sdk"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/i18n"
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 	"github.com/oneliang/aura/shared/pkg/user"
@@ -31,11 +32,23 @@ type Model struct {
 	tasks      *TaskWidget
 	plan       *PlanWidget
 
-	runFn      RunFunc
-	getSystemPromptFunc GetSystemPromptFunc // Optional: function to get system prompt
+	// ===== 新架构：统一事件流 =====
+
+	// Runtime引用 - 黑盒，只有IN/OUT事件流接口
+	runtime *sdk.Runtime
+
+	// OUT: 发送事件通道（用户输入、交互响应等）
+	eventOutCh chan events.Event
+
+	// IN: 接收事件通道（Agent响应、交互请求等）
+	eventInCh chan events.Event
+
+	// Internal event processing
 	ctx        context.Context
 	cancelFunc context.CancelFunc
-	eventChan  chan ChatEvent
+	eventChan  chan ChatEvent // Internal channel for Bubble Tea event loop
+
+	getSystemPromptFunc GetSystemPromptFunc // Optional: function to get system prompt
 
 	// Run state
 	currentRunCtx    context.Context
@@ -121,8 +134,9 @@ type (
 	scrollBottomMsg struct{}
 )
 
-// New creates a new TUI model.
-func New(ctx context.Context, runFn RunFunc, config Config, sessionMgr *sdk.SessionManager, summarizer *sdk.Summarizer, modelProvider *ModelProvider, commandProvider commands.Command, mcpManager *sdk.MCPManager) Model {
+// NewWithRuntime creates a new TUI model with runtime reference.
+// This is the new architecture: TUI holds runtime reference and uses event stream.
+func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.SessionManager, summarizer *sdk.Summarizer, modelProvider *ModelProvider, commandProvider commands.Command, mcpManager *sdk.MCPManager) *Model {
 	// Initialize i18n constants (must be called after i18n.Init)
 	InitI18nConstants()
 
@@ -148,11 +162,13 @@ func New(ctx context.Context, runFn RunFunc, config Config, sessionMgr *sdk.Sess
 		processing:          NewProcessingWidget(),
 		tasks:               NewTaskWidget(styles),
 		plan:                NewPlanWidget(styles),
-		runFn:               runFn,
+		runtime:             rt,  // 新架构：持有runtime引用
 		getSystemPromptFunc: config.GetSystemPrompt,
 		ctx:                 ctx,
 		cancelFunc:          cancel,
 		eventChan:           make(chan ChatEvent, 100),
+		eventOutCh:          make(chan events.Event, 100),  // OUT: 发送事件
+		eventInCh:           make(chan events.Event, 100),  // IN: 接收事件（备用）
 		config:              config,
 		sessionMgr:          sessionMgr,
 		summarizer:          summarizer,
@@ -207,7 +223,7 @@ func New(ctx context.Context, runFn RunFunc, config Config, sessionMgr *sdk.Sess
 		}
 	}
 
-	return m
+	return &m
 }
 
 // Init implements tea.Model.
@@ -292,51 +308,23 @@ func (m *Model) loadSessionHistory() bool {
 	return true
 }
 
-// sendMessage sends a message to the agent.
-func (m Model) sendMessage(input string) tea.Cmd {
+// sendMessage sends a message to the agent via event stream.
+// 新架构：通过事件流发送用户输入，不再直接调用runFn
+// 注意：requestID在调用前由Update设置到m.currentRequestID
+func (m *Model) sendMessage(input string) tea.Cmd {
+	requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
+	m.currentRequestID = requestID
+
 	return func() tea.Msg {
-		m.currentRunCtx, m.currentRunCancel = context.WithCancel(m.ctx)
+		log.Debug().Str("input", input).Str("requestID", requestID).Msg("sendMessage: sending via event stream")
 
-		log.Debug().Str("input", input).Msg("sendMessage: starting")
-
-		// Run Process() in a background goroutine so the Bubble Tea main loop
-		// can continue processing user input (e.g., confirmation responses).
-		go func() {
-			events, err := m.runFn(m.currentRunCtx, input)
-			if err != nil {
-				log.Debug().Err(err).Msg("sendMessage: error")
-				select {
-				case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
-				default:
-				}
-				// Send Done event to unlock input
-				select {
-				case m.eventChan <- ChatEvent{Type: EventTypeDone}:
-				default:
-				}
-				return
-			}
-
-			log.Debug().Msg("sendMessage: got events channel, starting goroutine")
-
-			count := 0
-			for ev := range events {
-				count++
-				log.Debug().Int("count", count).Str("type", string(ev.Type)).Msg("sendMessage: forwarding event")
-				select {
-				case m.eventChan <- ev:
-				case <-m.currentRunCtx.Done():
-					log.Debug().Msg("sendMessage: run cancelled, exiting goroutine")
-					return
-				}
-				log.Debug().Int("count", count).Str("type", string(ev.Type)).Msg("sendMessage: event sent")
-			}
-			log.Debug().Int("total", count).Msg("sendMessage: events channel closed, sending done")
-			select {
-			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
-			default:
-			}
-		}()
+		userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
+		select {
+		case m.eventOutCh <- userEvent:
+			log.Debug().Str("requestID", requestID).Msg("sendMessage: user input event sent")
+		default:
+			log.Warn().Msg("sendMessage: eventOutCh full, dropping user input")
+		}
 
 		return nil
 	}
@@ -458,4 +446,183 @@ func (m *Model) clearUIState() {
 	m.manualScrollOffset = 0
 	m.autoScroll = true
 	m.tasks.Reset()
+}
+
+// ===== 新架构：统一事件流接口 =====
+
+// ReceiveEvent 接收事件（IN）
+// 统一入口：所有Agent输出事件通过这个方法处理
+// 注意：此方法从Orchestrator goroutine调用，通过eventChan传递到Bubble Tea主循环
+func (m *Model) ReceiveEvent(event events.Event) {
+	chatEvent := m.convertEventToChatEvent(event)
+	select {
+	case m.eventChan <- chatEvent:
+	default:
+		log.Warn().Str("type", string(event.Type())).Msg("ReceiveEvent: eventChan full, dropping event")
+	}
+}
+
+// convertEventToChatEvent 将events.Event转换为ChatEvent
+func (m *Model) convertEventToChatEvent(event events.Event) ChatEvent {
+	switch event.Type() {
+	case events.EventTypeThinkingStart:
+		return ChatEvent{Type: EventTypeThinkingStart, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeThinkingChunk:
+		return ChatEvent{Type: EventTypeThinkingChunk, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeThinkingEnd:
+		return ChatEvent{Type: EventTypeThinkingEnd, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeThinkingContent:
+		return ChatEvent{Type: EventTypeThinkingContent, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeResponseStart:
+		return ChatEvent{Type: EventTypeResponseStart, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeResponseChunk:
+		return ChatEvent{Type: EventTypeResponseChunk, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeResponseEnd:
+		return ChatEvent{Type: EventTypeResponseEnd, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeResponse:
+		return ChatEvent{Type: EventTypeResponse, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeAction:
+		return ChatEvent{Type: EventTypeAction, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeResult:
+		return ChatEvent{Type: EventTypeResult, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeError:
+		return ChatEvent{Type: EventTypeError, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeStep:
+		return ChatEvent{Type: EventTypeStep, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeToolStart:
+		return ChatEvent{Type: EventTypeToolStart, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeToolEnd:
+		return ChatEvent{Type: EventTypeToolEnd, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeInteractionRequest:
+		return ChatEvent{Type: EventTypeConfirmationRequest, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeCommandMatched:
+		return ChatEvent{Type: EventTypeCommandMatched, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeCommandResult:
+		return ChatEvent{Type: EventTypeCommandResult, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeTaskCreate:
+		return ChatEvent{Type: EventTypeTaskCreate, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeTaskUpdate:
+		return ChatEvent{Type: EventTypeTaskUpdate, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeTaskList:
+		return ChatEvent{Type: EventTypeTaskList, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanCreated:
+		return ChatEvent{Type: EventTypePlanCreated, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanReviewStart:
+		return ChatEvent{Type: EventTypePlanReviewStart, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanReviewFiles:
+		return ChatEvent{Type: EventTypePlanReviewFiles, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanStep:
+		return ChatEvent{Type: EventTypePlanStep, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanComplete:
+		return ChatEvent{Type: EventTypePlanComplete, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanModeExit:
+		return ChatEvent{Type: EventTypePlanModeExit, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeEnterPlanMode:
+		return ChatEvent{Type: EventTypeEnterPlanMode, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanVerifyStart:
+		return ChatEvent{Type: EventTypePlanVerifyStart, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanVerifyResult:
+		return ChatEvent{Type: EventTypePlanVerifyResult, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypePlanVerifyEnd:
+		return ChatEvent{Type: EventTypePlanVerifyEnd, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeSnapshotCreated:
+		return ChatEvent{Type: EventTypeSnapshotCreated, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeRollbackOffer:
+		return ChatEvent{Type: EventTypeRollbackOffer, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeRollbackComplete:
+		return ChatEvent{Type: EventTypeRollbackComplete, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
+	case events.EventTypeAgentStart:
+		return ChatEvent{Type: EventTypeAgentStart, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeAgentStop:
+		return ChatEvent{Type: EventTypeAgentStop, Content: event.Content(), RequestID: event.RequestID()}
+	case events.EventTypeDone:
+		return ChatEvent{Type: EventTypeDone, RequestID: event.RequestID()}
+	default:
+		return ChatEvent{Type: EventTypeDone, RequestID: event.RequestID()}
+	}
+}
+
+// Events 获取输出事件流（OUT）
+// 返回事件流供Orchestrator转发到Agent
+func (m *Model) Events() <-chan events.Event {
+	return m.eventOutCh
+}
+
+// handleInteractionRequest 处理交互请求
+func (m *Model) handleInteractionRequest(event events.Event) {
+	reqID := event.RequestID()
+	interactionType := event.InteractionType()
+
+	// 设置确认状态
+	m.confirmState = ConfirmState{
+		Waiting: true,
+		Request: &ConfirmationRequest{
+			Type:       ConfirmationType(interactionType),
+			ToolName:   "",
+			ResponseCh: nil,  // 新架构：不再使用ResponseCh，通过事件流发送响应
+		},
+	}
+
+	// 从Extra中提取请求详情
+	if extra := event.Extra(); extra != nil {
+		if toolName, ok := extra["tool_name"].(string); ok {
+			m.confirmState.Request.ToolName = toolName
+		}
+		if params, ok := extra["tool_params"].(map[string]any); ok {
+			m.confirmState.Request.Params = params
+		}
+		if planGoal, ok := extra["plan_goal"].(string); ok {
+			m.confirmState.Request.PlanGoal = planGoal
+		}
+		if planSteps, ok := extra["plan_steps"].([]string); ok {
+			m.confirmState.Request.PlanSteps = planSteps
+		}
+	}
+
+	// 保存requestID用于响应
+	m.confirmState.RequestID = reqID
+	m.confirmState.InteractionType = interactionType
+
+	// 设置显示状态为确认对话框
+	m.state.SetDisplayState(DisplayConfirm)
+}
+
+// sendUserInput 发送用户输入事件
+// 将用户文本包装成EventTypeUserInput发送
+func (m *Model) sendUserInput(input string) {
+	event := events.NewEvent(events.EventTypeUserInput, input, m.currentRequestID)
+	select {
+	case m.eventOutCh <- event:
+	default:
+		log.Warn().Msg("eventOutCh full, dropping user input event")
+	}
+}
+
+// sendInteractionResponse 发送交互响应事件
+func (m *Model) sendInteractionResponse(approved bool) {
+	if m.confirmState.RequestID == "" {
+		return
+	}
+
+	extra := map[string]any{
+		"approved": approved,
+		"type":     m.confirmState.InteractionType,
+	}
+
+	event := events.NewEventWithExtra(
+		events.EventTypeInteractionResponse,
+		"",
+		extra,
+		m.confirmState.RequestID,
+	)
+
+	select {
+	case m.eventOutCh <- event:
+	default:
+		log.Warn().Msg("eventOutCh full, dropping interaction response event")
+	}
+
+	// 重置确认状态
+	m.confirmState = ConfirmState{Waiting: false}
+	m.state.SetDisplayState(DisplayProcessing)
 }

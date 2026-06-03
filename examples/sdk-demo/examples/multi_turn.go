@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oneliang/aura/core/pkg/sdk"
 )
 
-// MultiTurn demonstrates multi-turn conversation with session persistence.
+// MultiTurn demonstrates multi-turn conversation with session persistence using event stream.
 func MultiTurn() error {
 	ctx := context.Background()
 
@@ -31,6 +32,15 @@ func MultiTurn() error {
 	}
 	defer runtime.Shutdown()
 
+	// Start event stream
+	if err := runtime.Start(ctx); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	defer runtime.Stop(ctx)
+
+	// Get output event stream
+	events := runtime.Events()
+
 	// Conversation loop
 	inputs := []string{
 		"My name is Alice",
@@ -42,15 +52,26 @@ func MultiTurn() error {
 		fmt.Printf("\n=== Turn %d ===\n", i+1)
 		fmt.Printf("User: %s\n", input)
 
-		events, err := runtime.Process(ctx, input)
+		// Generate request ID for this turn
+		requestID := uuid.New().String()
+
+		// Send user input
+		err = runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, input, requestID))
 		if err != nil {
-			return fmt.Errorf("process turn %d: %w", i+1, err)
+			return fmt.Errorf("send event turn %d: %w", i+1, err)
 		}
 
+		// Process events for this turn (match requestID)
 		var response strings.Builder
 		for ev := range events {
-			if ev.Type() == sdk.EventTypeResponse || ev.Type() == sdk.EventTypeResponseChunk {
-				response.WriteString(ev.Content())
+			// Only process events matching our requestID or global events
+			if ev.RequestID() == requestID || ev.RequestID() == "" {
+				if ev.Type() == sdk.EventTypeResponse || ev.Type() == sdk.EventTypeResponseChunk {
+					response.WriteString(ev.Content())
+				}
+				if ev.Type() == sdk.EventTypeDone {
+					break
+				}
 			}
 		}
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/oneliang/aura/core/pkg/llm"
 	"github.com/oneliang/aura/core/pkg/permissions"
-	"github.com/oneliang/aura/core/pkg/runtime"
 	"github.com/oneliang/aura/shared/pkg/config"
 )
 
@@ -57,50 +56,6 @@ func TestNewRuntime(t *testing.T) {
 
 	if runtime == nil {
 		t.Fatal("NewRuntime() returned nil")
-	}
-}
-
-func TestNewRuntime_WithOptions(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-	cfg.SessionID = "test-session"
-
-	eventHandler := func(event Event) {
-		_ = event // unused for now
-	}
-
-	runtime, err := NewRuntime(
-		cfg,
-		WithEventHandler(eventHandler),
-		WithSessionID("test-session"),
-	)
-
-	if err != nil {
-		t.Fatalf("NewRuntime() with options returned error: %v", err)
-	}
-
-	if runtime == nil {
-		t.Fatal("NewRuntime() with options returned nil")
-	}
-}
-
-func TestNewRuntime_WithConfirmationHandler(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-
-	confirmHandler := func(req ConfirmationRequest) {
-		_ = req // unused for now
-	}
-
-	runtime, err := NewRuntime(
-		cfg,
-		WithConfirmationHandler(confirmHandler),
-	)
-
-	if err != nil {
-		t.Fatalf("NewRuntime() with confirmation handler returned error: %v", err)
-	}
-
-	if runtime == nil {
-		t.Fatal("NewRuntime() with confirmation handler returned nil")
 	}
 }
 
@@ -199,32 +154,6 @@ func TestNewRoleLoader_CustomDir(t *testing.T) {
 
 	if loader == nil {
 		t.Fatal("NewRoleLoader() returned nil")
-	}
-}
-
-func TestWithMode(t *testing.T) {
-	option := WithMode(runtime.RuntimeModeTUI)
-
-	if option == nil {
-		t.Error("WithMode() returned nil")
-	}
-}
-
-func TestWithEventHandler(t *testing.T) {
-	handler := func(event Event) {}
-	option := WithEventHandler(handler)
-
-	if option == nil {
-		t.Error("WithEventHandler() returned nil")
-	}
-}
-
-func TestWithConfirmationHandler(t *testing.T) {
-	handler := func(req ConfirmationRequest) {}
-	option := WithConfirmationHandler(handler)
-
-	if option == nil {
-		t.Error("WithConfirmationHandler() returned nil")
 	}
 }
 

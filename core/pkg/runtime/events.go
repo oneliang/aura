@@ -49,7 +49,36 @@ const (
 	EventTypeRollbackOffer       = events.EventTypeRollbackOffer
 	EventTypeRollbackComplete    = events.EventTypeRollbackComplete
 	EventTypeMaxStepsExceeded    = events.EventTypeMaxStepsExceeded
+
+	// ===== 新架构：统一事件流 =====
+
+	// IN事件类型
+	EventTypeUserInput           = events.EventTypeUserInput
+	EventTypeUserMessage         = events.EventTypeUserMessage
+	EventTypeInteractionResponse = events.EventTypeInteractionResponse
+	EventTypeSystemCommand       = events.EventTypeSystemCommand
+
+	// OUT事件类型
+	EventTypeInteractionRequest  = events.EventTypeInteractionRequest
+	EventTypeAgentStart          = events.EventTypeAgentStart
+	EventTypeAgentStop           = events.EventTypeAgentStop
 )
+
+// InteractionType 交互类型
+type InteractionType = events.InteractionType
+
+const (
+	InteractionTypeToolConfirmation  = events.InteractionTypeToolConfirmation
+	InteractionTypePlanReview        = events.InteractionTypePlanReview
+	InteractionTypeAskUserQuestion   = events.InteractionTypeAskUserQuestion
+	InteractionTypeRollbackConfirm   = events.InteractionTypeRollbackConfirm
+)
+
+// InteractionRequest 交互请求
+type InteractionRequest = events.InteractionRequest
+
+// InteractionResponse 交互响应
+type InteractionResponse = events.InteractionResponse
 
 // NewEvent creates a new event.
 func NewEvent(typ EventType, content string) Event {
@@ -73,12 +102,6 @@ func NewEventWithExtraAndRequestID(typ EventType, content string, extra map[stri
 
 // ConfirmationRequest represents a request for user confirmation.
 type ConfirmationRequest = events.ConfirmationRequest
-
-// EventConfirmationHandler is a callback for handling confirmation requests.
-type EventConfirmationHandler func(req ConfirmationRequest)
-
-// EventHandler is a callback for handling events.
-type EventHandler func(Event)
 
 // Timestamp returns the timestamp from an event.
 // This helper is provided for backward compatibility.

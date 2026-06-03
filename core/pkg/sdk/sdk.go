@@ -8,7 +8,42 @@
 // Direct modifications to internal packages should NOT be mirrored here
 // unless they are part of the public API contract.
 //
-// Example usage:
+// Example usage (new event stream pattern):
+//
+//	// Create runtime from config
+//	cfg := config.Load(...)
+//	runtime, err := sdk.NewRuntime(sdk.FromConfig(cfg))
+//	if err != nil { ... }
+//
+//	// Initialize
+//	if err := runtime.Initialize(ctx); err != nil { ... }
+//
+//	// Start event stream
+//	if err := runtime.Start(ctx); err != nil { ... }
+//
+//	// Get output event stream
+//	events := runtime.Events()
+//
+//	// Send user input as event
+//	runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "Hello, Aura!", requestID))
+//
+//	// Process events
+//	for ev := range events {
+//	    switch ev.Type() {
+//	    case sdk.EventTypeInteractionRequest:
+//	        // Handle interaction request
+//	        runtime.SendEvent(ctx, sdk.NewEventWithExtra(sdk.EventTypeInteractionResponse, "", map[string]any{"approved": true}, ev.RequestID()))
+//	    case sdk.EventTypeDone:
+//	        // Processing complete
+//	        break
+//	    }
+//	}
+//
+//	// Stop
+//	runtime.Stop(ctx)
+//	defer runtime.Shutdown()
+//
+// Example usage (legacy Process pattern - deprecated):
 //
 //	// Create runtime from config
 //	cfg := config.Load(...)
@@ -41,6 +76,7 @@ import (
 	sessionService "github.com/oneliang/aura/session/pkg/service"
 	sessionStorage "github.com/oneliang/aura/session/pkg/storage"
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/oneliang/aura/storage/pkg/jsonl"
 
@@ -100,16 +136,36 @@ const (
 	EventTypeRollbackOffer       = runtime.EventTypeRollbackOffer
 	EventTypeRollbackComplete    = runtime.EventTypeRollbackComplete
 	EventTypeMaxStepsExceeded    = runtime.EventTypeMaxStepsExceeded
+
+	// ===== 新架构：统一事件流 =====
+
+	// IN事件类型
+	EventTypeUserInput           = runtime.EventTypeUserInput
+	EventTypeUserMessage         = runtime.EventTypeUserMessage
+	EventTypeInteractionResponse = runtime.EventTypeInteractionResponse
+	EventTypeSystemCommand       = runtime.EventTypeSystemCommand
+
+	// OUT事件类型
+	EventTypeInteractionRequest  = runtime.EventTypeInteractionRequest
+	EventTypeAgentStart          = runtime.EventTypeAgentStart
+	EventTypeAgentStop           = runtime.EventTypeAgentStop
 )
 
-// ConfirmationRequest represents a request for user confirmation.
-type ConfirmationRequest = runtime.ConfirmationRequest
+// InteractionType 交互类型
+type InteractionType = runtime.InteractionType
 
-// EventConfirmationHandler is a callback for handling confirmation requests.
-type EventConfirmationHandler = runtime.EventConfirmationHandler
+const (
+	InteractionTypeToolConfirmation  = runtime.InteractionTypeToolConfirmation
+	InteractionTypePlanReview        = runtime.InteractionTypePlanReview
+	InteractionTypeAskUserQuestion   = runtime.InteractionTypeAskUserQuestion
+	InteractionTypeRollbackConfirm   = runtime.InteractionTypeRollbackConfirm
+)
 
-// EventHandler is a callback for handling events.
-type EventHandler = runtime.EventHandler
+// InteractionRequest 交互请求
+type InteractionRequest = runtime.InteractionRequest
+
+// InteractionResponse 交互响应
+type InteractionResponse = runtime.InteractionResponse
 
 // RuntimeConfig holds configuration for the Aura runtime.
 type RuntimeConfig = runtime.RuntimeConfig
@@ -117,6 +173,23 @@ type RuntimeConfig = runtime.RuntimeConfig
 // NewRuntime creates a new agent runtime.
 func NewRuntime(cfg *RuntimeConfig, opts ...RuntimeOption) (*Runtime, error) {
 	return runtime.New(cfg, opts...)
+}
+
+// ===== 新架构：事件创建函数 =====
+
+// NewEvent creates a new event with type, content, and request ID.
+func NewEvent(typ EventType, content string, requestID string) Event {
+	return events.NewEvent(typ, content, requestID)
+}
+
+// NewEventWithExtra creates a new event with extra data.
+func NewEventWithExtra(typ EventType, content string, extra map[string]any, requestID string) Event {
+	return events.NewEventWithExtra(typ, content, extra, requestID)
+}
+
+// NewInteractionEvent creates a new interaction event.
+func NewInteractionEvent(typ EventType, interactionType InteractionType, requestID string, extra map[string]any) Event {
+	return events.NewInteractionEvent(typ, interactionType, requestID, extra)
 }
 
 // FromConfig creates a runtime config from the main app config.
@@ -127,21 +200,6 @@ func FromConfig(cfg *config.Config) *RuntimeConfig {
 // DefaultRuntimeConfig returns a default runtime configuration.
 func DefaultRuntimeConfig() *RuntimeConfig {
 	return runtime.DefaultRuntimeConfig()
-}
-
-// WithEventHandler sets the event handler callback.
-func WithEventHandler(handler EventHandler) RuntimeOption {
-	return runtime.WithEventHandler(handler)
-}
-
-// WithConfirmationHandler sets the confirmation handler callback.
-func WithConfirmationHandler(handler EventConfirmationHandler) RuntimeOption {
-	return runtime.WithConfirmationHandler(handler)
-}
-
-// WithMode sets the runtime mode.
-func WithMode(mode runtime.RuntimeMode) RuntimeOption {
-	return runtime.WithMode(mode)
 }
 
 // WithSessionStore sets the session store for persistence.
@@ -271,15 +329,6 @@ func GetMCPServerStatus(ctx context.Context, name string) *ServerInfo {
 	info := mgr.ServerInfoForName(name)
 	return &info
 }
-
-// Runtime mode.
-type RuntimeMode = runtime.RuntimeMode
-
-const (
-	RuntimeModeCLI = runtime.RuntimeModeCLI
-	RuntimeModeTUI = runtime.RuntimeModeTUI
-	RuntimeModeAPI = runtime.RuntimeModeAPI
-)
 
 // Message source.
 type MessageSource = memory.MessageSource

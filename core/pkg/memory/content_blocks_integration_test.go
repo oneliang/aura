@@ -574,7 +574,7 @@ func TestContentBlocksIntegration_DirectPersistence(t *testing.T) {
 	msg := message.Message{
 		SessionID: sessionID,
 		UserID:    userID,
-		Type:      message.MessageTypeAssistant,
+		Type:      sharedmemory.MessageTypeAssistant,
 		Role:      sharedmemory.RoleAssistant,
 		Timestamp: time.Now().UnixMilli(),
 		Source:    "test",

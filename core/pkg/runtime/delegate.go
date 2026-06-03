@@ -122,26 +122,22 @@ func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task st
 	subAgentLog := subAgentRuntime.logger.With().Str("subAgentID", subAgentID).Logger()
 	subAgentLog.Debug().Str("task_preview", task[:min(len(task), 100)]).Msg("executeSubAgent: starting sub-agent execution")
 
-	subAgentRuntime.SetEventHandler(func(event Event) {
-		mu.Lock()
-		defer mu.Unlock()
-		eventCount++
-		switch event.Type() {
-		case EventTypeResponse:
-			result = event.Content()
-		case EventTypeError:
-			lastError = fmt.Errorf("%s", event.Content())
-		}
-	})
-
 	events, err := subAgentRuntime.Process(ctx, task)
 	if err != nil {
 		return "", fmt.Errorf("failed to process task: %w", err)
 	}
 
-	// Wait for all events to complete
-	for range events {
-		// Events are handled by the event handler
+	// Process events directly from the event stream
+	for ev := range events {
+		eventCount++
+		mu.Lock()
+		switch ev.Type() {
+		case EventTypeResponse:
+			result = ev.Content()
+		case EventTypeError:
+			lastError = fmt.Errorf("%s", ev.Content())
+		}
+		mu.Unlock()
 	}
 
 	mu.Lock()

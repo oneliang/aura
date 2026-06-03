@@ -245,7 +245,6 @@ func (r *AgentRuntime) initMemoryAndPrompt(ctx context.Context) error {
 	r.session = &SessionContext{
 		sessionID:     r.sessionID,
 		userID:        r.userID,
-		mode:          r.mode,
 		sessionStore:  r.sessionStore,
 		dataDir:       r.dataDir,
 		logger:        r.logger,
@@ -433,7 +432,6 @@ func (r *AgentRuntime) initPostSetup(ctx context.Context) error {
 	r.hooks.Fire(ctx, hooks.EventSessionStart, map[string]any{
 		"session_id": r.sessionID,
 		"user_id":    r.userID,
-		"mode":       r.mode,
 	})
 
 	// Initialize habit manager (after initialized flag so Process() can access it)
@@ -475,7 +473,6 @@ func (r *AgentRuntime) initializeSubAgent(ctx context.Context) error {
 	r.session = &SessionContext{
 		sessionID:    r.sessionID,
 		userID:       r.userID,
-		mode:         r.mode,
 		sessionStore: r.sessionStore,
 		dataDir:      r.dataDir,
 		logger:       r.logger,

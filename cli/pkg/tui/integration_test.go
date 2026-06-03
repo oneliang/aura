@@ -314,3 +314,11 @@ func (m *mockSDKEvent) Content() string        { return m.content }
 func (m *mockSDKEvent) Extra() map[string]any  { return m.extra }
 func (m *mockSDKEvent) Timestamp() time.Time   { return time.Now() }
 func (m *mockSDKEvent) RequestID() string      { return m.requestID }
+func (m *mockSDKEvent) InteractionType() events.InteractionType {
+	if m.extra != nil {
+		if it, ok := m.extra["interaction_type"].(events.InteractionType); ok {
+			return it
+		}
+	}
+	return "" // Return empty string for non-interaction events
+}

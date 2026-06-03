@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oneliang/aura/core/pkg/sdk"
+	"github.com/oneliang/aura/shared/pkg/events"
 )
 
-// ConfirmationHandling demonstrates handling sensitive operation confirmations.
+// ConfirmationHandling demonstrates handling interaction requests via event stream.
 func ConfirmationHandling() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -18,30 +20,7 @@ func ConfirmationHandling() error {
 	// Set permission level to ask for sensitive operations
 	cfg.Permissions.DefaultLevel = "ask"
 
-	// Create confirmation handler
-	confirmHandler := func(req sdk.ConfirmationRequest) {
-		fmt.Printf("\n=== Confirmation Request ===\n")
-		fmt.Printf("Type: %s\n", req.Type)
-		if req.ToolName != "" {
-			fmt.Printf("Tool: %s\n", req.ToolName)
-			fmt.Printf("Params: %v\n", req.Params)
-		}
-		if len(req.PlanSteps) > 0 {
-			fmt.Printf("Plan Goal: %s\n", req.PlanGoal)
-			for i, step := range req.PlanSteps {
-				fmt.Printf("  Step %d: %s\n", i+1, step)
-			}
-		}
-		fmt.Printf("\nAuto-approving for demo...\n")
-
-		// Send approval response
-		req.ResponseCh <- true
-	}
-
-	// Create runtime with confirmation handler
-	runtime, err := sdk.NewRuntime(cfg,
-		sdk.WithConfirmationHandler(confirmHandler),
-	)
+	runtime, err := sdk.NewRuntime(cfg)
 	if err != nil {
 		return fmt.Errorf("create runtime: %w", err)
 	}
@@ -51,19 +30,70 @@ func ConfirmationHandling() error {
 	}
 	defer runtime.Shutdown()
 
-	// Process potentially sensitive operation
-	events, err := runtime.Process(ctx, "Create a file named test.txt with content 'Hello World'")
+	// Start event stream
+	if err := runtime.Start(ctx); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	defer runtime.Stop(ctx)
+
+	// Get output event stream
+	eventStream := runtime.Events()
+
+	// Generate request ID
+	requestID := uuid.New().String()
+
+	// Send user input
+	err = runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "Create a file named test.txt with content 'Hello World'", requestID))
 	if err != nil {
-		return fmt.Errorf("process: %w", err)
+		return fmt.Errorf("send event: %w", err)
 	}
 
+	// Process events and handle interaction requests
 	var response strings.Builder
-	for ev := range events {
+	for ev := range eventStream {
 		switch ev.Type() {
-		case sdk.EventTypeConfirmationRequest:
-			fmt.Println("Confirmation event received")
+		case sdk.EventTypeInteractionRequest:
+			// Handle interaction request (tool confirmation, plan review, etc.)
+			interactionType := ev.InteractionType()
+			fmt.Printf("\n=== Interaction Request ===\n")
+			fmt.Printf("Type: %s\n", interactionType)
+			fmt.Printf("Request ID: %s\n", ev.RequestID())
+
+			if extra := ev.Extra(); extra != nil {
+				if toolName, ok := extra["tool_name"].(string); ok {
+					fmt.Printf("Tool: %s\n", toolName)
+				}
+				if toolParams, ok := extra["tool_params"].(map[string]any); ok {
+					fmt.Printf("Params: %v\n", toolParams)
+				}
+				if planGoal, ok := extra["plan_goal"].(string); ok {
+					fmt.Printf("Plan Goal: %s\n", planGoal)
+				}
+				if planSteps, ok := extra["plan_steps"].([]string); ok {
+					for i, step := range planSteps {
+						fmt.Printf("  Step %d: %s\n", i+1, step)
+					}
+				}
+			}
+
+			fmt.Printf("\nAuto-approving for demo...\n")
+
+			// Send approval response
+			respExtra := map[string]any{
+				"approved": true,
+				"type":     interactionType,
+			}
+			respEvent := events.NewEventWithExtra(events.EventTypeInteractionResponse, "", respExtra, ev.RequestID())
+			if err := runtime.SendEvent(ctx, respEvent); err != nil {
+				fmt.Printf("Error sending response: %v\n", err)
+			}
+
 		case sdk.EventTypeResponse:
 			response.WriteString(ev.Content())
+		case sdk.EventTypeResponseChunk:
+			response.WriteString(ev.Content())
+		case sdk.EventTypeError:
+			fmt.Printf("Error: %s\n", ev.Content())
 		case sdk.EventTypeDone:
 			break
 		}

@@ -83,6 +83,41 @@ const (
 	EventTypeDone EventType = "done"
 	// ConfirmationRequest event is emitted when user confirmation is needed.
 	EventTypeConfirmationRequest EventType = "confirmation_request"
+
+	// ===== IN事件类型（输入到Agent）=====
+
+	// UserInput event is emitted when user sends text input.
+	EventTypeUserInput EventType = "user_input"
+	// UserMessage event is emitted when user sends a message with metadata.
+	EventTypeUserMessage EventType = "user_message"
+	// InteractionResponse event is emitted when user responds to an interaction request.
+	EventTypeInteractionResponse EventType = "interaction_response"
+	// SystemCommand event is emitted for system-level commands.
+	EventTypeSystemCommand EventType = "system_command"
+	// ContextUpdate event is emitted when context needs to be updated.
+	EventTypeContextUpdate EventType = "context_update"
+
+	// ===== Agent状态事件 =====
+
+	// AgentStart event is emitted when agent starts running.
+	EventTypeAgentStart EventType = "agent_start"
+	// AgentStop event is emitted when agent stops running.
+	EventTypeAgentStop EventType = "agent_stop"
+
+	// ===== OUT交互请求事件 =====
+
+	// InteractionRequest event is emitted when agent requests user interaction.
+	EventTypeInteractionRequest EventType = "interaction_request"
+)
+
+// InteractionType represents the type of interaction request.
+type InteractionType string
+
+const (
+	InteractionTypeToolConfirmation  InteractionType = "tool_confirmation"
+	InteractionTypePlanReview        InteractionType = "plan_review"
+	InteractionTypeAskUserQuestion   InteractionType = "ask_user_question"
+	InteractionTypeRollbackConfirm   InteractionType = "rollback_confirm"
 )
 
 // Confirmation types for ConfirmationRequest.
@@ -159,6 +194,9 @@ type Event interface {
 	Timestamp() time.Time
 	// RequestID returns the request ID for event grouping.
 	RequestID() string
+	// InteractionType returns the interaction type for interaction events.
+	// Returns empty string for non-interaction events.
+	InteractionType() InteractionType
 }
 
 // BaseEvent is a basic implementation of the Event interface.
@@ -168,6 +206,9 @@ type BaseEvent struct {
 	extra     map[string]any
 	timestamp time.Time
 	requestID string // Unique ID for each user request (tracks event grouping)
+
+	// InteractionType for EventTypeInteractionRequest/Response
+	interactionType InteractionType
 }
 
 // NewEvent creates a new BaseEvent with the given type, content, and request ID.
@@ -190,6 +231,17 @@ func NewEventWithExtra(typ EventType, content string, extra map[string]any, requ
 		extra:     extra,
 		requestID: requestID,
 		timestamp: time.Now(),
+	}
+}
+
+// NewInteractionEvent creates a new BaseEvent for interaction requests/responses.
+func NewInteractionEvent(typ EventType, interactionType InteractionType, requestID string, extra map[string]any) *BaseEvent {
+	return &BaseEvent{
+		eventType:       typ,
+		requestID:       requestID,
+		extra:           extra,
+		interactionType: interactionType,
+		timestamp:       time.Now(),
 	}
 }
 
@@ -216,6 +268,16 @@ func (e *BaseEvent) Timestamp() time.Time {
 // RequestID implements Event interface.
 func (e *BaseEvent) RequestID() string {
 	return e.requestID
+}
+
+// InteractionType returns the interaction type for interaction events.
+func (e *BaseEvent) InteractionType() InteractionType {
+	return e.interactionType
+}
+
+// SetInteractionType sets the interaction type.
+func (e *BaseEvent) SetInteractionType(typ InteractionType) {
+	e.interactionType = typ
 }
 
 // ConfirmationRequest represents a request for user confirmation.
@@ -249,6 +311,39 @@ type QuestionResponse struct {
 	Answer    string   // Selected answer (text or option value)
 	Answers   []string // For multi_choice: all selected values
 	Cancelled bool     // User cancelled the question
+}
+
+// InteractionResponse represents the response to an interaction request.
+// Used for EventTypeInteractionResponse events.
+type InteractionResponse struct {
+	RequestID  string          // Matches the request ID
+	Type       InteractionType // Matches the request type
+	Approved   bool            // For tool/plan/rollback confirmation
+	Cancelled  bool            // User cancelled
+	AnswerText string          // For ask_user_question (text answer)
+	Selection  string          // For ask_user_question (single choice)
+	Selections []string        // For ask_user_question (multi choice)
+	Error      error           // Processing error
+}
+
+// InteractionRequest represents a request for user interaction.
+// Used internally by Agent for request-response matching.
+type InteractionRequest struct {
+	ID              string
+	Type            InteractionType
+	Timeout         time.Duration
+	ToolName        string
+	ToolParams      map[string]any
+	PermissionReason string
+	PlanGoal        string
+	PlanSteps       []string
+	PlanFiles       []string
+	Question        string
+	QuestionType    string
+	Options         []QuestionOption
+	DefaultAnswer   string
+	RollbackReason  string
+	RollbackTarget  string
 }
 
 // MemoryStats contains memory statistics.

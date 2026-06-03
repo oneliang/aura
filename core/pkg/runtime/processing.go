@@ -107,7 +107,7 @@ func (r *AgentRuntime) Process(ctx context.Context, input string) (<-chan Event,
 
 	// Start event conversion goroutine
 	// Note: We need this goroutine because agentEvents is <-chan events.Event
-	// and we need to convert to Event type and handle onEvent callback
+	// and we need to convert to Event type
 	go func() {
 		defer func() {
 			if rec := recover(); rec != nil {
@@ -133,13 +133,6 @@ func (r *AgentRuntime) Process(ctx context.Context, input string) (<-chan Event,
 			if convertedEvent == nil {
 				continue
 			}
-			// Call event handler if set (with proper locking)
-			r.handlerMu.RLock()
-			handler := r.onEvent
-			r.handlerMu.RUnlock()
-			if handler != nil {
-				handler(convertedEvent)
-			}
 			out <- convertedEvent
 		}
 
@@ -160,15 +153,9 @@ func (r *AgentRuntime) Process(ctx context.Context, input string) (<-chan Event,
 
 		r.logger.Debug().Msg("Runtime: agentEvents closed")
 
-			// Explicitly send Done event before closing
-			doneEv := NewEvent(EventTypeDone, "")
-			r.handlerMu.RLock()
-			handler := r.onEvent
-			r.handlerMu.RUnlock()
-			if handler != nil {
-				handler(doneEv)
-			}
-			out <- doneEv
+		// Explicitly send Done event before closing
+		doneEv := NewEvent(EventTypeDone, "")
+		out <- doneEv
 	}()
 
 	return out, nil
@@ -181,45 +168,28 @@ func (r *AgentRuntime) processIntentCommand(ctx context.Context, result *intent.
 	go func() {
 		defer close(out)
 
-		// Get event handler (consistent with normal event flow)
-		r.handlerMu.RLock()
-		handler := r.onEvent
-		r.handlerMu.RUnlock()
-
 		// Send command matched event
 		ev := NewEventWithExtra(EventTypeCommandMatched, result.Command, map[string]any{
 			"params":     result.Params,
 			"confidence": result.Confidence,
 			"source":     result.Source,
 		})
-		if handler != nil {
-			handler(ev)
-		}
 		out <- ev
 
 		// Execute command
 		cmdResult, err := r.intentService.ExecuteCommand(ctx, result)
 		if err != nil {
 			errEv := NewEvent(EventTypeError, err.Error())
-			if handler != nil {
-				handler(errEv)
-			}
 			out <- errEv
 			return
 		}
 
 		// Send command result event
 		resultEv := NewEvent(EventTypeCommandResult, cmdResult)
-		if handler != nil {
-			handler(resultEv)
-		}
 		out <- resultEv
 
 		// Send done event to signal completion (consistent with Engine)
 		doneEv := NewEvent(EventTypeDone, "")
-		if handler != nil {
-			handler(doneEv)
-		}
 		out <- doneEv
 	}()
 

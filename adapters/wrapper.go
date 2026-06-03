@@ -127,29 +127,6 @@ func (w *AdapterResourceManager) GetRuntime(ctx context.Context, sessionID strin
 		return sr.runtime, nil
 	}
 
-	// Create event handler that logs events but does NOT directly persist to storage.
-	// SessionMemory in Runtime handles all message persistence to ensure consistency.
-	eventHandler := func(ev sdk.Event) {
-		// For adapter mode, we only log events here.
-		// Message persistence is handled by SessionMemory.AddWithType in the Runtime.
-		// This ensures SessionMemory.messages stays in sync with persistent storage.
-		switch ev.Type() {
-		case sdk.EventTypeResponse:
-			// Response events are already persisted by Engine.runReActLoop via memory.AddWithType
-			// No action needed here
-		case sdk.EventTypeToolStart, sdk.EventTypeToolEnd:
-			// Tool events are internal and not persisted to session storage
-			// Only logged for debugging
-		case sdk.EventTypeError:
-			// Error events are internal and not persisted
-		}
-	}
-
-	// Create confirmation handler (auto-approve for adapter mode)
-	confirmHandler := func(req sdk.ConfirmationRequest) {
-		req.ResponseCh <- true
-	}
-
 	// Use config values for runtime settings
 	var runtimeCfg *sdk.RuntimeConfig
 	if w.config != nil {
@@ -184,11 +161,10 @@ func (w *AdapterResourceManager) GetRuntime(ctx context.Context, sessionID strin
 		SkillManager: skillMgr,
 	})
 
-	// Create runtime
+	// Create runtime (with auto-approve for adapter mode)
 	rt, err := sdk.NewRuntime(
 		runtimeCfg,
-		sdk.WithEventHandler(eventHandler),
-		sdk.WithConfirmationHandler(confirmHandler),
+		sdk.WithAutoApprove(),
 		sdk.WithSessionStore(w.store.MessageStore()),
 		sdk.WithSessionID(sessionID),
 		sdk.WithCommands(cmdProvider),

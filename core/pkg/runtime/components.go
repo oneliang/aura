@@ -240,7 +240,6 @@ func (h *HookSystem) GetEngine() *hooks.Engine {
 type SessionContext struct {
 	sessionID     string
 	userID        string
-	mode          RuntimeMode
 	sessionStore  *jsonl.MessageStore
 	dataDir       string
 	initialized   bool
@@ -264,14 +263,6 @@ func (s *SessionContext) GetSessionID() string {
 		return ""
 	}
 	return s.sessionID
-}
-
-// GetMode returns the runtime mode.
-func (s *SessionContext) GetMode() RuntimeMode {
-	if s == nil {
-		return RuntimeModeCLI
-	}
-	return s.mode
 }
 
 // GetDataDir returns the session data directory.

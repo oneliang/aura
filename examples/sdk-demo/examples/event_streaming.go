@@ -5,18 +5,49 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oneliang/aura/core/pkg/sdk"
 )
 
-// EventStreaming demonstrates real-time event handling.
+// EventStreaming demonstrates real-time event handling with the new event stream pattern.
 func EventStreaming() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	cfg := sdk.DefaultRuntimeConfig()
 
-	// Create event handler for real-time updates
-	eventHandler := func(ev sdk.Event) {
+	runtime, err := sdk.NewRuntime(cfg)
+	if err != nil {
+		return fmt.Errorf("create runtime: %w", err)
+	}
+
+	if err := runtime.Initialize(ctx); err != nil {
+		return fmt.Errorf("initialize: %w", err)
+	}
+	defer runtime.Shutdown()
+
+	// Start event stream
+	if err := runtime.Start(ctx); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	defer runtime.Stop(ctx)
+
+	// Get output event stream
+	events := runtime.Events()
+
+	// Generate request ID
+	requestID := uuid.New().String()
+
+	fmt.Println("Processing with real-time event display...")
+
+	// Send user input
+	err = runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "List files in the current directory and summarize what you find", requestID))
+	if err != nil {
+		return fmt.Errorf("send event: %w", err)
+	}
+
+	// Process events in real-time
+	for ev := range events {
 		switch ev.Type() {
 		case sdk.EventTypeThinkingStart:
 			fmt.Print("\n[Thinking started...]\n")
@@ -42,32 +73,9 @@ func EventStreaming() error {
 			if step, ok := extra["step"].(int); ok {
 				fmt.Printf("\n[Step %d]\n", step)
 			}
-		}
-	}
-
-	runtime, err := sdk.NewRuntime(cfg,
-		sdk.WithEventHandler(eventHandler),
-	)
-	if err != nil {
-		return fmt.Errorf("create runtime: %w", err)
-	}
-
-	if err := runtime.Initialize(ctx); err != nil {
-		return fmt.Errorf("initialize: %w", err)
-	}
-	defer runtime.Shutdown()
-
-	fmt.Println("Processing with real-time event display...")
-
-	events, err := runtime.Process(ctx, "List files in the current directory and summarize what you find")
-	if err != nil {
-		return fmt.Errorf("process: %w", err)
-	}
-
-	// Wait for completion
-	for ev := range events {
-		if ev.Type() == sdk.EventTypeDone {
+		case sdk.EventTypeDone:
 			fmt.Println("\n[Processing complete]")
+			return nil
 		}
 	}
 

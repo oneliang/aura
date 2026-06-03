@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	sseEventMessage = "message"
-	sseEventDone    = "done"
+	sseEventMessage  = "message"
+	sseEventThinking = "thinking"
+	sseEventTool     = "tool"
+	sseEventError    = "error"
+	sseEventDone     = "done"
 )
 
 // sseRequest represents the parsed SSE request body.

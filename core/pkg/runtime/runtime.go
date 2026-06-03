@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/logger"
 
 	agentloader "github.com/oneliang/aura/agent/pkg/loader"
@@ -65,13 +66,18 @@ type AgentRuntime struct {
 	// Agent delegation function for LLM-triggered delegation
 	agentDelegateFn func(ctx context.Context, agentName string, task string) (string, error)
 
-	// Callbacks
-	handlerMu sync.RWMutex // protects onEvent and onConfirm
-	onEvent   EventHandler
-	onConfirm EventConfirmationHandler
+	// ===== 新架构：统一事件流 =====
 
-	// Runtime mode
-	mode RuntimeMode
+	// OUT: 发送事件通道
+	eventOutCh chan Event
+
+	// IN: 交互请求-响应匹配
+	interactionMu     sync.RWMutex
+	interactionPending map[string]chan events.InteractionResponse  // RequestID → ResponseCh
+
+	// 运行状态
+	running bool
+	runMu   sync.Mutex
 
 	// Session management
 	sessionID    string
@@ -146,20 +152,6 @@ func WithLogger(log *logger.Logger) RuntimeOption {
 	}
 }
 
-// WithEventHandler sets the event handler callback.
-func WithEventHandler(handler EventHandler) RuntimeOption {
-	return func(r *AgentRuntime) {
-		r.onEvent = handler
-	}
-}
-
-// WithConfirmationHandler sets the confirmation handler callback.
-func WithConfirmationHandler(handler EventConfirmationHandler) RuntimeOption {
-	return func(r *AgentRuntime) {
-		r.onConfirm = handler
-	}
-}
-
 // WithSessionStore sets the session store for persistence.
 func WithSessionStore(store *jsonl.MessageStore) RuntimeOption {
 	return func(r *AgentRuntime) {
@@ -188,13 +180,6 @@ func WithUserID(userID string) RuntimeOption {
 	}
 }
 
-// WithMode sets the runtime mode.
-func WithMode(mode RuntimeMode) RuntimeOption {
-	return func(r *AgentRuntime) {
-		r.mode = mode
-	}
-}
-
 // WithMCPManager sets the MCP manager for dynamic tool loading.
 func WithMCPManager(mgr *mcpmanager.Manager) RuntimeOption {
 	return func(r *AgentRuntime) {
@@ -216,7 +201,6 @@ func New(cfg *RuntimeConfig, opts ...RuntimeOption) (*AgentRuntime, error) {
 	r := &AgentRuntime{
 		config:    cfg,
 		sessionID: cfg.SessionID,
-		mode:      RuntimeModeCLI, // Default to CLI mode
 	}
 
 	for _, opt := range opts {
@@ -324,8 +308,6 @@ func NewSubAgentRuntime(parent *AgentRuntime, subCfg *RuntimeConfig, disabledToo
 	subAgent := &AgentRuntime{
 		config:              subCfg,
 		sessionID:           "",
-		mode:                parent.mode,      // Inherit parent runtime mode (TUI/CLI/API)
-		onConfirm:           parent.onConfirm, // Share confirmation handler
 		logger:              subLogger,
 		skipInitialize:      true,
 		parentToolAllowlist: parentAllowlist, // Inherit tool allowlist from parent
@@ -521,24 +503,8 @@ func (r *AgentRuntime) AddTool(tool tools.Tool) error {
 	return nil
 }
 
-// SetEventHandler sets the event handler callback.
-// This allows dynamic configuration of event handling, useful for adapters.
-func (r *AgentRuntime) SetEventHandler(handler EventHandler) {
-	r.handlerMu.Lock()
-	r.onEvent = handler
-	r.handlerMu.Unlock()
-}
-
-// SetConfirmationHandler sets the confirmation handler callback.
-// This allows dynamic configuration of confirmation handling.
-func (r *AgentRuntime) SetConfirmationHandler(handler EventConfirmationHandler) {
-	r.handlerMu.Lock()
-	r.onConfirm = handler
-	r.handlerMu.Unlock()
-}
-
 // PlanReviewHandler returns a handler that triggers plan review confirmation
-// via the onConfirm callback and blocks waiting for user approval.
+// via the event stream and blocks waiting for user approval.
 // If AutoApprove is enabled, returns true immediately without triggering confirmation.
 func (r *AgentRuntime) PlanReviewHandler() func(ctx context.Context, goal string, steps []string) (bool, error) {
 	return func(ctx context.Context, goal string, steps []string) (bool, error) {
@@ -548,28 +514,19 @@ func (r *AgentRuntime) PlanReviewHandler() func(ctx context.Context, goal string
 			return true, nil
 		}
 
-		respCh := make(chan bool, 1)
-		r.handlerMu.RLock()
-		handler := r.onConfirm
-		if handler == nil {
-			r.handlerMu.RUnlock()
-			return false, fmt.Errorf("plan review: no confirmation handler configured")
+		// Use event stream for plan review confirmation
+		req := events.InteractionRequest{
+			Type:      events.InteractionTypePlanReview,
+			PlanGoal:  goal,
+			PlanSteps: steps,
+			Timeout:   120 * time.Second,
 		}
-		r.handlerMu.RUnlock()
-		handler(ConfirmationRequest{
-			Type:       "plan_review",
-			PlanGoal:   goal,
-			PlanSteps:  steps,
-			ResponseCh: respCh,
-		})
-		confirmCtx, confirmCancel := context.WithTimeout(ctx, 120*time.Second)
-		defer confirmCancel()
-		select {
-		case approved := <-respCh:
-			return approved, nil
-		case <-confirmCtx.Done():
-			return false, confirmCtx.Err()
+
+		resp := r.requestInteraction(ctx, req)
+		if resp.Error != nil {
+			return false, resp.Error
 		}
+		return resp.Approved, nil
 	}
 }
 
@@ -680,4 +637,272 @@ func (r *AgentRuntime) GetSystemPrompt() string {
 	}
 
 	return result
+}
+
+// ===== 新架构：统一事件流接口 =====
+
+// Start 启动Agent（初始化事件通道）
+func (r *AgentRuntime) Start(ctx context.Context) error {
+	r.runMu.Lock()
+	if r.running {
+		r.runMu.Unlock()
+		return fmt.Errorf("agent already running")
+	}
+	r.running = true
+	r.eventOutCh = make(chan Event, 100)
+	r.interactionPending = make(map[string]chan events.InteractionResponse)
+	r.runMu.Unlock()
+
+	// 发送启动事件
+	r.sendEvent(events.NewEvent(events.EventTypeAgentStart, "", ""))
+
+	return nil
+}
+
+// Stop 停止Agent
+func (r *AgentRuntime) Stop(ctx context.Context) error {
+	r.runMu.Lock()
+	if !r.running {
+		r.runMu.Unlock()
+		return nil
+	}
+	eventOutCh := r.eventOutCh
+	r.eventOutCh = nil
+	r.running = false
+	r.runMu.Unlock()
+
+	// 发送停止事件（在unlock后，使用缓存的channel）
+	if eventOutCh != nil {
+		select {
+		case eventOutCh <- events.NewEvent(events.EventTypeAgentStop, "", ""):
+		default:
+			// 通道满或已关闭，忽略
+		}
+		close(eventOutCh)
+	}
+
+	return nil
+}
+
+// SendEvent 统一入口：接收事件（IN）
+// 所有输入都通过这个方法：用户文本、交互响应、系统命令等
+func (r *AgentRuntime) SendEvent(ctx context.Context, event Event) error {
+	switch event.Type() {
+	case events.EventTypeUserInput:
+		// 用户文本输入
+		return r.handleUserInput(ctx, event.Content())
+
+	case events.EventTypeUserMessage:
+		// 用户消息（带metadata）
+		return r.handleUserMessage(ctx, event)
+
+	case events.EventTypeInteractionResponse:
+		// 交互响应
+		return r.handleInteractionResponse(event)
+
+	case events.EventTypeSystemCommand:
+		// 系统命令
+		return r.handleSystemCommand(ctx, event)
+
+	default:
+		// 未知事件类型
+		return fmt.Errorf("unknown event type: %s", event.Type())
+	}
+}
+
+// Events 获取输出事件流（OUT）
+func (r *AgentRuntime) Events() <-chan Event {
+	return r.eventOutCh
+}
+
+// handleUserInput 处理用户文本输入
+func (r *AgentRuntime) handleUserInput(ctx context.Context, input string) error {
+	if !r.initialized {
+		return fmt.Errorf("runtime not initialized")
+	}
+
+	// 启动处理流程（后台运行）
+	go r.processInput(ctx, input)
+	return nil
+}
+
+// handleUserMessage 处理用户消息（带metadata）
+func (r *AgentRuntime) handleUserMessage(ctx context.Context, event Event) error {
+	if !r.initialized {
+		return fmt.Errorf("runtime not initialized")
+	}
+
+	// 从Extra中提取输入内容
+	input := event.Content()
+	if input == "" {
+		if content, ok := event.Extra()["content"].(string); ok {
+			input = content
+		}
+	}
+
+	// 启动处理流程
+	go r.processInput(ctx, input)
+	return nil
+}
+
+// handleInteractionResponse 处理交互响应
+func (r *AgentRuntime) handleInteractionResponse(event Event) error {
+	// 解析响应
+	resp := events.InteractionResponse{
+		RequestID:  event.RequestID(),
+	 Approved:   false,
+	}
+
+	// 从Extra中提取响应数据
+	if extra := event.Extra(); extra != nil {
+		if approved, ok := extra["approved"].(bool); ok {
+			resp.Approved = approved
+		}
+		if cancelled, ok := extra["cancelled"].(bool); ok {
+			resp.Cancelled = cancelled
+		}
+		if answer, ok := extra["answer"].(string); ok {
+			resp.AnswerText = answer
+		}
+		if selection, ok := extra["selection"].(string); ok {
+			resp.Selection = selection
+		}
+		if selections, ok := extra["selections"].([]string); ok {
+			resp.Selections = selections
+		}
+		if err, ok := extra["error"].(error); ok {
+			resp.Error = err
+		}
+		if typ, ok := extra["type"].(events.InteractionType); ok {
+			resp.Type = typ
+		}
+	}
+
+	// 找到匹配的响应channel并发送响应（在锁内发送避免竞态）
+	r.interactionMu.Lock()
+	respCh, exists := r.interactionPending[resp.RequestID]
+	if exists {
+		select {
+		case respCh <- resp:
+			// 发送成功，从pending中移除
+			delete(r.interactionPending, resp.RequestID)
+		default:
+			// channel已满或已关闭，清理
+			delete(r.interactionPending, resp.RequestID)
+		}
+	}
+	r.interactionMu.Unlock()
+
+	return nil
+}
+
+// handleSystemCommand 处理系统命令
+func (r *AgentRuntime) handleSystemCommand(ctx context.Context, event Event) error {
+	// 系统命令处理（可扩展）
+	return nil
+}
+
+// sendEvent 发送事件到OUT通道
+func (r *AgentRuntime) sendEvent(event Event) {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+
+	if !r.running || r.eventOutCh == nil {
+		return
+	}
+
+	select {
+	case r.eventOutCh <- event:
+	default:
+		// 通道满，丢弃事件（或记录警告）
+		r.logger.Warn().Str("type", string(event.Type())).Msg("Event channel full, dropping event")
+	}
+}
+
+// processInput 处理输入，发送事件到OUT
+// 这是从Process方法重构后的核心处理逻辑
+func (r *AgentRuntime) processInput(ctx context.Context, input string) {
+	// 发送thinking事件
+	r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", ""))
+
+	// 调用现有的Process方法获取事件流
+	// 注意：这里复用现有的Process实现，后续可以进一步重构
+	eventsCh, err := r.Process(ctx, input)
+	if err != nil {
+		r.sendEvent(events.NewEvent(events.EventTypeError, err.Error(), ""))
+		return
+	}
+
+	// 转发事件到新的OUT通道
+	for ev := range eventsCh {
+		r.sendEvent(ev)
+	}
+}
+
+// requestInteraction 发送交互请求（Agent内部调用）
+// 用于工具确认、Plan审核、回滚确认等场景
+func (r *AgentRuntime) requestInteraction(ctx context.Context, req events.InteractionRequest) events.InteractionResponse {
+	// 生成请求ID
+	if req.ID == "" {
+		req.ID = fmt.Sprintf("interaction_%d", time.Now().UnixNano())
+	}
+
+	// 设置默认超时
+	if req.Timeout == 0 {
+		req.Timeout = 60 * time.Second
+	}
+
+	// 创建响应channel
+	respCh := make(chan events.InteractionResponse, 1)
+	r.interactionMu.Lock()
+	r.interactionPending[req.ID] = respCh
+	r.interactionMu.Unlock()
+
+	// 发送交互请求事件到OUT
+	extra := map[string]any{
+		"tool_name":   req.ToolName,
+		"tool_params": req.ToolParams,
+		"plan_goal":   req.PlanGoal,
+		"plan_steps":  req.PlanSteps,
+		"plan_files":  req.PlanFiles,
+		"question":    req.Question,
+		"question_type": req.QuestionType,
+		"options":     req.Options,
+		"default_answer": req.DefaultAnswer,
+		"rollback_reason": req.RollbackReason,
+		"rollback_target": req.RollbackTarget,
+	}
+
+	event := events.NewInteractionEvent(
+		events.EventTypeInteractionRequest,
+		req.Type,
+		req.ID,
+		extra,
+	)
+
+	r.sendEvent(event)
+
+	// 等待响应（带超时）
+	timeoutCtx, cancel := context.WithTimeout(ctx, req.Timeout)
+	defer cancel()
+
+	select {
+	case resp := <-respCh:
+		r.interactionMu.Lock()
+		delete(r.interactionPending, req.ID)
+		r.interactionMu.Unlock()
+		return resp
+	case <-timeoutCtx.Done():
+		r.interactionMu.Lock()
+		delete(r.interactionPending, req.ID)
+		r.interactionMu.Unlock()
+		// 超时 → 自动批准（SDK默认行为）
+		r.logger.Warn().Str("request_id", req.ID).Msg("Interaction request timeout, auto-approving")
+		return events.InteractionResponse{
+			RequestID: req.ID,
+			Type:      req.Type,
+			Approved:  true,
+			Error:     timeoutCtx.Err(),
+		}
+	}
 }

@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oneliang/aura/core/pkg/sdk"
 	demotools "github.com/oneliang/aura-sdk-demo/tools"
 )
 
-// CustomTool demonstrates registering and using custom tools.
+// CustomTool demonstrates registering and using custom tools with the new event stream pattern.
 func CustomTool() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -35,10 +36,22 @@ func CustomTool() error {
 
 	fmt.Println("Registered custom tool: weather")
 
-	// Process request that might use the tool
-	events, err := runtime.Process(ctx, "What's the weather in Tokyo?")
+	// Start event stream
+	if err := runtime.Start(ctx); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	defer runtime.Stop(ctx)
+
+	// Get output event stream
+	events := runtime.Events()
+
+	// Generate request ID
+	requestID := uuid.New().String()
+
+	// Send user input
+	err = runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "What's the weather in Tokyo?", requestID))
 	if err != nil {
-		return fmt.Errorf("process: %w", err)
+		return fmt.Errorf("send event: %w", err)
 	}
 
 	var response strings.Builder

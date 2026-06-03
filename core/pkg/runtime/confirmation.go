@@ -6,12 +6,13 @@ import (
 	"time"
 
 	enginepkg "github.com/oneliang/aura/core/pkg/engine"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/skill/pkg/skill"
 )
 
 // createConfirmationHandler creates a confirmation handler.
-// Relies on the injected onConfirm callback for all modes.
-// Returns an error if no handler is configured when confirmation is required.
+// Uses event stream for confirmation requests.
+// Returns an error if AutoApprove is disabled and no event stream is available.
 func (r *AgentRuntime) createConfirmationHandler() enginepkg.ToolConfirmationHandler {
 	if r.permMgr == nil {
 		return nil
@@ -26,37 +27,27 @@ func (r *AgentRuntime) createConfirmationHandler() enginepkg.ToolConfirmationHan
 			return true, nil
 		}
 
-		// Requires confirmation - must have handler configured
-		if r.onConfirm == nil {
-			return false, fmt.Errorf("confirmation required for tool %q but no confirmation handler is configured", toolName)
+		// Requires confirmation - use event stream
+		req := events.InteractionRequest{
+			Type:       events.InteractionTypeToolConfirmation,
+			ToolName:   toolName,
+			ToolParams: params,
+			Timeout:    60 * time.Second,
 		}
 
-		respCh := make(chan bool, 1)
-		r.handlerMu.RLock()
-		handler := r.onConfirm
-		r.handlerMu.RUnlock()
-		handler(ConfirmationRequest{
-			ToolName:   toolName,
-			Params:     params,
-			ResponseCh: respCh,
-		})
-		// Use independent timeout for tool confirmation too
-		// Increased to 60s to accommodate multiple sequential confirmations
-		confirmCtx, confirmCancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer confirmCancel()
-		select {
-		case confirmed := <-respCh:
-			return confirmed, nil
-		case <-confirmCtx.Done():
-			return false, confirmCtx.Err()
+		resp := r.requestInteraction(ctx, req)
+		if resp.Error != nil {
+			return false, resp.Error
 		}
+		return resp.Approved, nil
 	}
 }
 
 // checkSkillPermission checks if a skill with required confirmation should be injected.
+// Uses event stream for confirmation requests.
 // Returns true if confirmed by user, false otherwise.
 func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill) bool {
-	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Int("mode", int(r.mode)).Bool("onConfirm_nil", r.onConfirm == nil).Msg("checkSkillPermission: called")
+	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: called")
 
 	// Check permission manager first (respects config default_level and per-tool settings)
 	if r.permMgr != nil {
@@ -77,42 +68,23 @@ func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill
 		// PermissionMgr says ask, fall through to user confirmation below
 	}
 
-	// Use confirmation handler if configured
-	if r.onConfirm != nil {
-		// If outer context is already cancelled, deny immediately
-		if ctx.Err() != nil {
-			r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: outer context cancelled, denying")
-			return false
-		}
-
-		respCh := make(chan bool, 1)
-		r.handlerMu.RLock()
-		handler := r.onConfirm
-		r.handlerMu.RUnlock()
-		r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: sending confirmation request via onConfirm")
-		handler(ConfirmationRequest{
-			ToolName:   fmt.Sprintf("skill:%s", sk.Name),
-			Params:     map[string]any{"skill": sk.Name, "description": sk.Description, "permission_level": sk.PermissionLevel},
-			ResponseCh: respCh,
-		})
-
-		// Use independent timeout so one skill's cancellation doesn't cascade to others
-		// Increased to 60s to accommodate multiple sequential confirmations
-		confirmCtx, confirmCancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer confirmCancel()
-
-		r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: waiting for response")
-		select {
-		case result := <-respCh:
-			r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Bool("result", result).Msg("checkSkillPermission: received response")
-			return result
-		case <-confirmCtx.Done():
-			r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: confirmation timeout or context cancelled")
-			return false
-		}
+	// Use event stream for confirmation
+	// If outer context is already cancelled, deny immediately
+	if ctx.Err() != nil {
+		r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: outer context cancelled, denying")
+		return false
 	}
 
-	// No handler configured - log and deny
-	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Int("mode", int(r.mode)).Msg("checkSkillPermission: no confirmation handler configured, denying")
-	return false
+	req := events.InteractionRequest{
+		Type:       events.InteractionTypeToolConfirmation,
+		ToolName:   fmt.Sprintf("skill:%s", sk.Name),
+		ToolParams: map[string]any{"skill": sk.Name, "description": sk.Description, "permission_level": sk.PermissionLevel},
+		Timeout:    60 * time.Second,
+	}
+
+	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: sending confirmation request via event stream")
+	resp := r.requestInteraction(ctx, req)
+
+	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Bool("approved", resp.Approved).Msg("checkSkillPermission: received response")
+	return resp.Approved
 }

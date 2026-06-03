@@ -600,17 +600,6 @@ func (s *Server) getOrCreateRuntime(ctx context.Context, sessionID string) (*sdk
 		return sr.runtime, nil
 	}
 
-	// Create event handler - no need to persist events as the engine's SessionMemory already does this
-	eventHandler := func(ev sdk.Event) {
-		// Event handler kept for potential future use but no persistence needed
-		// The engine automatically persists all messages via SessionMemory.Add()
-	}
-
-	// Create confirmation handler (auto-approve for API mode)
-	confirmHandler := func(req sdk.ConfirmationRequest) {
-		req.ResponseCh <- true
-	}
-
 	// Use config values for runtime settings
 	var runtimeCfg *sdk.RuntimeConfig
 	if s.config != nil {
@@ -655,10 +644,9 @@ func (s *Server) getOrCreateRuntime(ctx context.Context, sessionID string) (*sdk
 		intentSvc = intent.NewService(cmdProvider, s.config.Intent.ConfidenceThreshold)
 	}
 
-	// Create runtime
+	// Create runtime (with auto-approve for API mode)
 	rtOpts := []sdk.RuntimeOption{
-		sdk.WithEventHandler(eventHandler),
-		sdk.WithConfirmationHandler(confirmHandler),
+		sdk.WithAutoApprove(),
 		sdk.WithSessionStore(s.store.MessageStore()),
 		sdk.WithSessionID(sessionID),
 		sdk.WithCommands(cmdProvider),
@@ -914,53 +902,58 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 		return
 	}
 
-	// Create event handler that streams to client
-	done := make(chan struct{})
-	var responseContent strings.Builder
-
-	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Setting up SSE event handler")
-
-	// Clear event handler when done to prevent resource leak
-	defer func() {
-		s.logger.Debug().Str("module", "server").Msg("SSE deferred cleanup: clearing event handler")
-		rt.SetEventHandler(nil)
-		close(done)
-	}()
-
-	rt.SetEventHandler(s.createSSEEventHandler(w, flusher, done, &responseContent))
-
 	// Process message
 	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Calling rt.Process()")
 	events, err := rt.Process(r.Context(), req.Content)
 	if err != nil {
 		s.logger.Error().Str("module", "server").Str("session_id", sessionID).Err(err).Msg("rt.Process() returned error")
-		rt.SetEventHandler(nil) // Clear handler before early return
-		// Wait for runtime goroutine to drain before returning
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-		}
 		s.sendSSEError(w, flusher, "Failed to process message")
 		return
 	}
 
-	// Stream events - stop when Done event received
-	doneReceived := false
+	// Stream events directly from event stream
+	var responseContent strings.Builder
 	for ev := range events {
 		s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Str("event_type", string(ev.Type())).Msg("Consumed event")
-		if ev.Type() == sdk.EventTypeDone {
-			doneReceived = true
-			break  // Stop streaming, Done event already sent via onEvent callback
+
+		// Send SSE events based on event type
+		switch ev.Type() {
+		case sdk.EventTypeResponse, sdk.EventTypeResponseChunk:
+			responseContent.WriteString(ev.Content())
+			s.sendSSEEvent(w, flusher, sseEventMessage, map[string]interface{}{
+				"role":    "assistant",
+				"content": ev.Content(),
+			})
+		case sdk.EventTypeThinkingStart, sdk.EventTypeThinkingChunk, sdk.EventTypeThinkingEnd:
+			s.sendSSEEvent(w, flusher, sseEventThinking, map[string]interface{}{
+				"content": ev.Content(),
+			})
+		case sdk.EventTypeToolStart:
+			extra := ev.Extra()
+			if toolName, ok := extra["tool"].(string); ok {
+				s.sendSSEEvent(w, flusher, sseEventTool, map[string]interface{}{
+					"name":  toolName,
+					"status": "running",
+				})
+			}
+		case sdk.EventTypeToolEnd:
+			s.sendSSEEvent(w, flusher, sseEventTool, map[string]interface{}{
+				"status": "complete",
+			})
+		case sdk.EventTypeError:
+			s.sendSSEEvent(w, flusher, sseEventError, map[string]interface{}{
+				"message": ev.Content(),
+			})
+		case sdk.EventTypeDone:
+			break
 		}
 	}
 
-	// Send completion event only if Done was not received (abnormal termination)
-	if !doneReceived {
-		s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Sending SSE done event (channel closed without Done)")
-		s.sendSSEEvent(w, flusher, sseEventDone, map[string]interface{}{
-			"status": "complete",
-		})
-	}
+	// Send completion event
+	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Sending SSE done event")
+	s.sendSSEEvent(w, flusher, sseEventDone, map[string]interface{}{
+		"status": "complete",
+	})
 }
 
 // sendSSEEvent sends an SSE event to the client.

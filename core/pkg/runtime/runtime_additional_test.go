@@ -7,7 +7,6 @@ import (
 
 	"github.com/oneliang/aura/commands/pkg"
 	"github.com/oneliang/aura/core/pkg/memory"
-	"github.com/oneliang/aura/core/pkg/permissions"
 	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/storage/pkg/jsonl"
 	tools "github.com/oneliang/aura/tools/pkg"
@@ -72,90 +71,6 @@ func TestAgentRuntime_GetSummarizer(t *testing.T) {
 	summarizer := runtime.GetSummarizer()
 	if summarizer != nil {
 		t.Error("GetSummarizer() should return nil before initialization")
-	}
-}
-
-// TestAgentRuntime_SetEventHandler tests SetEventHandler method.
-func TestAgentRuntime_SetEventHandler(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-	runtime, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New() returned error: %v", err)
-	}
-
-	handlerCalled := false
-	handler := func(event Event) {
-		handlerCalled = true
-	}
-
-	runtime.SetEventHandler(handler)
-
-	if runtime.onEvent == nil {
-		t.Error("SetEventHandler() did not set handler")
-	}
-
-	// Call handler to verify it works
-	runtime.onEvent(NewEvent(EventTypeThinkingStart, "test"))
-	if !handlerCalled {
-		t.Error("EventHandler was not called")
-	}
-}
-
-// TestAgentRuntime_SetConfirmationHandler tests SetConfirmationHandler method.
-func TestAgentRuntime_SetConfirmationHandler(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-	runtime, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New() returned error: %v", err)
-	}
-
-	handlerCalled := false
-	handler := func(req ConfirmationRequest) {
-		handlerCalled = true
-		_ = req
-	}
-
-	runtime.SetConfirmationHandler(handler)
-
-	if runtime.onConfirm == nil {
-		t.Error("SetConfirmationHandler() did not set handler")
-	}
-
-	// Verify handler can be called
-	handler(ConfirmationRequest{ToolName: "test"})
-	if !handlerCalled {
-		t.Error("ConfirmationHandler was not called")
-	}
-}
-
-// TestAgentRuntime_AddTool tests AddTool method before initialization.
-func TestAgentRuntime_AddTool(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-	runtime, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New() returned error: %v", err)
-	}
-
-	// AddTool before initialization should fail
-	mockTool := &mockTool{name: "test-tool"}
-	err = runtime.AddTool(mockTool)
-	if err == nil {
-		t.Error("AddTool() before initialization should return error")
-	}
-}
-
-// TestAgentRuntime_Process tests Process method before initialization.
-func TestAgentRuntime_Process(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-	runtime, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New() returned error: %v", err)
-	}
-
-	ctx := context.Background()
-	_, err = runtime.Process(ctx, "test input")
-	if err == nil {
-		t.Error("Process() before initialization should return error")
 	}
 }
 
@@ -387,55 +302,6 @@ func TestAgentRuntime_createMemory(t *testing.T) {
 	}
 	if mem == nil {
 		t.Fatal("createMemory() returned nil")
-	}
-}
-
-// TestAgentRuntime_createConfirmationHandler_NilPermMgr tests createConfirmationHandler with nil permission manager.
-func TestAgentRuntime_createConfirmationHandler_NilPermMgr(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-	runtime, _ := New(cfg)
-
-	handler := runtime.createConfirmationHandler()
-	if handler != nil {
-		t.Error("createConfirmationHandler() should return nil with nil permission manager")
-	}
-}
-
-// TestAgentRuntime_createConfirmationHandler_TUIMode tests createConfirmationHandler with TUI mode.
-func TestAgentRuntime_createConfirmationHandler_TUIMode(t *testing.T) {
-	cfg := DefaultRuntimeConfig()
-	runtime, _ := New(cfg, WithMode(RuntimeModeTUI))
-
-	// Set up TUI confirmation handler
-	var receivedReq *ConfirmationRequest
-	runtime.onConfirm = func(req ConfirmationRequest) {
-		receivedReq = &req
-		req.ResponseCh <- true
-	}
-
-	// Manually create permission manager
-	permCfg := permissions.DefaultPermissionConfig()
-	permCfg.DefaultLevel = "ask"
-	permMgr, _ := permissions.NewManager(permCfg)
-	runtime.permMgr = permMgr
-
-	handler := runtime.createConfirmationHandler()
-	if handler == nil {
-		t.Error("createConfirmationHandler() should return handler")
-	}
-
-	// Test handler in TUI mode
-	ctx := context.Background()
-	approved, err := handler(ctx, "test-tool", map[string]any{"key": "value"})
-
-	if err != nil {
-		t.Errorf("handler returned error: %v", err)
-	}
-	if !approved {
-		t.Error("handler should approve the request")
-	}
-	if receivedReq == nil {
-		t.Error("onConfirm handler should have been called")
 	}
 }
 

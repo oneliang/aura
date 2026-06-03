@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oneliang/aura/core/pkg/sdk"
 )
 
-// BasicUsage demonstrates minimal SDK integration.
+// BasicUsage demonstrates minimal SDK integration with the new event stream pattern.
 func BasicUsage() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -29,13 +30,25 @@ func BasicUsage() error {
 	}
 	defer runtime.Shutdown()
 
-	// 4. Process input
-	events, err := runtime.Process(ctx, "Hello, Aura! What can you help me with?")
+	// 4. Start event stream
+	if err := runtime.Start(ctx); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	defer runtime.Stop(ctx)
+
+	// 5. Get output event stream
+	events := runtime.Events()
+
+	// 6. Generate request ID for this interaction
+	requestID := uuid.New().String()
+
+	// 7. Send user input event
+	err = runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "Hello, Aura! What can you help me with?", requestID))
 	if err != nil {
-		return fmt.Errorf("process: %w", err)
+		return fmt.Errorf("send event: %w", err)
 	}
 
-	// 5. Consume event stream
+	// 8. Consume event stream
 	var response strings.Builder
 	for ev := range events {
 		switch ev.Type() {
@@ -47,6 +60,7 @@ func BasicUsage() error {
 			fmt.Printf("Error: %s\n", ev.Content())
 		case sdk.EventTypeDone:
 			fmt.Println("\nProcessing complete")
+			return nil
 		}
 	}
 

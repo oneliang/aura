@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	lipglossv2 "charm.land/lipgloss/v2"
 	"github.com/oneliang/aura/core/pkg/sdk"
+	"github.com/oneliang/aura/shared/pkg/events"
 )
 
 // DefaultSessionNameFormat is the format string for auto-generated session names.
@@ -50,6 +51,8 @@ const (
 	EventTypeRollbackOffer       = sdk.EventTypeRollbackOffer
 	EventTypeRollbackComplete    = sdk.EventTypeRollbackComplete
 	EventTypeMaxStepsExceeded    = sdk.EventTypeMaxStepsExceeded
+	EventTypeAgentStart          = sdk.EventTypeAgentStart
+	EventTypeAgentStop           = sdk.EventTypeAgentStop
 )
 
 // CommandHandler handles a slash command.
@@ -151,9 +154,6 @@ type ChatEvent struct {
 	ResponseCh chan bool // Direct response channel for confirmations
 	RequestID  string    // Unique ID for each user request (tracks event grouping)
 }
-
-// RunFunc is the function signature for running the agent.
-type RunFunc func(ctx context.Context, input string) (<-chan ChatEvent, error)
 
 // GetSystemPromptFunc is the function signature for getting the system prompt.
 type GetSystemPromptFunc func() string
@@ -260,11 +260,15 @@ type QuestionResponse struct {
 
 // ConfirmState represents the state when waiting for user confirmation or question.
 type ConfirmState struct {
-	Waiting  bool
-	Request  *ConfirmationRequest
-	Selected int            // 0 = Yes/First option, 1 = No/Second option, etc.
-	SelectedOptions []int   // For multi_choice: indices of selected options
-	TextInput string        // For text questions: the user's input
+	Waiting         bool
+	Request         *ConfirmationRequest
+	Selected        int            // 0 = Yes/First option, 1 = No/Second option, etc.
+	SelectedOptions []int          // For multi_choice: indices of selected options
+	TextInput       string         // For text questions: the user's input
+
+	// 新架构：事件流相关字段
+	RequestID       string         // 交互请求的唯一ID
+	InteractionType events.InteractionType  // 交互类型
 }
 
 // ModelProvider holds a reference to the current Model.

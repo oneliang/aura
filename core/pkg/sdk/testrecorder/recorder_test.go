@@ -296,3 +296,4 @@ func (m *mockEvent) Content() string        { return m.content }
 func (m *mockEvent) Extra() map[string]any  { return m.extra }
 func (m *mockEvent) Timestamp() time.Time   { return time.Now() }
 func (m *mockEvent) RequestID() string      { return "test-request-id" }
+func (m *mockEvent) InteractionType() events.InteractionType { return "" }

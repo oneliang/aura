@@ -386,25 +386,6 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 	var responseBuilder strings.Builder
 	var hasResponse bool
 
-	// Create event handler to capture responses
-	eventHandler := func(ev sdk.Event) {
-		// Only process response events for reply
-		if ev.Type() != sdk.EventTypeResponse {
-			return
-		}
-		responseBuilder.WriteString(ev.Content())
-		hasResponse = true
-	}
-
-	// Create confirmation handler (auto-approve for Feishu)
-	confirmHandler := func(req sdk.ConfirmationRequest) {
-		req.ResponseCh <- true
-	}
-
-	// Set handlers on runtime
-	rt.SetEventHandler(eventHandler)
-	rt.SetConfirmationHandler(confirmHandler)
-
 	// Determine target for sending messages
 	var targetID, targetType string
 	if msgInfo.IsGroup {
@@ -436,9 +417,13 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 		return
 	}
 
-	// Consume event stream (handler already set via SetEventHandler, called by runtime's event pump)
+	// Process events directly from stream
 	for ev := range events {
-		// Just drain the channel, handler is called internally by processing.go
+		// Collect response for reply
+		if ev.Type() == sdk.EventTypeResponse || ev.Type() == sdk.EventTypeResponseChunk {
+			responseBuilder.WriteString(ev.Content())
+			hasResponse = true
+		}
 		// Log for debugging
 		a.logger.Debug().Str("module", "feishu").Str("event_type", string(ev.Type())).Msg("Event received")
 	}

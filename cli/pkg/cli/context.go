@@ -25,9 +25,6 @@ type CommandContext struct {
 	PermissionManagerFactory PermissionManagerFactory
 	ConfigLoader             ConfigLoader
 
-	// TUI confirmation channel
-	TUIConfirmCh chan sdk.ConfirmationRequest
-
 	// Current user ID (empty for legacy single-user mode)
 	UserID string
 }
