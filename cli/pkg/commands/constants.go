@@ -30,6 +30,7 @@ const (
 	CmdSubscriptionDelete = "/subscription delete"
 	CmdKnowledge          = "/knowledge"
 	CmdMcp                = "/mcp"
+	CmdPrompt             = "/prompt"
 	CmdVersion            = "/version"
 	CmdInit               = "/init"
 )

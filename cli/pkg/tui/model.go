@@ -32,6 +32,7 @@ type Model struct {
 	plan       *PlanWidget
 
 	runFn      RunFunc
+	getSystemPromptFunc GetSystemPromptFunc // Optional: function to get system prompt
 	ctx        context.Context
 	cancelFunc context.CancelFunc
 	eventChan  chan ChatEvent
@@ -138,29 +139,30 @@ func New(ctx context.Context, runFn RunFunc, config Config, sessionMgr *sdk.Sess
 	state.SetShowTokens(config.ShowTokens)
 
 	m := Model{
-		state:            state,
-		messages:         messages,
-		input:            input,
-		styles:           styles,
-		renderer:         renderer,
-		thinking:         NewThinkingWidget(),
-		processing:       NewProcessingWidget(),
-		tasks:            NewTaskWidget(styles),
-		plan:             NewPlanWidget(styles),
-		runFn:            runFn,
-		ctx:               ctx,
-		cancelFunc:        cancel,
-		eventChan:         make(chan ChatEvent, 100),
-		config:            config,
-		sessionMgr:        sessionMgr,
-		summarizer:        summarizer,
-		modelProvider:     modelProvider,
-		commandProvider:   commandProvider,
-		sessionPopup:      NewSessionPopup(),
-		subscriptionPopup: NewSubscriptionPopup(),
-		userID:            user.GetDefaultUserID(), // Load current user ID from users.yaml
-		mcpManager:        mcpManager,
-		viewport:          viewport.New(viewport.WithWidth(0), viewport.WithHeight(0)),
+		state:               state,
+		messages:            messages,
+		input:               input,
+		styles:              styles,
+		renderer:            renderer,
+		thinking:            NewThinkingWidget(),
+		processing:          NewProcessingWidget(),
+		tasks:               NewTaskWidget(styles),
+		plan:                NewPlanWidget(styles),
+		runFn:               runFn,
+		getSystemPromptFunc: config.GetSystemPrompt,
+		ctx:                 ctx,
+		cancelFunc:          cancel,
+		eventChan:           make(chan ChatEvent, 100),
+		config:              config,
+		sessionMgr:          sessionMgr,
+		summarizer:          summarizer,
+		modelProvider:       modelProvider,
+		commandProvider:     commandProvider,
+		sessionPopup:        NewSessionPopup(),
+		subscriptionPopup:   NewSubscriptionPopup(),
+		userID:              user.GetDefaultUserID(), // Load current user ID from users.yaml
+		mcpManager:          mcpManager,
+		viewport:            viewport.New(viewport.WithWidth(0), viewport.WithHeight(0)),
 		autoScroll:        AutoScrollDefault,
 		viewportReady:     false,
 	}

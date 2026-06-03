@@ -630,3 +630,54 @@ func (r *AgentRuntime) ClearTasks() {
 func (r *AgentRuntime) Clear() {
 	r.ClearTasks()
 }
+
+// GetSystemPrompt returns the current system prompt for debugging/display purposes.
+// Returns a formatted string showing all prompt layers and their cache status.
+func (r *AgentRuntime) GetSystemPrompt() string {
+	var result string
+
+	// Show base system prompt
+	result += "=== System Prompt ===\n\n"
+	if r.config.SystemPrompt != "" {
+		result += r.config.SystemPrompt
+	} else if r.config.Role != "" {
+		result += r.promptBuilder.BuildWithRole(r.config.Role)
+	} else {
+		result += r.promptBuilder.BuildWithConfig(r.config.Config)
+	}
+
+	// Show Skills block
+	if r.skillLoader != nil && len(r.skillLoader.GetSkills()) > 0 {
+		result += "\n\n=== Skills Block ===\n\n"
+		for _, skill := range r.skillLoader.GetSkills() {
+			result += fmt.Sprintf("- %s: %s\n", skill.Name, skill.Description)
+		}
+	}
+
+	// Show Agents block
+	if r.agentLoader != nil && len(r.agentLoader.GetAgents()) > 0 && r.config.EnableSubAgent {
+		result += "\n\n=== Agents Block ===\n\n"
+		for _, agent := range r.agentLoader.GetAgents() {
+			result += fmt.Sprintf("- %s: %s\n", agent.Name, agent.Description)
+		}
+	}
+
+	// Show AURA.md block
+	auraMd := r.loadProjectAuraMd()
+	if auraMd != "" {
+		result += "\n\n=== AURA.md Block ===\n\n"
+		result += auraMd
+	}
+
+	// Show cache status
+	if r.cacheManager != nil && r.cacheManager.Enabled() {
+		result += "\n\n=== Cache Status ===\n\n"
+		result += "Prompt caching: ENABLED\n"
+		result += fmt.Sprintf("Layers: StaticSystem(0), Tools(1), Skills(2), Agents(3), ProjectAura(4)\n")
+	} else {
+		result += "\n\n=== Cache Status ===\n\n"
+		result += "Prompt caching: DISABLED\n"
+	}
+
+	return result
+}

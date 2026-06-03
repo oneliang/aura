@@ -140,6 +140,12 @@ func init() {
 		Description: "Initialize AURA.md with codebase documentation",
 		Handler:     cmdInit,
 	})
+
+	RegisterCommand(&Command{
+		Name:        climds.CmdPrompt,
+		Description: "Show current system prompt",
+		Handler:     cmdPrompt,
+	})
 }
 
 // Command handlers
@@ -595,4 +601,15 @@ func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 		m.scrollToBottom(),
 		m.eventLoop(),
 	)
+}
+
+func cmdPrompt(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
+	if m.getSystemPromptFunc == nil {
+		m.messages.AddRaw(m.styles.Error.Render("  Error: System prompt function not available"))
+		return m, m.scrollToBottom()
+	}
+
+	promptContent := m.getSystemPromptFunc()
+	m.messages.AddRaw(m.styles.Help.Render(promptContent))
+	return m, m.scrollToBottom()
 }

@@ -290,15 +290,16 @@ func runTUIMode(
 	summarizer := rt.GetSummarizer()
 
 	cfg := tui.Config{
-		Mode:             "aura",
-		UserName:         profName,
-		Tools:            rt.GetToolNames(),
-		ShowTokens:       ctx.Config.Debug.ShowTokens,
-		TokenMax:         ctx.Config.Memory.MaxTokens,
-		DebugMode:        ctx.Config.TUI.DebugMode,
-		SessionID:        currentSessionID,
-		SkillDirectories: ctx.Config.Skills.Directories,
-		EnableReview:     ctx.Config.Agent.Plan.EnableReview,
+		Mode:               "aura",
+		UserName:           profName,
+		Tools:              rt.GetToolNames(),
+		ShowTokens:         ctx.Config.Debug.ShowTokens,
+		TokenMax:           ctx.Config.Memory.MaxTokens,
+		DebugMode:          ctx.Config.TUI.DebugMode,
+		SessionID:          currentSessionID,
+		SkillDirectories:   ctx.Config.Skills.Directories,
+		EnableReview:       ctx.Config.Agent.Plan.EnableReview,
+		GetSystemPrompt:    func() string { return rt.GetSystemPrompt() },
 	}
 
 	// Store config in context for command handlers to access

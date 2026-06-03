@@ -155,18 +155,22 @@ type ChatEvent struct {
 // RunFunc is the function signature for running the agent.
 type RunFunc func(ctx context.Context, input string) (<-chan ChatEvent, error)
 
+// GetSystemPromptFunc is the function signature for getting the system prompt.
+type GetSystemPromptFunc func() string
+
 // Config holds TUI configuration.
 type Config struct {
-	Mode             string
-	UserName         string
-	Tools            []string
-	ShowTokens       bool
-	TokenMax         int
-	DebugMode        bool
-	SessionID        string
-	SkillDirectories []string          // Directories to load skills from
-	Keybindings      map[string]string // User-defined keybindings (key combination → command)
-	EnableReview     bool              // Enable plan review before execution
+	Mode               string
+	UserName           string
+	Tools              []string
+	ShowTokens         bool
+	TokenMax           int
+	DebugMode          bool
+	SessionID          string
+	SkillDirectories   []string          // Directories to load skills from
+	Keybindings        map[string]string // User-defined keybindings (key combination → command)
+	EnableReview       bool              // Enable plan review before execution
+	GetSystemPrompt    GetSystemPromptFunc // Optional: function to get system prompt for /prompt command
 }
 
 // UIStyles holds all styles for the TUI.

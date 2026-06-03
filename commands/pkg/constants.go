@@ -73,6 +73,7 @@ const (
 	CmdNameHistory = "command_history"
 	CmdNameModel   = "command_model"
 	CmdNameRole    = "command_role"
+	CmdNamePrompt  = "command_prompt"
 )
 
 // Command prefix constants for prefix matching

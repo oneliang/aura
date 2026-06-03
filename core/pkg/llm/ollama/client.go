@@ -132,6 +132,21 @@ func (c *Client) Complete(ctx context.Context, req *llm.Request) (*llm.Response,
 		Options: make(map[string]any),
 	}
 
+	// Handle SystemBlocks: Ollama doesn't support system blocks array,
+	// so we expand them into a single system message at the beginning.
+	if req.PromptCache != nil && len(req.PromptCache.SystemBlocks) > 0 {
+		var systemText string
+		for _, block := range req.PromptCache.SystemBlocks {
+			systemText += block.Text + "\n\n"
+		}
+		if systemText != "" {
+			ollamaReq.Messages = append(ollamaReq.Messages, ollamaMessage{
+				Role:    "system",
+				Content: systemText,
+			})
+		}
+	}
+
 	for _, msg := range req.Messages {
 		// Extract text content from ContentBlocks
 		var textContent string
@@ -221,6 +236,21 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 		Model:   c.model,
 		Stream:  true,
 		Options: make(map[string]any),
+	}
+
+	// Handle SystemBlocks: Ollama doesn't support system blocks array,
+	// so we expand them into a single system message at the beginning.
+	if req.PromptCache != nil && len(req.PromptCache.SystemBlocks) > 0 {
+		var systemText string
+		for _, block := range req.PromptCache.SystemBlocks {
+			systemText += block.Text + "\n\n"
+		}
+		if systemText != "" {
+			ollamaReq.Messages = append(ollamaReq.Messages, ollamaMessage{
+				Role:    "system",
+				Content: systemText,
+			})
+		}
 	}
 
 	for _, msg := range req.Messages {

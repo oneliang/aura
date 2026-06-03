@@ -11,10 +11,11 @@ import (
 type CacheLayer int
 
 const (
-	LayerStaticSystem CacheLayer = 0 // Immutable base system prompt
-	LayerTools        CacheLayer = 1 // Tool definitions
-	LayerSkills       CacheLayer = 2 // Skills metadata
-	LayerAgents       CacheLayer = 3 // Agents metadata
+	LayerStaticSystem  CacheLayer = 0 // Immutable base system prompt
+	LayerTools         CacheLayer = 1 // Tool definitions
+	LayerSkills        CacheLayer = 2 // Skills metadata
+	LayerAgents        CacheLayer = 3 // Agents metadata
+	LayerProjectAura   CacheLayer = 4 // Project-level AURA.md
 )
 
 // PromptCacheManager manages cached prompt layers for provider-agnostic caching.
@@ -22,10 +23,11 @@ type PromptCacheManager struct {
 	mu sync.RWMutex
 
 	// Cached layers (immutable after initialization)
-	staticSystem string
-	toolsBlock   string
-	skillsBlock  string
-	agentsBlock  string
+	staticSystem    string
+	toolsBlock      string
+	skillsBlock     string
+	agentsBlock     string
+	projectAuraBlock string
 
 	// Configuration
 	enabled bool
@@ -62,6 +64,13 @@ func (m *PromptCacheManager) SetAgentsBlock(agents string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.agentsBlock = agents
+}
+
+// SetProjectAuraBlock sets the cached project-level AURA.md block.
+func (m *PromptCacheManager) SetProjectAuraBlock(projectAura string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.projectAuraBlock = projectAura
 }
 
 // BuildSystemBlocks builds Anthropic-style system blocks with cache_control.
@@ -107,6 +116,15 @@ func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 		blocks = append(blocks, llm.SystemBlock{
 			Type:         "text",
 			Text:         m.agentsBlock,
+			CacheControl: &llm.CacheControl{Type: "ephemeral"},
+		})
+	}
+
+	// Layer 4: Project-level AURA.md
+	if m.projectAuraBlock != "" {
+		blocks = append(blocks, llm.SystemBlock{
+			Type:         "text",
+			Text:         m.projectAuraBlock,
 			CacheControl: &llm.CacheControl{Type: "ephemeral"},
 		})
 	}

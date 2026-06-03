@@ -611,9 +611,7 @@ func (r *AgentRuntime) buildSystemPrompt() string {
 		prompt += "\n\n## Single-Agent Mode\n\nYou are operating in single-agent mode. Do not attempt to delegate tasks to other agents or invoke sub-agents. Complete all tasks yourself using the available tools.\n"
 	}
 
-	// Append project-level AURA.md if exists
-	prompt += r.loadProjectAuraMd()
-
+	// Note: AURA.md is now handled separately as LayerProjectAura for caching
 	return prompt
 }
 
@@ -660,6 +658,12 @@ func (r *AgentRuntime) initPromptCachePreEngine(ctx context.Context) {
 	if r.agentLoader != nil && len(r.agentLoader.GetAgents()) > 0 {
 		agentsBlock := agentbuilder.BuildSystemPromptSection(r.agentLoader.GetAgents())
 		r.cacheManager.SetAgentsBlock(agentsBlock)
+	}
+
+	// Build project-level AURA.md block (Layer 4)
+	auraMdContent := r.loadProjectAuraMd()
+	if auraMdContent != "" {
+		r.cacheManager.SetProjectAuraBlock(auraMdContent)
 	}
 }
 

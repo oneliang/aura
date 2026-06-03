@@ -339,10 +339,29 @@ type openaiError struct {
 
 // Complete implements llm.Client.
 func (c *Client) Complete(ctx context.Context, req *llm.Request) (*llm.Response, error) {
+	messages := convertMessages(req.Messages)
+
+	// Handle SystemBlocks: OpenAI doesn't support system blocks array,
+	// so we expand them into a single system message at the beginning.
+	if req.PromptCache != nil && len(req.PromptCache.SystemBlocks) > 0 {
+		var systemText string
+		for _, block := range req.PromptCache.SystemBlocks {
+			systemText += block.Text + "\n\n"
+		}
+		if systemText != "" {
+			// Insert system message at the beginning
+			systemMsg := openaiMessage{
+				Role:    "system",
+				Content: strings.TrimSpace(systemText),
+			}
+			messages = append([]openaiMessage{systemMsg}, messages...)
+		}
+	}
+
 	openaiReq := openaiRequest{
-		Model:   c.model,
-		Stream:  false,
-		Messages: convertMessages(req.Messages),
+		Model:    c.model,
+		Stream:   false,
+		Messages: messages,
 	}
 
 	// Forward tool definitions
@@ -452,10 +471,29 @@ func (c *Client) Complete(ctx context.Context, req *llm.Request) (*llm.Response,
 
 // Stream implements llm.Client.
 func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk, error) {
+	messages := convertMessages(req.Messages)
+
+	// Handle SystemBlocks: OpenAI doesn't support system blocks array,
+	// so we expand them into a single system message at the beginning.
+	if req.PromptCache != nil && len(req.PromptCache.SystemBlocks) > 0 {
+		var systemText string
+		for _, block := range req.PromptCache.SystemBlocks {
+			systemText += block.Text + "\n\n"
+		}
+		if systemText != "" {
+			// Insert system message at the beginning
+			systemMsg := openaiMessage{
+				Role:    "system",
+				Content: strings.TrimSpace(systemText),
+			}
+			messages = append([]openaiMessage{systemMsg}, messages...)
+		}
+	}
+
 	openaiReq := openaiRequest{
-		Model:   c.model,
-		Stream:  true,
-		Messages: convertMessages(req.Messages),
+		Model:    c.model,
+		Stream:   true,
+		Messages: messages,
 	}
 
 	// Forward tool definitions

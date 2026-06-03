@@ -328,5 +328,10 @@ func GetInternalCommands() []CommandInfo {
 			DisplayName: i18n.T("internal_command.role.name"),
 			Description: i18n.T("internal_command.role.desc"),
 		},
+		{
+			Name:        CmdNamePrompt,
+			DisplayName: i18n.T("internal_command.prompt.name"),
+			Description: i18n.T("internal_command.prompt.desc"),
+		},
 	}
 }
