@@ -524,7 +524,8 @@ func cmdVersion(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd)
 	return m, m.scrollToBottom()
 }
 
-// cmdInit initializes AURA.md with codebase documentation using independent LLM runtime.
+// cmdInit initializes AURA.md with codebase documentation.
+// Uses sendMessageWithConfig to integrate with TUI event system for proper UI feedback.
 func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	// Get config from context
 	cfg := config.GetConfig(ctx)
@@ -548,10 +549,24 @@ func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Build init prompt - LLM will explore codebase itself using tools
+	// Build init-specific runtime config
+	initCfg := sdk.FromConfig(cfg)
+	initCfg.SystemPrompt = initpkg.InitSystemPrompt
+	initCfg.EnableSubAgent = false
+	initCfg.SessionID = "" // No persistence
+
+	// Build init prompt - LLM will explore codebase using tools
 	prompt := initpkg.BuildInitPrompt(cwd)
 
-	m.messages.AddRaw(m.styles.Help.Render("  Analyzing project deeply with independent runtime..."))
+	// Add user message to show what's happening
+	m.messages.Add(MessageTypeUser, "/init", nil, renderMessage, m.renderer, m.styles)
+
+	// Set init state for content capture
+	m.initPending = true
+	m.initAuraMdPath = auraMdPath
+	m.initContent = ""
+
+	// Set UI state (same as handleSubmit)
 	m.state.SetWaiting(true)
 	m.state.SetStartTime(time.Now())
 	m.state.SetDisplayState(DisplayThinking)
@@ -570,64 +585,11 @@ func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	// Start thinking indicator
 	_, thinkingCmd := m.thinking.StartAndRender()
 
-	// Create async init command
-	initCmd := func() tea.Msg {
-		// Create init-specific runtime config
-		initCfg := sdk.FromConfig(cfg)
-		initCfg.SystemPrompt = initpkg.InitSystemPrompt
-		// Enable tools for LLM to explore codebase independently
-		initCfg.EnableSubAgent = false
-		initCfg.SessionID = "" // No persistence
-
-		// Create independent runtime with TUI logger (suppress console output)
-		initRt, err := sdk.NewRuntime(initCfg,
-			sdk.WithAutoApprove(),
-			sdk.WithLogger(GetLogger()), // Inject TUI file logger
-		)
-		if err != nil {
-			return InitResultMsg{Error: fmt.Errorf("failed to create init runtime: %w", err)}
-		}
-
-		// Initialize runtime
-		if err := initRt.Initialize(m.ctx); err != nil {
-			initRt.Shutdown()
-			return InitResultMsg{Error: fmt.Errorf("failed to initialize init runtime: %w", err)}
-		}
-
-		// Process prompt through independent runtime
-		events, err := initRt.Process(m.ctx, prompt)
-		if err != nil {
-			initRt.Shutdown()
-			return InitResultMsg{Error: err}
-		}
-
-		var result string
-		for ev := range events {
-			if ev.Type() == sdk.EventTypeResponse {
-				result += ev.Content()
-			}
-		}
-
-		// Save to AURA.md
-		if result != "" {
-			if err := os.WriteFile(auraMdPath, []byte(result), 0644); err != nil {
-				initRt.Shutdown()
-				return InitResultMsg{Error: err}
-			}
-		}
-
-		// Cleanup: shutdown init runtime
-		initRt.Shutdown()
-
-		return InitResultMsg{Path: auraMdPath, Content: result}
-	}
-
-	return m, tea.Batch(initCmd, thinkingCmd, m.scrollToBottom())
-}
-
-// InitResultMsg carries the result of init command.
-type InitResultMsg struct {
-	Path    string
-	Content string
-	Error   error
+	// Use sendMessageWithConfig to send through event system
+	return m, tea.Batch(
+		m.sendMessageWithConfig(prompt, initCfg),
+		thinkingCmd,
+		m.scrollToBottom(),
+		m.eventLoop(),
+	)
 }

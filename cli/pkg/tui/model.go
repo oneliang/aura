@@ -63,6 +63,11 @@ type Model struct {
 	// Rollback state for plan mode
 	rollbackSnapshotID string
 
+	// Init state for /init command
+	initPending    bool   // True when /init is running
+	initAuraMdPath string // Path to save AURA.md
+	initContent    string // Accumulated response content for AURA.md
+
 	config Config
 
 	// Testing flags
@@ -329,6 +334,93 @@ func (m Model) sendMessage(input string) tea.Cmd {
 			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
 			default:
 			}
+		}()
+
+		return nil
+	}
+}
+
+// sendMessageWithConfig sends a message with a custom runtime config.
+// This is used for special operations like /init that need a different system prompt.
+// Events are still forwarded to eventChan for UI updates.
+func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.Cmd {
+	return func() tea.Msg {
+		m.currentRunCtx, m.currentRunCancel = context.WithCancel(m.ctx)
+
+		log.Debug().Str("input", input).Msg("sendMessageWithConfig: starting")
+
+		// Create temporary runtime with custom config
+		tempRt, err := sdk.NewRuntime(cfg,
+			sdk.WithAutoApprove(),
+			sdk.WithLogger(GetLogger()),
+		)
+		if err != nil {
+			log.Debug().Err(err).Msg("sendMessageWithConfig: failed to create runtime")
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
+			default:
+			}
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			default:
+			}
+			return nil
+		}
+
+		// Initialize temporary runtime
+		if err := tempRt.Initialize(m.ctx); err != nil {
+			tempRt.Shutdown()
+			log.Debug().Err(err).Msg("sendMessageWithConfig: failed to initialize runtime")
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
+			default:
+			}
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			default:
+			}
+			return nil
+		}
+
+		// Run Process() in background goroutine
+		go func() {
+			events, err := tempRt.Process(m.currentRunCtx, input)
+			if err != nil {
+				log.Debug().Err(err).Msg("sendMessageWithConfig: process error")
+				select {
+				case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
+				default:
+				}
+				select {
+				case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+				default:
+				}
+				tempRt.Shutdown()
+				return
+			}
+
+			log.Debug().Msg("sendMessageWithConfig: got events channel")
+
+			adapter := NewAdapter()
+			count := 0
+			for ev := range events {
+				count++
+				log.Debug().Int("count", count).Str("type", string(ev.Type())).Msg("sendMessageWithConfig: forwarding event")
+				select {
+				case m.eventChan <- adapter.ConvertSDKEvent(ev):
+				case <-m.currentRunCtx.Done():
+					log.Debug().Msg("sendMessageWithConfig: run cancelled")
+					tempRt.Shutdown()
+					return
+				}
+			}
+
+			log.Debug().Int("total", count).Msg("sendMessageWithConfig: events channel closed")
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			default:
+			}
+			tempRt.Shutdown()
 		}()
 
 		return nil

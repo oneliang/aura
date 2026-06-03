@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -142,8 +143,14 @@ func (m Model) handleChatEvent(msg ChatEvent) (tea.Model, tea.Cmd) {
 // Note: For non-streaming responses (e.g., intent commands, direct Response events),
 // the message is already displayed by its handler. Only render here for streaming
 // responses that accumulated chunks without a separate Response event.
+// For init mode: saves AURA.md and shows result.
 func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 	log.Debug().Str("requestID", msg.RequestID).Msg("handleEventDone: processing done event")
+
+	// Handle init completion
+	if m.initPending {
+		return m.handleInitComplete()
+	}
 
 	// Check if the last assistant message was already displayed.
 	// Messages added via Add() have .Rendered set, meaning they were already rendered in viewport.
@@ -197,6 +204,46 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.state.ResetForNewInteraction()
 
 	// Re-enable input and scroll to bottom
+	return m, tea.Sequence(
+		m.input.EnableAndFocus(),
+		m.scrollToBottom(),
+		nil,
+	)
+}
+
+// handleInitComplete handles the completion of /init command.
+// Saves accumulated content to AURA.md and shows result message.
+func (m Model) handleInitComplete() (tea.Model, tea.Cmd) {
+	log.Debug().Str("path", m.initAuraMdPath).Int("content_len", len(m.initContent)).Msg("handleInitComplete: saving AURA.md")
+
+	// Reset init state
+	m.initPending = false
+	auraMdPath := m.initAuraMdPath
+	content := m.initContent
+	m.initAuraMdPath = ""
+	m.initContent = ""
+
+	// Save AURA.md
+	var resultMsg string
+	if content != "" {
+		if err := os.WriteFile(auraMdPath, []byte(content), 0644); err != nil {
+			resultMsg = m.styles.Error.Render(fmt.Sprintf("  Error saving AURA.md: %v", err))
+		} else {
+			resultMsg = m.styles.Help.Render(fmt.Sprintf("  Generated AURA.md at: %s", auraMdPath))
+		}
+	} else {
+		resultMsg = m.styles.Error.Render("  Error: No content generated for AURA.md")
+	}
+
+	// Add result message to chat
+	m.messages.AddRaw(resultMsg)
+
+	// Complete interaction
+	m.stopWidgets()
+	m.tasks.Reset()
+	m.plan.Reset()
+	m.state.ResetForNewInteraction()
+
 	return m, tea.Sequence(
 		m.input.EnableAndFocus(),
 		m.scrollToBottom(),
@@ -291,6 +338,7 @@ func (m Model) handleEventResponseEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 // For non-streaming responses: glamour render and add to viewport.
 // For streaming responses: the response content already matches accumulated chunks,
 // so skip if we already have content (prevents duplicate).
+// For init mode: accumulate content for AURA.md generation.
 func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 	log.Debug().Str("content", msg.Content).Msg("handleEventResponse: processing response")
 
@@ -298,6 +346,12 @@ func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(msg.Content) == "" {
 		log.Debug().Msg("handleEventResponse: empty content, skipping")
 		return m, nil
+	}
+
+	// Capture init content for AURA.md generation
+	if m.initPending {
+		m.initContent += msg.Content
+		log.Debug().Int("len", len(m.initContent)).Msg("handleEventResponse: accumulating init content")
 	}
 
 	// If we already have an assistant message (from accumulated streaming chunks),

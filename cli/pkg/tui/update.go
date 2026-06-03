@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -106,27 +105,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-
-	// Init result message
-	case InitResultMsg:
-		m.state.SetWaiting(false)
-		m.state.SetDisplayState(DisplayIdle)
-		m.stopWidgets()
-		m.input.SetDisabled(false)
-		m.input.EnableAndFocus()
-		m.autoScroll = true
-		m.manualScroll = false
-		m.manualScrollOffset = 0
-		if msg.Error != nil {
-			m.messages.AddRaw(m.styles.Error.Render(fmt.Sprintf("  Init error: %v", msg.Error)))
-		} else {
-			m.messages.AddRaw(m.styles.Help.Render(fmt.Sprintf("  Generated AURA.md at: %s", msg.Path)))
-			if msg.Content != "" {
-				// Display full content without truncation
-				m.messages.AddRaw(m.styles.Help.Render(msg.Content))
-			}
-		}
-		return m, m.scrollToBottom()
 	}
 
 	// Delegate to viewport for mouse wheel and keyboard scroll
