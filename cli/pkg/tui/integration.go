@@ -56,7 +56,8 @@ func Run(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.Se
 	p := tea.NewProgram(m)
 	_, err := p.Run()
 
-	// Stop runtime after TUI exits
+	// Close TUI channels first, then stop runtime
+	m.Close()
 	rt.Stop(ctx)
 
 	return err

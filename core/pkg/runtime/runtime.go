@@ -79,6 +79,10 @@ type AgentRuntime struct {
 	running bool
 	runMu   sync.Mutex
 
+	// 输入队列（顺序处理，避免嵌套事件循环）
+	inputQueue  chan inputRequest
+	processWg   sync.WaitGroup // 等待处理完成
+
 	// Session management
 	sessionID    string
 	userID       string
@@ -128,6 +132,12 @@ type AgentRuntime struct {
 
 	// Session context (new instance per sub-agent)
 	session *SessionContext
+}
+
+// inputRequest 封装用户输入请求
+type inputRequest struct {
+	Input     string
+	RequestID string
 }
 
 // WithCommands sets the command provider for internal commands.
@@ -651,7 +661,11 @@ func (r *AgentRuntime) Start(ctx context.Context) error {
 	r.running = true
 	r.eventOutCh = make(chan Event, 100)
 	r.interactionPending = make(map[string]chan events.InteractionResponse)
+	r.inputQueue = make(chan inputRequest, 10)
 	r.runMu.Unlock()
+
+	// 启动输入处理goroutine（顺序处理，避免嵌套）
+	go r.processInputQueue(ctx)
 
 	// 发送启动事件
 	r.sendEvent(events.NewEvent(events.EventTypeAgentStart, "", ""))
@@ -668,8 +682,16 @@ func (r *AgentRuntime) Stop(ctx context.Context) error {
 	}
 	eventOutCh := r.eventOutCh
 	r.eventOutCh = nil
+	inputQueue := r.inputQueue
+	r.inputQueue = nil
 	r.running = false
 	r.runMu.Unlock()
+
+	// 关闭输入队列，等待处理goroutine退出
+	if inputQueue != nil {
+		close(inputQueue)
+	}
+	r.processWg.Wait()
 
 	// 发送停止事件（在unlock后，使用缓存的channel）
 	if eventOutCh != nil {
@@ -721,9 +743,16 @@ func (r *AgentRuntime) handleUserInput(ctx context.Context, input string) error 
 		return fmt.Errorf("runtime not initialized")
 	}
 
-	// 启动处理流程（后台运行）
-	go r.processInput(ctx, input)
-	return nil
+	// 提交到输入队列，由processInputQueue顺序处理
+	requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
+	req := inputRequest{Input: input, RequestID: requestID}
+
+	select {
+	case r.inputQueue <- req:
+		return nil
+	default:
+		return fmt.Errorf("input queue full")
+	}
 }
 
 // handleUserMessage 处理用户消息（带metadata）
@@ -740,9 +769,19 @@ func (r *AgentRuntime) handleUserMessage(ctx context.Context, event Event) error
 		}
 	}
 
-	// 启动处理流程
-	go r.processInput(ctx, input)
-	return nil
+	// 提交到输入队列，使用事件的RequestID
+	requestID := event.RequestID()
+	if requestID == "" {
+		requestID = fmt.Sprintf("req_%d", time.Now().UnixNano())
+	}
+	req := inputRequest{Input: input, RequestID: requestID}
+
+	select {
+	case r.inputQueue <- req:
+		return nil
+	default:
+		return fmt.Errorf("input queue full")
+	}
 }
 
 // handleInteractionResponse 处理交互响应
@@ -819,23 +858,38 @@ func (r *AgentRuntime) sendEvent(event Event) {
 	}
 }
 
-// processInput 处理输入，发送事件到OUT
-// 这是从Process方法重构后的核心处理逻辑
-func (r *AgentRuntime) processInput(ctx context.Context, input string) {
-	// 发送thinking事件
-	r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", ""))
+// processInputQueue 顺序处理输入队列
+// 这避免了嵌套事件循环问题，确保一个请求完成后再处理下一个
+func (r *AgentRuntime) processInputQueue(ctx context.Context) {
+	r.processWg.Add(1)
+	defer r.processWg.Done()
 
-	// 调用现有的Process方法获取事件流
-	// 注意：这里复用现有的Process实现，后续可以进一步重构
-	eventsCh, err := r.Process(ctx, input)
-	if err != nil {
-		r.sendEvent(events.NewEvent(events.EventTypeError, err.Error(), ""))
-		return
-	}
+	for req := range r.inputQueue {
+		// 处理单个请求
+		r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", req.RequestID))
 
-	// 转发事件到新的OUT通道
-	for ev := range eventsCh {
-		r.sendEvent(ev)
+		// 直接调用Engine.Run而非Process包装器
+		eventsCh, err := r.agent.Run(ctx, req.Input)
+		if err != nil {
+			r.sendEvent(events.NewEvent(events.EventTypeError, err.Error(), req.RequestID))
+			r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
+			continue
+		}
+
+		// 转发事件到OUT通道
+		for ev := range eventsCh {
+			// 设置RequestID以确保事件流匹配
+			if ev.RequestID() == "" {
+				ev = events.NewEvent(ev.Type(), ev.Content(), req.RequestID)
+				if extra := ev.Extra(); extra != nil {
+					ev = events.NewEventWithExtra(ev.Type(), ev.Content(), extra, req.RequestID)
+				}
+			}
+			r.sendEvent(ev)
+		}
+
+		// 确保发送Done事件
+		r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
 	}
 }
 
@@ -896,12 +950,14 @@ func (r *AgentRuntime) requestInteraction(ctx context.Context, req events.Intera
 		r.interactionMu.Lock()
 		delete(r.interactionPending, req.ID)
 		r.interactionMu.Unlock()
-		// 超时 → 自动批准（SDK默认行为）
-		r.logger.Warn().Str("request_id", req.ID).Msg("Interaction request timeout, auto-approving")
+		// 超时 → 中断（而非自动批准）
+		// 用户后续可继续对话，LLM会重触发未完成内容
+		r.logger.Warn().Str("request_id", req.ID).Msg("Interaction request timeout, interrupting")
 		return events.InteractionResponse{
 			RequestID: req.ID,
 			Type:      req.Type,
-			Approved:  true,
+			Approved:  false, // 不批准
+			Cancelled: true,  // 标记为中断
 			Error:     timeoutCtx.Err(),
 		}
 	}

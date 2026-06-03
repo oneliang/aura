@@ -626,3 +626,14 @@ func (m *Model) sendInteractionResponse(approved bool) {
 	m.confirmState = ConfirmState{Waiting: false}
 	m.state.SetDisplayState(DisplayProcessing)
 }
+
+// Close 关闭Model的所有channel，释放资源
+// 应在TUI退出后调用，确保Orchestrator goroutine能正确退出
+func (m *Model) Close() {
+	m.cancelFunc()
+
+	// 关闭所有channel，确保接收方能正确退出
+	close(m.eventOutCh)
+	close(m.eventInCh)
+	close(m.eventChan)
+}
