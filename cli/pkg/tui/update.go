@@ -584,6 +584,10 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	// Reset plan widget for new interaction
 	m.plan.Reset()
 
+	// Create thinking message along with widget lifecycle
+	// This ensures the first ThinkingChunk event appends content correctly
+	m.messages.AddEmpty(MessageTypeThinking)
+
 	// Start thinking immediately — don't wait for engine event
 	_, thinkingCmd := m.thinking.StartAndRender()
 	m.autoScroll = true

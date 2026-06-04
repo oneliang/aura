@@ -321,6 +321,32 @@ func (s *MessageStore) GetLastAssistantMessage() *Message {
 	return nil
 }
 
+// GetLastThinkingMessage returns the last thinking message if it exists.
+// Used to check if thinking content was accumulated.
+func (s *MessageStore) GetLastThinkingMessage() *Message {
+	for i := len(s.messages) - 1; i >= 0; i-- {
+		if s.messages[i].Type == MessageTypeThinking {
+			return s.messages[i]
+		}
+	}
+	return nil
+}
+
+// RemoveLastIfEmpty removes the last message of the given type if it has no content.
+// Used to clean up empty thinking messages when LLM didn't output thinking content.
+func (s *MessageStore) RemoveLastIfEmpty(msgType MessageType) bool {
+	for i := len(s.messages) - 1; i >= 0; i-- {
+		if s.messages[i].Type == msgType {
+			if s.messages[i].Content == "" {
+				s.messages = s.messages[:i]
+				return true
+			}
+			return false
+		}
+	}
+	return false
+}
+
 // GetMessages returns a copy of all messages.
 func (s *MessageStore) GetMessages() []*Message {
 	result := make([]*Message, len(s.messages))

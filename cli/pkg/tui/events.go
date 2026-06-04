@@ -171,6 +171,10 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 		m.tasks.Reset()
 		m.plan.Reset()
 
+		// Create thinking message along with widget lifecycle
+		// This ensures the first ThinkingChunk event appends content correctly
+		m.messages.AddEmpty(MessageTypeThinking)
+
 		// Set UI state and start thinking IMMEDIATELY
 		m.state.SetWaiting(true)
 		m.state.SetStartTime(time.Now())
@@ -250,24 +254,19 @@ func (m *Model) stopWidgets() {
 }
 
 // handleEventThinkingStart handles the thinking start event.
-// Creates an empty Thinking message for streaming chunks to accumulate into.
+// Thinking message is already created in handleSubmit, so this only ensures
+// the widget animation is running (edge case: if widget wasn't started yet).
 func (m Model) handleEventThinkingStart(msg ChatEvent) (tea.Model, tea.Cmd) {
 	if m.thinking == nil {
 		return m, nil
 	}
-	// Skip if thinking already started by handleSubmit (avoids restart on late engine event)
-	if m.thinking.IsActive() {
-		return m, nil
+	// Widget should already be active from handleSubmit, but ensure it's running
+	if !m.thinking.IsActive() {
+		_, tickCmd := m.thinking.StartAndRender()
+		return m, tea.Sequence(tickCmd, nil)
 	}
-
-	// Create empty Thinking message for streaming chunks
-	m.messages.AddEmpty(MessageTypeThinking)
-
-	_, tickCmd := m.thinking.StartAndRender()
-	// Thinking widget renders inline in chat area via buildChatContent()
-	// IMPORTANT: tickCmd must execute BEFORE processEvents to start the tick chain
-	// processEvents is blocking - it waits for next event from channel
-	return m, tea.Sequence(tickCmd, nil)
+	// Message already created, widget already active — nothing to do
+	return m, nil
 }
 
 // handleEventThinkingEnd handles the thinking end event.
@@ -278,6 +277,9 @@ func (m Model) handleEventThinkingEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 	}
 	// Complete thinking widget — stops tick animation chain
 	m.thinking.Complete()
+
+	// Clean up empty thinking message if LLM didn't output thinking content
+	m.messages.RemoveLastIfEmpty(MessageTypeThinking)
 
 	// Render accumulated thinking content and mark as complete (no cursor)
 	m.messages.RenderLastWithTypeAndComplete(MessageTypeThinking, m.renderer, m.styles, renderMessage)
