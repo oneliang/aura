@@ -47,19 +47,19 @@ require (
 
 // Local development - replace with actual published versions for external use
 replace (
-	github.com/oneliang/aura/adapters => ../../modules/adapters
-	github.com/oneliang/aura/agent => ../../modules/agent
-	github.com/oneliang/aura/api => ../../modules/api
-	github.com/oneliang/aura/cli => ../../modules/cli
-	github.com/oneliang/aura/commands => ../../modules/commands
-	github.com/oneliang/aura/core => ../../modules/core
-	github.com/oneliang/aura/habit => ../../modules/habit
-	github.com/oneliang/aura/knowledge => ../../modules/knowledge
-	github.com/oneliang/aura/mcp => ../../modules/mcp
-	github.com/oneliang/aura/personality => ../../modules/personality
-	github.com/oneliang/aura/session => ../../modules/session
-	github.com/oneliang/aura/shared => ../../modules/shared
-	github.com/oneliang/aura/skill => ../../modules/skill
-	github.com/oneliang/aura/storage => ../../modules/storage
-	github.com/oneliang/aura/tools => ../../modules/tools
+	github.com/oneliang/aura/adapters => ../../adapters
+	github.com/oneliang/aura/agent => ../../agent
+	github.com/oneliang/aura/api => ../../api
+	github.com/oneliang/aura/cli => ../../cli
+	github.com/oneliang/aura/commands => ../../commands
+	github.com/oneliang/aura/core => ../../core
+	github.com/oneliang/aura/habit => ../../habit
+	github.com/oneliang/aura/knowledge => ../../knowledge
+	github.com/oneliang/aura/mcp => ../../mcp
+	github.com/oneliang/aura/personality => ../../personality
+	github.com/oneliang/aura/session => ../../session
+	github.com/oneliang/aura/shared => ../../shared
+	github.com/oneliang/aura/skill => ../../skill
+	github.com/oneliang/aura/storage => ../../storage
+	github.com/oneliang/aura/tools => ../../tools
 )

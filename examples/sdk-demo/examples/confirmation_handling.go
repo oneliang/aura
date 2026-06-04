@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oneliang/aura/core/pkg/sdk"
-	"github.com/oneliang/aura/shared/pkg/events"
 )
 
 // ConfirmationHandling demonstrates handling interaction requests via event stream.
@@ -83,7 +82,7 @@ func ConfirmationHandling() error {
 				"approved": true,
 				"type":     interactionType,
 			}
-			respEvent := events.NewEventWithExtra(events.EventTypeInteractionResponse, "", respExtra, ev.RequestID())
+			respEvent := sdk.NewEventWithExtra(sdk.EventTypeInteractionResponse, "", respExtra, ev.RequestID())
 			if err := runtime.SendEvent(ctx, respEvent); err != nil {
 				fmt.Printf("Error sending response: %v\n", err)
 			}

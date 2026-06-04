@@ -172,9 +172,12 @@ func RecordRealEvents(t *testing.T) {
         "请帮我分析这个文件",
     )
     
-    // 录制
-    events, _ := rt.Process(ctx, "请帮我分析这个文件")
-    recorder.RecordFromChannel(events)
+    // 录制 - 使用事件流模式
+    requestID := "req-001"
+    rt.Start(ctx)
+    rt.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "请帮我分析这个文件", requestID))
+    recorder.RecordFromChannel(rt.Events())
+    rt.Stop(ctx)
     
     // 保存
     recorder.SaveToFile("testdata/real_scenario.json")
@@ -185,14 +188,14 @@ func RecordRealEvents(t *testing.T) {
 
 ```bash
 # 运行所有新测试
-go test ./modules/core/pkg/sdk/... ./modules/cli/pkg/tui/... -count=1
+go test ./core/pkg/sdk/... ./cli/pkg/tui/... -count=1
 
 # 运行特定测试
-go test -run TestEventFlow ./modules/core/pkg/sdk/
-go test -run TestAdapter ./modules/cli/pkg/tui/
+go test -run TestEventFlow ./core/pkg/sdk/
+go test -run TestAdapter ./cli/pkg/tui/
 
 # 生成覆盖率报告
-go test -coverprofile=cover.out ./modules/core/pkg/sdk/...
+go test -coverprofile=cover.out ./core/pkg/sdk/...
 go tool cover -html=cover.out
 ```
 

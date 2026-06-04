@@ -44,9 +44,10 @@ runtime, err := sdk.NewRuntime(cfg,
 if err := runtime.Initialize(ctx); err != nil { ... }
 defer runtime.Shutdown()
 
-// 4. Process input - returns event channel
-events, err := runtime.Process(ctx, "Hello!")
-for ev := range events {
+// 4. Start and send input via event stream
+runtime.Start(ctx)
+runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "Hello!", "req-1"))
+for ev := range runtime.Events() {
     switch ev.Type() {
     case sdk.EventTypeResponse:
         fmt.Println(ev.Content())
@@ -54,6 +55,7 @@ for ev := range events {
         break
     }
 }
+runtime.Stop(ctx)
 ```
 
 ## Custom Tools

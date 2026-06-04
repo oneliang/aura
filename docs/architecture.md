@@ -607,7 +607,7 @@ func (s *SessionContext) GetTaskList() *tasks.TaskList
 ### Agent 委托流程
 
 ```
-1. 用户输入 → runtime.Process()
+1. 用户输入 → runtime.SendEvent(EventTypeUserInput)
 2. Engine.Run() 开始 ReAct 循环
 3. LLM 决定委托给 Agent → 生成 command_delegate_to_agent
 4. CommandProvider 执行委托命令
@@ -1885,7 +1885,7 @@ type (
     │
     ▼
 ┌─────────────────┐
-│ runtime.Process()│ 处理输入
+│ runtime.SendEvent()│ 处理输入
 └─────────────────┘
     │
     ▼
@@ -1933,10 +1933,10 @@ Thinking Action Result Response Task    Done
     │
     ▼
 ┌─────────────────────────┐
-│ Runtime.Process()       │ 处理消息
-│ - memory.Add(User)      │ 添加用户消息
-│ - Engine.ReAct()        │ 执行 ReAct 循环
-│ - SessionMemory 持久化  │ 由 Engine 协调持久化
+│ ProcessMessage()        │ 事件流模式处理消息
+│ - rt.Start(ctx)         │ 启动事件流
+│ - rt.SendEvent(UserInput)│ 发送用户输入事件
+│ - rt.Events()           │ 返回事件流
 └─────────────────────────┘
     │
     ▼

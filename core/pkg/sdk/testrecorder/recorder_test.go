@@ -263,25 +263,31 @@ func TestRecorder_IntegrationWithRuntime(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	events, err := rt.Process(ctx, "Say hello")
-	if err != nil {
-		t.Fatalf("Process failed: %v", err)
+	// Event stream pattern
+	requestID := "test-request-001"
+	if startErr := rt.Start(ctx); startErr != nil {
+		t.Fatalf("Start failed: %v", startErr)
 	}
+	if sendErr := rt.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "Say hello", requestID)); sendErr != nil {
+		t.Fatalf("SendEvent failed: %v", sendErr)
+	}
+	events := rt.Events()
 
-	err = recorder.RecordFromChannelWithTimeout(events, 30*time.Second)
-	if err != nil {
-		t.Fatalf("Recording failed: %v", err)
+	recordErr := recorder.RecordFromChannelWithTimeout(events, 30*time.Second)
+	if recordErr != nil {
+		t.Fatalf("Recording failed: %v", recordErr)
 	}
 
 	// Save for later use
 	tmpDir := t.TempDir()
 	testPath := filepath.Join(tmpDir, "integration_events.json")
-	err = recorder.SaveToFile(testPath)
-	if err != nil {
-		t.Fatalf("SaveToFile failed: %v", err)
+	saveErr := recorder.SaveToFile(testPath)
+	if saveErr != nil {
+		t.Fatalf("SaveToFile failed: %v", saveErr)
 	}
 
 	t.Logf("Recorded %d events to %s", recorder.GetMetadata().EventCount, testPath)
+}
 }
 
 // mockEvent is a mock implementation of sdk.Event for testing.

@@ -586,8 +586,9 @@ func (e *Engine) processInputQueue() {
 		// Use per-request event channel
 		eventCh := request.EventChan
 
-		// Note: User message is already added to memory by Runtime.Process()
-		// We don't add it again here to avoid duplication in session storage
+		// Note: User message is added to memory by event stream handler (handleUserInput)
+		// when EventTypeUserInput is received via SendEvent. We don't add it again here
+		// to avoid duplication in session storage.
 
 		e.logger.Info().Str("requestID", request.RequestID).Msg("processInputQueue: starting ReAct loop")
 

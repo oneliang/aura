@@ -43,22 +43,6 @@
 //	runtime.Stop(ctx)
 //	defer runtime.Shutdown()
 //
-// Example usage (legacy Process pattern - deprecated):
-//
-//	// Create runtime from config
-//	cfg := config.Load(...)
-//	runtime, err := sdk.NewRuntime(sdk.FromConfig(cfg))
-//	if err != nil { ... }
-//
-//	// Initialize
-//	if err := runtime.Initialize(ctx); err != nil { ... }
-//
-//	// Process input
-//	events, err := runtime.Process(ctx, "Hello, Aura!")
-//	for ev := range events { ... }
-//
-//	// Shutdown
-//	defer runtime.Shutdown()
 package sdk
 
 import (
