@@ -141,18 +141,23 @@ func renderToolEndBlock(result string, duration time.Duration, executionID strin
 	return b.String()
 }
 
-// renderToolBlockComplete renders a complete tool block by combining start and end blocks.
-// Shows execution time in header for better visibility.
+// renderToolBlockComplete renders a complete tool block with collapse indicator.
+// Shows "[+]" when collapsed (click/ctrl+o to expand), "[-]" when expanded.
 // Applies left border for visual separation.
-func renderToolBlockComplete(toolName string, params string, result string, duration time.Duration, executionID string, styles UIStyles) string {
+func renderToolBlockComplete(toolName string, params string, result string, duration time.Duration, executionID string, styles UIStyles, collapsed bool) string {
 	var b strings.Builder
 
-	// Header with execution ID and duration
+	// Header with execution ID, duration, and collapse indicator
 	durationStr := formatDuration(duration)
+	collapseIndicator := "[-]" // Expanded (can collapse)
+	if collapsed {
+		collapseIndicator = "[+]" // Collapsed (can expand)
+	}
+
 	if executionID != "" {
-		b.WriteString("  " + styles.ToolBlockHeader.Render("● "+toolName) + " " + styles.Help.Render("["+executionID+"]") + " " + styles.Duration.Render("["+durationStr+"]"))
+		b.WriteString("  " + styles.ToolBlockHeader.Render("● "+toolName) + " " + styles.Help.Render("["+executionID+"]") + " " + styles.Duration.Render("["+durationStr+"]") + " " + styles.Help.Render(collapseIndicator))
 	} else {
-		b.WriteString("  " + styles.ToolBlockHeader.Render("● "+toolName) + " " + styles.Duration.Render("["+durationStr+"]"))
+		b.WriteString("  " + styles.ToolBlockHeader.Render("● "+toolName) + " " + styles.Duration.Render("["+durationStr+"]") + " " + styles.Help.Render(collapseIndicator))
 	}
 	b.WriteByte('\n')
 
@@ -167,12 +172,23 @@ func renderToolBlockComplete(toolName string, params string, result string, dura
 	}
 	b.WriteByte('\n')
 
-	// OUT line (reuse renderToolEndBlock's OUT portion)
+	// OUT line - show truncated preview when collapsed
 	b.WriteString("  ")
-	outContent := utils.Truncate(result, ToolBlockMaxContentWidth)
+	outContent := utils.Truncate(result, ToolBlockCollapsedPreview)
+	if collapsed {
+		// Show truncated preview + "..."
+		if len(result) > ToolBlockCollapsedPreview {
+			outContent = outContent + "..."
+		}
+	} else {
+		// Show full content (up to ToolBlockMaxContentWidth)
+		outContent = utils.Truncate(result, ToolBlockMaxContentWidth)
+	}
+
 	if outContent == "" {
 		outContent = "(no output)"
 	}
+
 	outLabel := styles.ToolBlockOut.Render("OUT ")
 	if executionID != "" {
 		b.WriteString(outLabel + styles.Help.Render("["+executionID+"] ") + outContent)

@@ -195,6 +195,7 @@ func (s *MessageStore) RenderLastWithTypeAndComplete(msgType MessageType, render
 // MergeToolBlock finds the corresponding ToolStart message by executionID and merges the result.
 // This creates a complete IN/OUT block for each tool instead of separate IN and OUT messages.
 // Uses executionID for precise matching of concurrent tool executions.
+// Long outputs are automatically collapsed with "[+]" indicator.
 func (s *MessageStore) MergeToolBlockByExecID(executionID, toolName, result string, duration time.Duration, styles UIStyles) {
 	startMsg := s.findToolStartByExecID(executionID)
 	if startMsg == nil {
@@ -204,14 +205,20 @@ func (s *MessageStore) MergeToolBlockByExecID(executionID, toolName, result stri
 		return
 	}
 
+	// Determine if output should be collapsed (long output)
+	shouldCollapse := len(result) > ToolBlockCollapseThreshold
+
 	// Merge: update the ToolStart message to include OUT content
 	params := s.extractParams(startMsg)
-	startMsg.Rendered = renderToolBlockComplete(toolName, params, result, duration, executionID, styles)
+	startMsg.Rendered = renderToolBlockComplete(toolName, params, result, duration, executionID, styles, shouldCollapse)
 	// Mark as merged so renderMessage won't re-render as IN-only block on width change
 	if startMsg.Extra == nil {
 		startMsg.Extra = make(map[string]any)
 	}
 	startMsg.Extra["merged"] = true
+	startMsg.Extra["collapsed"] = shouldCollapse // Track collapse state
+	startMsg.Extra["result"] = result            // Store full result for expand
+	startMsg.Extra["duration"] = duration        // Store duration for re-render
 }
 
 // findToolStartByExecID finds a ToolStart message by executionID for precise matching.
@@ -236,6 +243,52 @@ func (s *MessageStore) extractParams(msg *Message) string {
 		}
 	}
 	return ""
+}
+
+// ToggleToolBlockCollapse toggles the collapse state of a tool block message.
+// Requires styles parameter for re-rendering the tool block.
+// Returns true if a message was found and toggled.
+func (s *MessageStore) ToggleToolBlockCollapse(executionID string, styles UIStyles) bool {
+	for i := len(s.messages) - 1; i >= 0; i-- {
+		if s.messages[i].Type == MessageTypeToolStart && s.messages[i].Extra != nil {
+			if id, ok := s.messages[i].Extra["execution_id"].(string); ok && id == executionID {
+				// Toggle collapse state
+				currentCollapsed := s.messages[i].Extra["collapsed"] == true
+				newCollapsed := !currentCollapsed
+				s.messages[i].Extra["collapsed"] = newCollapsed
+
+				// Re-render with new state
+				toolName := s.messages[i].Content
+				params := s.extractParams(s.messages[i])
+				result, _ := s.messages[i].Extra["result"].(string)
+				duration := extractDuration(s.messages[i].Extra)
+
+				s.messages[i].Rendered = renderToolBlockComplete(
+					toolName, params, result, duration, executionID, styles, newCollapsed,
+				)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// extractDuration extracts duration from Extra field (handles multiple types).
+func extractDuration(extra map[string]any) time.Duration {
+	if extra == nil {
+		return 0
+	}
+	switch d := extra["duration"].(type) {
+	case time.Duration:
+		return d
+	case int64:
+		return time.Duration(d)
+	case float64:
+		return time.Duration(int64(d))
+	case int:
+		return time.Duration(d)
+	}
+	return 0
 }
 
 // RenderLast renders the last assistant message.

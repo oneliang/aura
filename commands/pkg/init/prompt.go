@@ -3,43 +3,37 @@ package init
 
 import "fmt"
 
-// BuildInitPrompt builds the prompt for codebase analysis.
+// BuildInitPrompt builds the prompt for workspace analysis.
 func BuildInitPrompt(cwd string) string {
 	return fmt.Sprintf(`
-You are a codebase analyst. Explore the project at %s and generate AURA.md.
+You are a workspace analyst. Explore the workspace at %s and generate AURA.md.
 
 ## IMPORTANT: Explore Independently
 - DO NOT rely on existing documentation (README.md etc.) - they may be outdated
-- Use tools (glob, grep, file_read) to explore the ACTUAL code structure
-- Analyze files yourself to understand current architecture
+- Use tools (glob, grep, file_read) to explore the ACTUAL structure and content
+- Analyze files yourself to understand the workspace purpose
 - Generate documentation based on YOUR exploration, not provided content
 
 ## Task
-Explore the codebase using tools and generate AURA.md for AI assistants.
+Explore the workspace using tools and generate AURA.md for AI assistants.
 
 ## Exploration Steps
-1. Use glob to find key files (Makefile, go.mod, package.json, configs)
-2. Use grep to understand code patterns and architecture
-3. Read main entry points and config files
-4. Discover architecture by exploring directory structure
+1. Use glob to observe directory structure and file type distribution
+2. Use grep to understand patterns (code, documents, configs)
+3. Read key files (README, configs, entry points, main documents)
+4. Determine workspace type: code project? document library? notes? mixed? other?
 
-## What AI Assistants Need
-1. Exact build/test/lint commands (from Makefile, configs)
-2. Architecture patterns (from actual code exploration)
-3. Key file locations and their purposes
-4. Code style and naming conventions
-5. Important details for working with this codebase
+## Output Requirements
+Generate AURA.md content appropriate for the workspace type:
 
-## Required Sections
-1. Build & Development Commands - use ACTUAL commands from files
-2. Architecture Overview - describe what YOU discovered
-3. Configuration - file locations and key settings
-4. Development Patterns - conventions YOU observed
-5. Notes - important details YOU found
+- **If code project**: Include build/test commands, architecture overview, entry points, development patterns
+- **If document library**: Include document organization, key documents, purpose, workflow
+- **If mixed**: Combine relevant information from both
+- **If other**: Organize content based on actual structure and purpose
 
 ## Output Format
 - Output ONLY the AURA.md markdown content
-- Start directly with a project name heading
+- Start with the workspace/project name as heading
 - Be concise and actionable
 - Include file paths where relevant
 `, cwd)
@@ -51,13 +45,13 @@ func BuildFullInitPrompt(cwd string, projectContent string) string {
 }
 
 // InitSystemPrompt is the system prompt for init analysis.
-const InitSystemPrompt = `You are a codebase analyst generating AURA.md for AI assistants.
+const InitSystemPrompt = `You are a workspace analyst generating AURA.md for AI assistants.
 
 CRITICAL RULES:
-1. Explore codebase using tools - DO NOT rely on provided file content
-2. Existing docs (README.md) may be outdated - analyze actual code
-3. Use glob, grep, file_read to discover architecture yourself
-4. Focus on what AI needs: commands, patterns, file locations
+1. Explore workspace using tools - DO NOT rely on provided file content
+2. Existing docs (README.md) may be outdated - analyze actual content
+3. Use glob, grep, file_read to discover structure yourself
+4. Determine workspace type and generate appropriate content
 5. Be concise and actionable
 
 Output ONLY the AURA.md markdown based on YOUR exploration.

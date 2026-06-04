@@ -26,7 +26,9 @@ const (
 	SkillCacheTTL = 5 * time.Minute // Cache TTL for loaded skills
 
 	// Tool block
-	ToolBlockMaxContentWidth = 400 // Maximum width for tool block content
+	ToolBlockMaxContentWidth   = 400  // Maximum width for tool block content
+	ToolBlockCollapseThreshold = 200  // Collapse if OUT content exceeds this length
+	ToolBlockCollapsedPreview  = 50   // Characters to show when collapsed
 
 	// Tool display strings (non-translatable)
 	ToolErrorIcon = "  ✗ "

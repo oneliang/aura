@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/httpclient"
 	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/oneliang/aura/shared/pkg/user"
@@ -99,6 +100,11 @@ func (r *AgentRuntime) Initialize(ctx context.Context) error {
 	if err := r.initPostSetup(ctx); err != nil {
 		return err
 	}
+
+	// Phase 10: Initialize interaction tracking maps for confirmation flow
+	r.interactionMu.Lock()
+	r.interactionPending = make(map[string]chan events.InteractionResponse)
+	r.interactionMu.Unlock()
 
 	r.initialized = true
 	if r.session != nil {

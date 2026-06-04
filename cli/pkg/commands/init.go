@@ -5,26 +5,31 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	initpkg "github.com/oneliang/aura/commands/pkg/init"
+	"github.com/oneliang/aura/core/pkg/engine"
+	"github.com/oneliang/aura/core/pkg/sdk"
+	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/events"
+	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/spf13/cobra"
 )
 
 // InitCmd is the command for initializing AURA.md.
 var InitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize AURA.md with codebase documentation",
-	Long: `Scan project structure and generate AURA.md file.
+	Short: "Initialize AURA.md with workspace documentation",
+	Long: `Explore the current workspace and generate AURA.md file.
 
-The generated file includes:
-- Build & Development Commands (from Makefile/package.json)
-- Architecture Overview (module structure)
-- Key Interfaces (with file paths)
-- Configuration (config file locations)
-- Development Patterns (project-specific)
+The generated file adapts to the workspace type:
+- Code projects: Build commands, architecture, entry points
+- Document libraries: Document organization, key files, purpose
+- Mixed/Other: Appropriate structure based on content
 
-This command helps Aura quickly understand your project structure
-and coding conventions, reducing repetitive context setup.`,
+This command helps Aura quickly understand your workspace
+and reduces repetitive context setup.`,
 	Run: runInit,
 }
 
@@ -42,19 +47,102 @@ func runInit(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Execute init handler directly
-	handler := &initpkg.Handler{}
+	auraMdPath := filepath.Join(cwd, "AURA.md")
 
-	params := map[string]any{
-		"cwd":   cwd,
-		"force": initForce,
+	// Check if AURA.md already exists
+	if !initForce {
+		if _, err := os.Stat(auraMdPath); err == nil {
+			fmt.Printf("AURA.md already exists at: %s\nUse --force to regenerate.\n", auraMdPath)
+			return
+		}
 	}
 
-	result, err := handler.Execute(ctx, "command_init", params)
+	// Load config (empty string uses default path ~/.aura/config.yaml)
+	cfg, err := config.Load("")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println(result)
+	// Build init-specific runtime config
+	initCfg := sdk.FromConfig(cfg)
+	initCfg.SystemPrompt = initpkg.InitSystemPrompt
+	initCfg.EnableSubAgent = false
+	initCfg.SessionID = "" // No persistence
+	initCfg.Agent.PlanningMode = string(engine.ModeImplicit)
+
+	// Create logger
+	log := logger.NewNamed(logger.Config{
+		Level:  "info",
+		Format: "text",
+		Output: "stdout",
+		Module: "init",
+	})
+
+	// Create runtime
+	rt, err := sdk.NewRuntime(initCfg,
+		sdk.WithAutoApprove(),
+		sdk.WithLogger(log),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating runtime: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize runtime
+	if err := rt.Initialize(ctx); err != nil {
+		rt.Shutdown()
+		fmt.Fprintf(os.Stderr, "Error initializing runtime: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Build prompt
+	prompt := initpkg.BuildInitPrompt(cwd)
+
+	fmt.Println("Exploring workspace...")
+
+	// Process and collect events
+	eventChan, err := rt.Process(ctx, prompt)
+	if err != nil {
+		rt.Shutdown()
+		fmt.Fprintf(os.Stderr, "Error processing: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Collect response content
+	var contentBuilder strings.Builder
+	for event := range eventChan {
+		switch event.Type() {
+		case events.EventTypeResponse, events.EventTypeResponseChunk:
+			if event.Content() != "" {
+				contentBuilder.WriteString(event.Content())
+			}
+		case events.EventTypeError:
+			fmt.Fprintf(os.Stderr, "Error: %s\n", event.Content())
+		}
+	}
+
+	// Shutdown runtime
+	rt.Shutdown()
+
+	content := contentBuilder.String()
+	if content == "" {
+		fmt.Fprintf(os.Stderr, "Error: No content generated\n")
+		os.Exit(1)
+	}
+
+	// Write AURA.md
+	if err := os.WriteFile(auraMdPath, []byte(content), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing AURA.md: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Generated AURA.md at: %s\n\nPreview:\n%s\n", auraMdPath, truncatePreview(content, 500))
+}
+
+func truncatePreview(content string, maxLen int) string {
+	if len(content) <= maxLen {
+		return content
+	}
+	return content[:maxLen] + "..."
 }

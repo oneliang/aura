@@ -154,6 +154,11 @@ func (m Model) syncViewport() Model {
 
 // handleKeyMsg handles keyboard input.
 func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Ctrl+O: toggle tool block collapse (works during processing too)
+	if msg.Code == 'o' && msg.Mod == tea.ModCtrl {
+		return m.toggleLastToolBlock()
+	}
+
 	// 1. Handle session popup
 	if cmd, handled := m.sessionPopup.HandleKeyMsg(msg, m.styles); handled {
 		return m, cmd
@@ -679,4 +684,21 @@ func (m Model) doCancel() {
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
+}
+
+// toggleLastToolBlock toggles the collapse state of the most recent tool block.
+// Finds the last merged ToolStart message and toggles its collapsed state.
+func (m Model) toggleLastToolBlock() (tea.Model, tea.Cmd) {
+	msgs := m.messages.GetMessages()
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Type == MessageTypeToolStart && msgs[i].Extra != nil {
+			if merged, ok := msgs[i].Extra["merged"].(bool); ok && merged {
+				if id, ok := msgs[i].Extra["execution_id"].(string); ok && id != "" {
+					m.messages.ToggleToolBlockCollapse(id, m.styles)
+					return m, nil
+				}
+			}
+		}
+	}
+	return m, nil
 }

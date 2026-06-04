@@ -139,4 +139,10 @@ func init() {
 		Command:  "/status",
 		HelpText: "Execution status",
 	})
+	RegisterKeyBinding(KeyBinding{
+		Keys:     []string{"ctrl+o"},
+		Action:   "toggle_tool",
+		Type:     ActionTUI,
+		HelpText: "Toggle tool output collapse",
+	})
 }
