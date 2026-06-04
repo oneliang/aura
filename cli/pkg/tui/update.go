@@ -316,9 +316,13 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		// Confirm selection
 		confirmed := m.confirmState.Selected == 0 // 0 = Yes, 1 = No
-		log.Debug().Bool("confirmed", confirmed).Bool("has_response_ch", m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil).Msg("handleConfirmKey: Enter pressed")
+		log.Debug().Bool("confirmed", confirmed).Bool("has_response_ch", m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil).Str("request_id", m.confirmState.RequestID).Msg("handleConfirmKey: Enter pressed")
 		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
+			// Old mechanism: direct channel response
 			m.confirmState.Request.ResponseCh <- confirmed
+		} else if m.confirmState.RequestID != "" {
+			// New mechanism: event stream response
+			m.sendInteractionResponse(confirmed)
 		}
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
@@ -330,6 +334,9 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Cancel
 		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
 			m.confirmState.Request.ResponseCh <- false
+		} else if m.confirmState.RequestID != "" {
+			// New mechanism: send rejection via event stream
+			m.sendInteractionResponse(false)
 		}
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
@@ -340,9 +347,11 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle Y/N key presses
 	switch msg.Text {
 	case "y", "Y":
-		log.Debug().Bool("has_response_ch", m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil).Msg("handleConfirmKey: Y pressed")
+		log.Debug().Bool("has_response_ch", m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil).Str("request_id", m.confirmState.RequestID).Msg("handleConfirmKey: Y pressed")
 		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
 			m.confirmState.Request.ResponseCh <- true
+		} else if m.confirmState.RequestID != "" {
+			m.sendInteractionResponse(true)
 		}
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
@@ -351,6 +360,8 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "n", "N":
 		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
 			m.confirmState.Request.ResponseCh <- false
+		} else if m.confirmState.RequestID != "" {
+			m.sendInteractionResponse(false)
 		}
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil

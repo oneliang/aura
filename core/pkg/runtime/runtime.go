@@ -815,6 +815,9 @@ func (r *AgentRuntime) handleInteractionResponse(event Event) error {
 		}
 		if typ, ok := extra["type"].(events.InteractionType); ok {
 			resp.Type = typ
+		} else if typStr, ok := extra["type"].(string); ok {
+			// Fallback: handle string type (from JSON deserialization or cross-boundary)
+			resp.Type = events.InteractionType(typStr)
 		}
 	}
 

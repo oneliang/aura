@@ -816,7 +816,19 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 	// Get question response channel if present
 	questionRespCh := getQuestionRespCh(msg.Extra)
 
-	log.Debug().Str("type", confType).Str("tool", toolName).Bool("has_response_ch", responseCh != nil).Bool("has_question_resp_ch", questionRespCh != nil).Msg("handleEventConfirmationRequest: extracted details")
+	// Extract RequestID and InteractionType for event stream response (new architecture)
+	requestID := msg.RequestID
+	var interactionType events.InteractionType
+	if msg.Extra != nil {
+		if t, ok := msg.Extra["type"].(events.InteractionType); ok {
+			interactionType = t
+		} else if tStr, ok := msg.Extra["type"].(string); ok {
+			// Fallback: handle string type (from JSON deserialization)
+			interactionType = events.InteractionType(tStr)
+		}
+	}
+
+	log.Debug().Str("type", confType).Str("tool", toolName).Str("request_id", requestID).Bool("has_response_ch", responseCh != nil).Bool("has_question_resp_ch", questionRespCh != nil).Msg("handleEventConfirmationRequest: extracted details")
 
 	// Clear thinking widget so user attention is drawn to the confirmation dialog
 	if m.thinking != nil {
@@ -834,8 +846,10 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 
 	// Show confirmation dialog
 	m.confirmState = ConfirmState{
-		Waiting:  true,
-		Selected: 0, // Default to Yes/First option
+		Waiting:         true,
+		Selected:        0, // Default to Yes/First option
+		RequestID:       requestID,
+		InteractionType: interactionType,
 		Request: &ConfirmationRequest{
 			Type:           ConfirmationType(confType),
 			ToolName:       toolName,
