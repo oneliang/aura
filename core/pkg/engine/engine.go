@@ -139,6 +139,12 @@ type ToolConfirmationHandler func(ctx context.Context, toolName string, params m
 // PlanReviewHandler is called to get user approval for a generated plan before execution.
 type PlanReviewHandler func(ctx context.Context, goal string, steps []string) (bool, error)
 
+// RollbackConfirmHandler is called to get user confirmation for rollback after execution/verification failure.
+type RollbackConfirmHandler func(ctx context.Context, snapshotID string, files []string, reason string) (bool, error)
+
+// AskUserQuestionHandler is called to prompt the user with a question during plan review.
+type AskUserQuestionHandler func(ctx context.Context, question string, options []events.QuestionOption, questionType string) (*events.QuestionResponse, error)
+
 // PlanningMode represents the planning strategy mode.
 type PlanningMode string
 
@@ -276,6 +282,12 @@ type Engine struct {
 
 	// Rollback snapshot ID for current plan execution
 	rollbackSnapshotID string
+
+	// Rollback confirm handler (for execution/verification failure recovery)
+	rollbackConfirmFn RollbackConfirmHandler
+
+	// Ask user question handler (for plan review clarifying questions)
+	askUserQuestionFn AskUserQuestionHandler
 
 	// Shutdown guard
 	shutdownOnce sync.Once
@@ -426,6 +438,20 @@ func WithHookEngine(hookEngine *hooks.Engine) Option {
 func WithPlanReviewHandler(handler PlanReviewHandler) Option {
 	return func(e *Engine) {
 		e.planReviewFn = handler
+	}
+}
+
+// WithRollbackConfirmHandler sets the rollback confirm handler for plan mode rollback recovery.
+func WithRollbackConfirmHandler(handler RollbackConfirmHandler) Option {
+	return func(e *Engine) {
+		e.rollbackConfirmFn = handler
+	}
+}
+
+// WithAskUserQuestionHandler sets the ask user question handler for plan review clarifying questions.
+func WithAskUserQuestionHandler(handler AskUserQuestionHandler) Option {
+	return func(e *Engine) {
+		e.askUserQuestionFn = handler
 	}
 }
 

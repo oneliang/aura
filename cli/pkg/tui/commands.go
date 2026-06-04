@@ -15,6 +15,7 @@ import (
 	"github.com/oneliang/aura/core/pkg/engine"
 	"github.com/oneliang/aura/core/pkg/sdk"
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/i18n"
 	"github.com/oneliang/aura/shared/pkg/version"
 )
 
@@ -151,7 +152,8 @@ func init() {
 // Command handlers
 
 func cmdExit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
-	return m, tea.Quit
+	m.messages.Add(MessageTypeSystem, i18n.T("command.exit"), nil, renderMessage, m.renderer, m.styles)
+	return m, tea.Sequence(m.scrollToBottom(), tea.Quit)
 }
 
 func cmdClear(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {

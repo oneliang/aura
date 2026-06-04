@@ -48,7 +48,6 @@ const (
 	EventTypePlanVerifyResult    = sdk.EventTypePlanVerifyResult
 	EventTypePlanVerifyEnd       = sdk.EventTypePlanVerifyEnd
 	EventTypeSnapshotCreated     = sdk.EventTypeSnapshotCreated
-	EventTypeRollbackOffer       = sdk.EventTypeRollbackOffer
 	EventTypeRollbackComplete    = sdk.EventTypeRollbackComplete
 	EventTypeMaxStepsExceeded    = sdk.EventTypeMaxStepsExceeded
 	EventTypeAgentStart          = sdk.EventTypeAgentStart
@@ -148,11 +147,10 @@ type Message struct {
 
 // ChatEvent represents a single event from the agent.
 type ChatEvent struct {
-	Type       sdk.EventType
-	Content    string
-	Extra      map[string]any
-	ResponseCh chan bool // Direct response channel for confirmations
-	RequestID  string    // Unique ID for each user request (tracks event grouping)
+	Type      sdk.EventType
+	Content   string
+	Extra     map[string]any
+	RequestID string // Unique ID for each user request (tracks event grouping)
 }
 
 // GetSystemPromptFunc is the function signature for getting the system prompt.
@@ -213,8 +211,7 @@ const (
 	ConfirmationSensitiveTool ConfirmationType = "sensitive_tool"
 	ConfirmationPlanReview    ConfirmationType = "plan_review"
 	ConfirmationQuestion      ConfirmationType = "question"
-	ConfirmationRollback      ConfirmationType = "rollback" // Rollback after execution/verification failure
-)
+	)
 
 // QuestionType represents the type of question.
 type QuestionType string
@@ -235,20 +232,18 @@ type QuestionOption struct {
 // ConfirmationRequest represents a Y/N confirmation request or a question.
 // Supports sensitive tool, plan review, and question types.
 type ConfirmationRequest struct {
-	Type       ConfirmationType
-	ToolName   string
-	Params     map[string]any
-	Message    string
-	PlanGoal   string   // Plan review: the plan goal
-	PlanSteps  []string // Plan review: step descriptions
-	ResponseCh chan bool
+	Type      ConfirmationType
+	ToolName  string
+	Params    map[string]any
+	Message   string
+	PlanGoal  string   // Plan review: the plan goal
+	PlanSteps []string // Plan review: step descriptions
 
 	// AskUserQuestion fields
-	Question       string           // The question text to display
-	QuestionType   QuestionType     // "text", "choice", or "multi_choice"
-	Options        []QuestionOption // Available options for choice/multi_choice
-	DefaultAnswer  string           // Optional default answer
-	QuestionRespCh chan QuestionResponse // Response channel for questions
+	Question      string           // The question text to display
+	QuestionType  QuestionType     // "text", "choice", or "multi_choice"
+	Options       []QuestionOption // Available options for choice/multi_choice
+	DefaultAnswer string           // Optional default answer
 }
 
 // QuestionResponse represents the response to an AskUserQuestion request.

@@ -136,6 +136,7 @@ func (r *AgentRuntime) initClients(ctx context.Context) error {
 		// BUT preserve safety restrictions from original config
 		autoApprovePermCfg := &config.PermissionsConfig{
 			DefaultLevel:      "allow",
+			Tools:             r.config.Permissions.Tools, // Preserve per-tool settings like file_write: ask
 			ShellRestrictions: r.config.Permissions.ShellRestrictions,
 			SSHRestrictions:   r.config.Permissions.SSHRestrictions,
 			TrustedDirs:       r.config.Permissions.TrustedDirs,
@@ -267,6 +268,8 @@ func (r *AgentRuntime) initEngine(ctx context.Context) error {
 		factory.WithSystemPrompt(systemPrompt),
 		factory.WithConfirmationHandler(confirmHandler),
 		factory.WithPlanReviewHandler(r.PlanReviewHandler()),
+		factory.WithRollbackConfirmHandler(r.RollbackConfirmHandler()),
+		factory.WithAskUserQuestionHandler(r.AskUserQuestionHandler()),
 		factory.WithDataDir(r.dataDir),
 		factory.WithSessionID(r.sessionID),
 	}
@@ -495,6 +498,8 @@ func (r *AgentRuntime) initializeSubAgent(ctx context.Context) error {
 	agentFactoryOpts := []factory.EngineFactoryOption{
 		factory.WithSystemPrompt(systemPrompt),
 		factory.WithConfirmationHandler(confirmHandler),
+		factory.WithRollbackConfirmHandler(r.RollbackConfirmHandler()),
+		factory.WithAskUserQuestionHandler(r.AskUserQuestionHandler()),
 		factory.WithDataDir(r.dataDir),
 		factory.WithSessionID(r.sessionID),
 	}

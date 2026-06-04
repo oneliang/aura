@@ -257,8 +257,8 @@ func TestAgentAddTool(t *testing.T) {
 	agent.AddTool(mockTool)
 
 	tools := agent.GetTools()
-	if len(tools) != 2 {
-		t.Errorf("expected 2 tools (test_tool + task), got %d", len(tools))
+	if len(tools) != 1 {
+		t.Errorf("expected 1 tool (test_tool), got %d", len(tools))
 	}
 
 	// Verify test_tool is present (task tool is always registered)
@@ -858,7 +858,7 @@ Action: {"tool": "calculator", "parameters": {"expression": "2+2"}}`,
 
 	// Collect events
 	var eventTypes []events.EventType
-	var toolStartFound, toolEndFound, thinkingFound bool
+	var toolStartFound, toolEndFound bool
 
 	for event := range eventCh {
 		eventTypes = append(eventTypes, event.Type())
@@ -873,14 +873,9 @@ Action: {"tool": "calculator", "parameters": {"expression": "2+2"}}`,
 			if !strings.Contains(event.Content(), "4") {
 				t.Errorf("ToolEnd event content = %q, want to contain %q", event.Content(), "4")
 			}
-		case events.EventTypeThinkingStart, events.EventTypeThinkingEnd:
-			thinkingFound = true
 		}
 	}
 
-	if !thinkingFound {
-		t.Error("Expected Thinking event")
-	}
 	if !toolStartFound {
 		t.Error("Expected ToolStart event")
 	}

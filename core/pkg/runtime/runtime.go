@@ -10,6 +10,7 @@ import (
 
 	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/logger"
+	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 
 	agentloader "github.com/oneliang/aura/agent/pkg/loader"
 	commands "github.com/oneliang/aura/commands/pkg"
@@ -540,6 +541,47 @@ func (r *AgentRuntime) PlanReviewHandler() func(ctx context.Context, goal string
 	}
 }
 
+// RollbackConfirmHandler returns a rollback confirm handler that uses the event stream.
+func (r *AgentRuntime) RollbackConfirmHandler() func(ctx context.Context, snapshotID string, files []string, reason string) (bool, error) {
+	return func(ctx context.Context, snapshotID string, files []string, reason string) (bool, error) {
+		req := events.InteractionRequest{
+			Type:           events.InteractionTypeRollbackConfirm,
+			RollbackReason: reason,
+			Timeout:        60 * time.Second,
+		}
+		resp := r.requestInteraction(ctx, req)
+		if resp.Error != nil {
+			return false, resp.Error
+		}
+		return resp.Approved, nil
+	}
+}
+
+// AskUserQuestionHandler returns an ask user question handler that uses the event stream.
+func (r *AgentRuntime) AskUserQuestionHandler() func(ctx context.Context, question string, options []events.QuestionOption, questionType string) (*events.QuestionResponse, error) {
+	return func(ctx context.Context, question string, options []events.QuestionOption, questionType string) (*events.QuestionResponse, error) {
+		req := events.InteractionRequest{
+			Type:         events.InteractionTypeAskUserQuestion,
+			Question:     question,
+			QuestionType: questionType,
+			Options:      options,
+			Timeout:      120 * time.Second,
+		}
+		resp := r.requestInteraction(ctx, req)
+		if resp.Cancelled {
+			return nil, fmt.Errorf("user cancelled the question")
+		}
+		if resp.Error != nil {
+			return nil, resp.Error
+		}
+		return &events.QuestionResponse{
+			Answer:    resp.AnswerText,
+			Answers:   resp.Selections,
+			Cancelled: resp.Cancelled,
+		}, nil
+	}
+}
+
 // SetAgentDelegateFn sets the agent delegation function callback.
 // This allows the command provider to trigger agent delegation.
 func (r *AgentRuntime) SetAgentDelegateFn(fn func(ctx context.Context, agentName string, task string) (string, error)) {
@@ -878,6 +920,10 @@ func (r *AgentRuntime) processInputQueue(ctx context.Context) {
 			// 处理单个请求
 			r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", req.RequestID))
 
+			// Add user message to memory before processing
+			// This is essential for buildReActMessages to include user input
+			r.memory.AddWithType(sharedmemory.RoleUser, req.Input, sharedmemory.MessageTypeUser)
+
 			// 直接调用Engine.Run而非Process包装器
 			eventsCh, err := r.agent.Run(ctx, req.Input)
 			if err != nil {
@@ -887,13 +933,14 @@ func (r *AgentRuntime) processInputQueue(ctx context.Context) {
 			}
 
 			// 转发事件到OUT通道，同时响应context取消
+			eventLoop:
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case ev, ok := <-eventsCh:
 					if !ok {
-						break
+						break eventLoop
 					}
 					// 设置RequestID以确保事件流匹配
 					if ev.RequestID() == "" {

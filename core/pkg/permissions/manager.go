@@ -60,38 +60,50 @@ func NewManager(config *PermissionConfig) (*Manager, error) {
 
 // CheckPermission checks if a tool can be executed.
 // Returns (allowed, requiresConfirmation, reason).
+// Per-tool settings take precedence over default level.
 func (m *Manager) CheckPermission(ctx context.Context, toolName string, params map[string]any) (bool, bool, string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Global allow: default_level=allow overrides all per-tool settings
+	// Check tool-specific permission setting FIRST (takes precedence)
+	controlLevel, ok := m.config.Tools[toolName]
+	if ok {
+		switch controlLevel {
+		case ControlAllow:
+			return true, false, ""
+		case ControlDeny:
+			return false, false, fmt.Sprintf("tool %q is denied by configuration", toolName)
+		case ControlAsk:
+			// Check session grants before requiring confirmation
+			for _, session := range m.sessions {
+				if session.GrantedTools[toolName] {
+					return true, false, "" // Granted in session
+				}
+			}
+			return true, true, "" // Requires confirmation
+		}
+	}
+
+	// Fall back to default level for unknown tools
 	if m.config.DefaultLevel == ControlAllow {
 		return true, false, ""
 	}
 
-	// Check session-based grants first
+	// Check session-based grants for unknown tools
 	for _, session := range m.sessions {
 		if session.GrantedTools[toolName] {
 			return true, false, ""
 		}
 	}
 
-	// Check tool-specific permission setting
-	controlLevel, ok := m.config.Tools[toolName]
-	if !ok {
-		// Unknown tool - use default control level
-		controlLevel = m.config.DefaultLevel
-	}
-
-	switch controlLevel {
-	case ControlAllow:
-		return true, false, ""
+	// Handle default level for unknown tools
+	switch m.config.DefaultLevel {
 	case ControlDeny:
-		return false, false, fmt.Sprintf("tool %q is denied by configuration", toolName)
+		return false, false, fmt.Sprintf("tool %q is denied by default level", toolName)
 	case ControlAsk:
-		fallthrough
+		return true, true, ""
 	default:
-		// Requires user confirmation
+		// Unknown default level - require confirmation
 		return true, true, ""
 	}
 }

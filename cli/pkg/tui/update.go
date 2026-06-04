@@ -9,16 +9,6 @@ import (
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Debug: log paste-related messages (temporary)
-	switch msg := msg.(type) {
-	case tea.PasteMsg:
-		log.Debug().Int("len", len(msg.Content)).Str("content_preview", msg.Content[:min(50, len(msg.Content))]).Msg("收到PasteMsg")
-	case tea.KeyPressMsg:
-		if msg.Code == tea.KeyEnter {
-			log.Debug().Bool("shift", msg.Mod == tea.ModShift).Msg("收到Enter KeyPressMsg")
-		}
-	}
-
 	// Refresh statusBar model pointer — Bubble Tea MVU returns new Model
 	// values on each Update, so the pointer captured in New() becomes stale.
 	m.statusBar.model = &m
@@ -295,8 +285,6 @@ func (m Model) handleViewportScroll(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleConfirmKey handles Y/N confirmation and question input.
 func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	log.Debug().Str("key", msg.String()).Bool("waiting", m.confirmState.Waiting).Msg("handleConfirmKey: called")
-
 	// Check if this is a question type
 	if m.confirmState.Request != nil && m.confirmState.Request.Type == ConfirmationQuestion {
 		return m.handleQuestionKey(msg)
@@ -316,12 +304,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		// Confirm selection
 		confirmed := m.confirmState.Selected == 0 // 0 = Yes, 1 = No
-		log.Debug().Bool("confirmed", confirmed).Bool("has_response_ch", m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil).Str("request_id", m.confirmState.RequestID).Msg("handleConfirmKey: Enter pressed")
-		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
-			// Old mechanism: direct channel response
-			m.confirmState.Request.ResponseCh <- confirmed
-		} else if m.confirmState.RequestID != "" {
-			// New mechanism: event stream response
+		if m.confirmState.RequestID != "" {
 			m.sendInteractionResponse(confirmed)
 		}
 		m.confirmState.Waiting = false
@@ -332,10 +315,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEsc:
 		// Cancel
-		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
-			m.confirmState.Request.ResponseCh <- false
-		} else if m.confirmState.RequestID != "" {
-			// New mechanism: send rejection via event stream
+		if m.confirmState.RequestID != "" {
 			m.sendInteractionResponse(false)
 		}
 		m.confirmState.Waiting = false
@@ -347,10 +327,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle Y/N key presses
 	switch msg.Text {
 	case "y", "Y":
-		log.Debug().Bool("has_response_ch", m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil).Str("request_id", m.confirmState.RequestID).Msg("handleConfirmKey: Y pressed")
-		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
-			m.confirmState.Request.ResponseCh <- true
-		} else if m.confirmState.RequestID != "" {
+		if m.confirmState.RequestID != "" {
 			m.sendInteractionResponse(true)
 		}
 		m.confirmState.Waiting = false
@@ -358,9 +335,7 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.state.SetDisplayState(DisplayProcessing)
 		return m, nil
 	case "n", "N":
-		if m.confirmState.Request != nil && m.confirmState.Request.ResponseCh != nil {
-			m.confirmState.Request.ResponseCh <- false
-		} else if m.confirmState.RequestID != "" {
+		if m.confirmState.RequestID != "" {
 			m.sendInteractionResponse(false)
 		}
 		m.confirmState.Waiting = false
@@ -406,13 +381,7 @@ func (m Model) handleTextQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if answer == "" && req.DefaultAnswer != "" {
 			answer = req.DefaultAnswer
 		}
-		log.Debug().Str("answer", answer).Msg("handleTextQuestionKey: Enter pressed")
-		if req.QuestionRespCh != nil {
-			req.QuestionRespCh <- QuestionResponse{
-				Answer:    answer,
-				Cancelled: false,
-			}
-		}
+		m.sendInteractionResponse(true, map[string]any{"answer": answer})
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.confirmState.TextInput = ""
@@ -421,11 +390,7 @@ func (m Model) handleTextQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEsc:
 		// Cancel
-		if req.QuestionRespCh != nil {
-			req.QuestionRespCh <- QuestionResponse{
-				Cancelled: true,
-			}
-		}
+		m.sendInteractionResponse(false, map[string]any{"cancelled": true})
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.confirmState.TextInput = ""
@@ -471,13 +436,7 @@ func (m Model) handleChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		// Submit selected option
 		if m.confirmState.Selected >= 0 && m.confirmState.Selected < len(req.Options) {
 			answer := req.Options[m.confirmState.Selected].Value
-			log.Debug().Str("answer", answer).Msg("handleChoiceQuestionKey: Enter pressed")
-			if req.QuestionRespCh != nil {
-				req.QuestionRespCh <- QuestionResponse{
-					Answer:    answer,
-					Cancelled: false,
-				}
-			}
+			m.sendInteractionResponse(true, map[string]any{"answer": answer})
 		}
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
@@ -487,11 +446,7 @@ func (m Model) handleChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 
 	case tea.KeyEsc:
 		// Cancel
-		if req.QuestionRespCh != nil {
-			req.QuestionRespCh <- QuestionResponse{
-				Cancelled: true,
-			}
-		}
+		m.sendInteractionResponse(false, map[string]any{"cancelled": true})
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.confirmState.Selected = 0
@@ -550,13 +505,7 @@ func (m Model) handleMultiChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea
 				answers = append(answers, req.Options[idx].Value)
 			}
 		}
-		log.Debug().Strs("answers", answers).Msg("handleMultiChoiceQuestionKey: Enter pressed")
-		if req.QuestionRespCh != nil {
-			req.QuestionRespCh <- QuestionResponse{
-				Answers:   answers,
-				Cancelled: false,
-			}
-		}
+		m.sendInteractionResponse(true, map[string]any{"answers": answers})
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.confirmState.Selected = 0
@@ -566,11 +515,7 @@ func (m Model) handleMultiChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea
 
 	case tea.KeyEsc:
 		// Cancel
-		if req.QuestionRespCh != nil {
-			req.QuestionRespCh <- QuestionResponse{
-				Cancelled: true,
-			}
-		}
+		m.sendInteractionResponse(false, map[string]any{"cancelled": true})
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.confirmState.Selected = 0
@@ -586,7 +531,6 @@ func (m Model) handleMultiChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea
 // Uses UI-controlled state machine for display order.
 func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	input := strings.TrimSpace(m.input.Value())
-	log.Debug().Str("input", input).Msg("handleSubmit: called")
 	if input == "" {
 		return m, nil
 	}
@@ -612,7 +556,6 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 			Content:   input,
 			Timestamp: time.Now(),
 		})
-		log.Debug().Str("input", input).Int("pending_count", len(m.pendingMessages)).Msg("handleSubmit: added to pending queue")
 		return m, nil
 	}
 
@@ -620,8 +563,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	m.state.ResetForNewInteraction()
 
 	// Add user message to store
-	userRendered := m.messages.Add(MessageTypeUser, input, nil, renderMessage, m.renderer, m.styles)
-	log.Debug().Str("rendered", userRendered).Msg("handleSubmit: user message added")
+	m.messages.Add(MessageTypeUser, input, nil, renderMessage, m.renderer, m.styles)
 
 	// Set UI state
 	m.state.SetWaiting(true)
@@ -712,7 +654,11 @@ func (m Model) scrollToBottom() tea.Cmd {
 // eventLoop returns a cmd that waits for events.
 func (m Model) eventLoop() tea.Cmd {
 	return func() tea.Msg {
-		ev := <-m.eventChan
+		ev, ok := <-m.eventChan
+		if !ok || ev.Type == "" {
+			// Channel closed or zero-value event, stop event loop
+			return nil
+		}
 		log.Debug().Str("type", string(ev.Type)).Msg("eventLoop: received event")
 		return ev
 	}

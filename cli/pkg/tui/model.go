@@ -79,9 +79,6 @@ type Model struct {
 	// Confirmation state
 	confirmState ConfirmState
 
-	// Rollback state for plan mode
-	rollbackSnapshotID string
-
 	// Init state for /init command
 	initPending    bool   // True when /init is running
 	initAuraMdPath string // Path to save AURA.md
@@ -321,12 +318,10 @@ func (m *Model) sendMessage(input string) tea.Cmd {
 	m.currentRequestID = requestID
 
 	return func() tea.Msg {
-		log.Debug().Str("input", input).Str("requestID", requestID).Msg("sendMessage: sending via event stream")
 
 		userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
 		select {
 		case m.eventOutCh <- userEvent:
-			log.Debug().Str("requestID", requestID).Msg("sendMessage: user input event sent")
 		default:
 			log.Warn().Msg("sendMessage: eventOutCh full, dropping user input")
 		}
@@ -343,7 +338,6 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 	return func() tea.Msg {
 		m.currentRunCtx, m.currentRunCancel = context.WithCancel(m.ctx)
 
-		log.Debug().Str("input", input).Msg("sendMessageWithConfig: starting")
 
 		// Create temporary runtime with custom config
 		// AutoApprove will auto-approve all confirmations (tools + plan review)
@@ -352,7 +346,6 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			sdk.WithLogger(GetLogger()),
 		)
 		if err != nil {
-			log.Debug().Err(err).Msg("sendMessageWithConfig: failed to create runtime")
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
 			default:
@@ -367,7 +360,6 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 		// Initialize temporary runtime
 		if err := tempRt.Initialize(m.ctx); err != nil {
 			tempRt.Shutdown()
-			log.Debug().Err(err).Msg("sendMessageWithConfig: failed to initialize runtime")
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
 			default:
@@ -383,7 +375,6 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 		go func() {
 			events, err := tempRt.Process(m.currentRunCtx, input)
 			if err != nil {
-				log.Debug().Err(err).Msg("sendMessageWithConfig: process error")
 				select {
 				case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
 				default:
@@ -396,23 +387,19 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 				return
 			}
 
-			log.Debug().Msg("sendMessageWithConfig: got events channel")
 
 			adapter := NewAdapter()
 			count := 0
 			for ev := range events {
 				count++
-				log.Debug().Int("count", count).Str("type", string(ev.Type())).Msg("sendMessageWithConfig: forwarding event")
 				select {
 				case m.eventChan <- adapter.ConvertSDKEvent(ev):
 				case <-m.currentRunCtx.Done():
-					log.Debug().Msg("sendMessageWithConfig: run cancelled")
 					tempRt.Shutdown()
 					return
 				}
 			}
 
-			log.Debug().Int("total", count).Msg("sendMessageWithConfig: events channel closed")
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
 			default:
@@ -532,8 +519,6 @@ func (m *Model) convertEventToChatEvent(event events.Event) ChatEvent {
 		return ChatEvent{Type: EventTypePlanVerifyEnd, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
 	case events.EventTypeSnapshotCreated:
 		return ChatEvent{Type: EventTypeSnapshotCreated, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
-	case events.EventTypeRollbackOffer:
-		return ChatEvent{Type: EventTypeRollbackOffer, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
 	case events.EventTypeRollbackComplete:
 		return ChatEvent{Type: EventTypeRollbackComplete, Content: event.Content(), Extra: event.Extra(), RequestID: event.RequestID()}
 	case events.EventTypeAgentStart:
@@ -562,9 +547,8 @@ func (m *Model) handleInteractionRequest(event events.Event) {
 	m.confirmState = ConfirmState{
 		Waiting: true,
 		Request: &ConfirmationRequest{
-			Type:       ConfirmationType(interactionType),
-			ToolName:   "",
-			ResponseCh: nil,  // 新架构：不再使用ResponseCh，通过事件流发送响应
+			Type:     ConfirmationType(interactionType),
+			ToolName: "",
 		},
 	}
 
@@ -603,8 +587,9 @@ func (m *Model) sendUserInput(input string) {
 	}
 }
 
-// sendInteractionResponse 发送交互响应事件
-func (m *Model) sendInteractionResponse(approved bool) {
+// sendInteractionResponse sends an interaction response via event stream.
+// Additional fields (answer, answers, cancelled) are merged into the event extra.
+func (m *Model) sendInteractionResponse(approved bool, extraFields ...map[string]any) {
 	if m.confirmState.RequestID == "" {
 		return
 	}
@@ -612,6 +597,11 @@ func (m *Model) sendInteractionResponse(approved bool) {
 	extra := map[string]any{
 		"approved": approved,
 		"type":     m.confirmState.InteractionType,
+	}
+	for _, fields := range extraFields {
+		for k, v := range fields {
+			extra[k] = v
+		}
 	}
 
 	event := events.NewEventWithExtra(
@@ -646,7 +636,23 @@ func (m *Model) Close() {
 	m.cancelFunc()
 
 	// 关闭所有channel，确保接收方能正确退出
-	close(m.eventOutCh)
+	// eventOutCh may already be closed by closeEventOutCh, use recover to handle panic
+	func() {
+		defer func() { recover() }()
+		close(m.eventOutCh)
+	}()
 	close(m.eventInCh)
 	close(m.eventChan)
+}
+
+// closeEventOutCh closes only the eventOutCh channel.
+// Called before orchestrator.Stop() to unblock TUI→Runtime goroutine.
+func (m *Model) closeEventOutCh() {
+	m.closeMu.Lock()
+	// Use recover to handle case where channel is already closed
+	defer func() {
+		m.closeMu.Unlock()
+		recover()
+	}()
+	close(m.eventOutCh)
 }

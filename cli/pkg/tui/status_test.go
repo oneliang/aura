@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oneliang/aura/shared/pkg/events"
 )
 
 func TestProcessingWidget_StartAndActive(t *testing.T) {
@@ -462,16 +463,18 @@ func keyPress(text string, mod tea.KeyMod) tea.KeyPressMsg {
 }
 
 func TestHandleConfirmKey_UppercaseYN(t *testing.T) {
-	// Test that uppercase Y and N work the same as lowercase in confirmation
-	responseCh := make(chan bool, 1)
+	// Test that uppercase Y and N work via event stream interaction response.
+	eventOutCh := make(chan events.Event, 1)
 
 	m := Model{
-		state: NewState(),
+		state:      NewState(),
+		eventOutCh: eventOutCh,
 		confirmState: ConfirmState{
-			Waiting: true,
+			Waiting:         true,
+			RequestID:       "test-request-id",
+			InteractionType: events.InteractionTypeToolConfirmation,
 			Request: &ConfirmationRequest{
-				Message:    "Test confirm?",
-				ResponseCh: responseCh,
+				Message: "Test confirm?",
 			},
 		},
 	}
@@ -483,18 +486,22 @@ func TestHandleConfirmKey_UppercaseYN(t *testing.T) {
 		t.Error("confirmState.Waiting should be false after Y")
 	}
 	select {
-	case confirmed := <-responseCh:
-		if !confirmed {
-			t.Error("Expected confirmed=true for Y")
+	case event := <-eventOutCh:
+		approved, _ := event.Extra()["approved"].(bool)
+		if !approved {
+			t.Error("Expected approved=true for Y")
 		}
 	default:
-		t.Error("Expected response on channel for Y")
+		t.Error("Expected interaction response event for Y")
 	}
 	_ = cmd
 
 	// Reset for N test
 	m.confirmState.Waiting = true
-	m.confirmState.Request.ResponseCh = make(chan bool, 1)
+	m.confirmState.RequestID = "test-request-id-2"
+	m.confirmState.Request = &ConfirmationRequest{
+		Message: "Test confirm?",
+	}
 
 	// Test uppercase N
 	model2, _ := m.handleConfirmKey(keyPress("N", 0))
@@ -503,12 +510,13 @@ func TestHandleConfirmKey_UppercaseYN(t *testing.T) {
 		t.Error("confirmState.Waiting should be false after N")
 	}
 	select {
-	case confirmed := <-m.confirmState.Request.ResponseCh:
-		if confirmed {
-			t.Error("Expected confirmed=false for N")
+	case event := <-eventOutCh:
+		approved, _ := event.Extra()["approved"].(bool)
+		if approved {
+			t.Error("Expected approved=false for N")
 		}
 	default:
-		t.Error("Expected response on channel for N")
+		t.Error("Expected interaction response event for N")
 	}
 }
 

@@ -109,9 +109,8 @@ func initConfig() {
 // runAgent is the main entry point for the unified agent.
 func runAgent(cmd *cobra.Command, args []string) {
 	runCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
-	setupSignalHandler(cancel)
+	setupSignalHandler(runCtx, cancel)
 	initConfig()
 	ctx := getCommandContext()
 
@@ -138,7 +137,13 @@ func runAgent(cmd *cobra.Command, args []string) {
 	if rt == nil {
 		os.Exit(1)
 	}
+
+	// Defer order matters: cancel() first (stop goroutines), then rt.Shutdown()
+	// signal handler goroutine waits on ctx.Done(), so cancel must come before Shutdown
+	// defer executes in reverse order (LIFO), so rt.Shutdown() is registered first, cancel() second
+	// execution order: cancel() → rt.Shutdown()
 	defer rt.Shutdown()
+	defer cancel()
 
 	// Inject MCP list function into command provider
 	if mcpManager != nil {

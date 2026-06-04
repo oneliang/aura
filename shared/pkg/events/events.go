@@ -289,14 +289,12 @@ type ConfirmationRequest struct {
 	Params     map[string]any
 	PlanGoal   string   // Plan review: the plan goal
 	PlanSteps  []string // Plan review: step descriptions
-	ResponseCh chan bool
 
 	// AskUserQuestion fields
-	Question       string         // The question text to display
-	QuestionType   string         // "text", "choice", or "multi_choice"
+	Question       string           // The question text to display
+	QuestionType   string           // "text", "choice", or "multi_choice"
 	Options        []QuestionOption // Available options for choice/multi_choice
-	DefaultAnswer  string         // Optional default answer
-	QuestionRespCh chan QuestionResponse // Response channel for questions (separate from bool channel)
+	DefaultAnswer  string           // Optional default answer
 }
 
 // QuestionOption represents an option in a choice question.

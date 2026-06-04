@@ -26,7 +26,9 @@ type EngineFactory struct {
 	systemPrompt      string
 	commands          commands.Command               // Command provider for internal commands
 	confirmHandler    engine.ToolConfirmationHandler // Optional confirmation handler
-	planReviewFn      engine.PlanReviewHandler       // Optional plan review handler
+	planReviewFn         engine.PlanReviewHandler       // Optional plan review handler
+	rollbackConfirmFn    engine.RollbackConfirmHandler  // Optional rollback confirm handler
+	askUserQuestionFn    engine.AskUserQuestionHandler  // Optional ask user question handler
 	logger            *logger.Logger                 // Optional logger for injection
 	dataDir           string                         // Session data directory for task persistence
 	sessionID         string                         // Session ID for task persistence
@@ -88,6 +90,20 @@ func WithToolAllowlist(names []string) EngineFactoryOption {
 func WithRollbackManager(mgr *rollback.Manager) EngineFactoryOption {
 	return func(f *EngineFactory) {
 		f.rollbackMgr = mgr
+	}
+}
+
+// WithRollbackConfirmHandler sets the rollback confirm handler for plan mode rollback recovery.
+func WithRollbackConfirmHandler(handler engine.RollbackConfirmHandler) EngineFactoryOption {
+	return func(f *EngineFactory) {
+		f.rollbackConfirmFn = handler
+	}
+}
+
+// WithAskUserQuestionHandler sets the ask user question handler for plan review questions.
+func WithAskUserQuestionHandler(handler engine.AskUserQuestionHandler) EngineFactoryOption {
+	return func(f *EngineFactory) {
+		f.askUserQuestionFn = handler
 	}
 }
 
@@ -188,6 +204,16 @@ func (f *EngineFactory) CreateWithSession(sessionID string, mem memory.Memory) (
 	// Pass plan review handler if configured and review is enabled
 	if f.planReviewFn != nil && (f.config == nil || f.config.Plan.EnableReview) {
 		opts = append(opts, engine.WithPlanReviewHandler(f.planReviewFn))
+	}
+
+	// Pass rollback confirm handler if configured
+	if f.rollbackConfirmFn != nil {
+		opts = append(opts, engine.WithRollbackConfirmHandler(f.rollbackConfirmFn))
+	}
+
+	// Pass ask user question handler if configured
+	if f.askUserQuestionFn != nil {
+		opts = append(opts, engine.WithAskUserQuestionHandler(f.askUserQuestionFn))
 	}
 
 	// Pass tool allowlist if configured

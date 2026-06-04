@@ -73,8 +73,6 @@ func (w *StatusBarWidget) buildConfirmLine(cs *ConfirmState) string {
 		switch cs.Request.Type {
 		case ConfirmationPlanReview:
 			return w.buildPlanReviewLine(cs)
-		case ConfirmationRollback:
-			return w.buildRollbackLine(cs)
 		case ConfirmationQuestion:
 			return w.buildQuestionLine(cs)
 		default:
@@ -104,32 +102,6 @@ func (w *StatusBarWidget) buildPlanReviewLine(cs *ConfirmState) string {
 		builder.WriteString(w.styles.Help.Render(fmt.Sprintf("  Plan: %s  |  Enter confirm  Esc reject", cs.Request.PlanGoal)))
 	} else {
 		builder.WriteString(w.styles.Help.Render("  Enter confirm  Esc reject"))
-	}
-
-	return builder.String()
-}
-
-// buildRollbackLine builds the rollback confirmation line.
-// Layout: [Rollback] [Skip] Files affected  Enter confirm  Esc skip
-func (w *StatusBarWidget) buildRollbackLine(cs *ConfirmState) string {
-	var builder strings.Builder
-
-	yesStyle := w.styles.CommandItem
-	noStyle := w.styles.CommandItem
-	if cs.Selected == 0 {
-		yesStyle = w.styles.CommandItemSelected
-	} else {
-		noStyle = w.styles.CommandItemSelected
-	}
-
-	builder.WriteString(yesStyle.Render(" [Rollback] "))
-	builder.WriteString(noStyle.Render(" [Skip] "))
-
-	// Show files affected count
-	if cs.Request != nil && len(cs.Request.PlanSteps) > 0 {
-		builder.WriteString(w.styles.Help.Render(fmt.Sprintf("  %d files affected  |  Enter confirm  Esc skip", len(cs.Request.PlanSteps))))
-	} else {
-		builder.WriteString(w.styles.Help.Render("  Enter confirm  Esc skip"))
 	}
 
 	return builder.String()

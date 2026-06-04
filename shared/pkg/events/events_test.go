@@ -298,9 +298,8 @@ func TestCommandTypeConstants(t *testing.T) {
 // TestConfirmationRequest tests ConfirmationRequest struct.
 func TestConfirmationRequest(t *testing.T) {
 	req := ConfirmationRequest{
-		ToolName:   "bash",
-		Params:     map[string]any{"cmd": "ls"},
-		ResponseCh: make(chan bool, 1),
+		ToolName: "bash",
+		Params:   map[string]any{"cmd": "ls"},
 	}
 
 	if req.ToolName != "bash" {
@@ -308,9 +307,6 @@ func TestConfirmationRequest(t *testing.T) {
 	}
 	if req.Params["cmd"] != "ls" {
 		t.Errorf("Expected Params['cmd'] = 'ls', got '%v'", req.Params["cmd"])
-	}
-	if req.ResponseCh == nil {
-		t.Error("ResponseCh should not be nil")
 	}
 }
 

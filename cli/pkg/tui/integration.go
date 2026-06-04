@@ -53,14 +53,27 @@ func Run(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.Se
 	// Start event stream forwarding in background
 	go orchestrator.Run(ctx)
 
+	// Wait for orchestrator to be ready before starting UI
+	// This prevents race condition where user input arrives before goroutines are listening
+	orchestrator.WaitReady()
+	log.Debug().Msg("Run: orchestrator ready, starting Bubble Tea")
+
 	// Run Bubble Tea program
 	p := tea.NewProgram(m)
 	_, err := p.Run()
 
-	// Stop orchestrator first (wait for goroutines), then close TUI channels, then stop runtime
-	orchestrator.Stop()
-	m.Close()
+	// Close TUI output channel first to unblock TUI→Runtime goroutine
+	// This must happen BEFORE orchestrator.Stop() which waits for goroutines
+	m.closeEventOutCh()
+
+	// Stop runtime to close agentEvents channel, unblocking Runtime→TUI goroutine
 	rt.Stop(ctx)
+
+	// Now wait for goroutines to complete (they exit via closed channels)
+	orchestrator.Stop()
+
+	// Close remaining channels
+	m.Close()
 
 	return err
 }
@@ -72,9 +85,10 @@ func RunWithConfig(ctx context.Context, rt *sdk.Runtime, config Config, sessionM
 
 // Orchestrator integrates Runtime and TUI event streams.
 type Orchestrator struct {
-	runtime *sdk.Runtime
-	model   *Model
-	wg      sync.WaitGroup // WaitGroup for goroutine lifecycle
+	runtime   *sdk.Runtime
+	model     *Model
+	wg        sync.WaitGroup // WaitGroup for goroutine lifecycle
+	ready     chan struct{}  // Signal when goroutines are ready to receive events
 }
 
 // NewOrchestrator creates an orchestrator for event stream integration.
@@ -82,10 +96,12 @@ func NewOrchestrator(rt *sdk.Runtime, m *Model) *Orchestrator {
 	return &Orchestrator{
 		runtime: rt,
 		model:   m,
+		ready:   make(chan struct{}),
 	}
 }
 
 // Run starts event stream forwarding between Runtime and TUI.
+// Signals readiness via ready channel before entering main loop.
 func (o *Orchestrator) Run(ctx context.Context) {
 	// Get runtime event stream (OUT)
 	agentEvents := o.runtime.Events()
@@ -112,6 +128,8 @@ func (o *Orchestrator) Run(ctx context.Context) {
 	go func() {
 		defer o.wg.Done()
 		uiEvents := o.model.Events()
+		// Signal that we're ready to receive events
+		close(o.ready)
 		for {
 			select {
 			case <-ctx.Done():
@@ -121,11 +139,16 @@ func (o *Orchestrator) Run(ctx context.Context) {
 					return
 				}
 				if err := o.runtime.SendEvent(ctx, event); err != nil {
-					log.Debug().Err(err).Msg("Orchestrator: failed to send event to runtime")
 				}
 			}
 		}
 	}()
+}
+
+// WaitReady waits for the orchestrator goroutines to be ready to receive events.
+// This ensures no events are lost if user input arrives before goroutines start.
+func (o *Orchestrator) WaitReady() {
+	<-o.ready
 }
 
 // Stop waits for all goroutines to complete before returning.
@@ -213,8 +236,6 @@ func (a *Adapter) ConvertSDKEvent(ev sdk.Event) ChatEvent {
 		return ChatEvent{Type: EventTypePlanVerifyEnd, Content: ev.Content(), Extra: ev.Extra(), RequestID: ev.RequestID()}
 	case sdk.EventTypeSnapshotCreated:
 		return ChatEvent{Type: EventTypeSnapshotCreated, Content: ev.Content(), Extra: ev.Extra(), RequestID: ev.RequestID()}
-	case sdk.EventTypeRollbackOffer:
-		return ChatEvent{Type: EventTypeRollbackOffer, Content: ev.Content(), Extra: ev.Extra(), RequestID: ev.RequestID()}
 	case sdk.EventTypeRollbackComplete:
 		return ChatEvent{Type: EventTypeRollbackComplete, Content: ev.Content(), Extra: ev.Extra(), RequestID: ev.RequestID()}
 	case sdk.EventTypeAgentStart:

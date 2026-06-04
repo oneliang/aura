@@ -36,13 +36,19 @@ func readUserConfirmation(prompt string) bool {
 }
 
 // setupSignalHandler sets up signal handling for graceful shutdown.
-func setupSignalHandler(cancel context.CancelFunc) {
+// Also exits when context is cancelled (normal exit via /exit command).
+func setupSignalHandler(ctx context.Context, cancel context.CancelFunc) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-		fmt.Println("\n\nGoodbye!")
-		cancel()
+		select {
+		case <-ctx.Done():
+			// Normal exit (context cancelled by defer or /exit)
+			signal.Stop(sigChan)
+		case <-sigChan:
+			fmt.Println("\n\nGoodbye!")
+			cancel()
+		}
 	}()
 }
 

@@ -162,9 +162,8 @@ func TestEvent_Extra_NoExtraProvided(t *testing.T) {
 
 func TestConfirmationRequest(t *testing.T) {
 	req := ConfirmationRequest{
-		ToolName:   "file_write",
-		Params:     map[string]any{"file": "/tmp/test.txt"},
-		ResponseCh: make(chan bool, 1),
+		ToolName: "file_write",
+		Params:   map[string]any{"file": "/tmp/test.txt"},
 	}
 
 	if req.ToolName != "file_write" {
@@ -173,16 +172,5 @@ func TestConfirmationRequest(t *testing.T) {
 
 	if req.Params["file"] != "/tmp/test.txt" {
 		t.Errorf("ConfirmationRequest.Params file = %q, want %q", req.Params["file"], "/tmp/test.txt")
-	}
-
-	if req.ResponseCh == nil {
-		t.Error("ConfirmationRequest.ResponseCh should not be nil")
-	}
-
-	// Test sending response
-	req.ResponseCh <- true
-	result := <-req.ResponseCh
-	if result != true {
-		t.Errorf("ResponseCh result = %v, want true", result)
 	}
 }

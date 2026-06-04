@@ -283,27 +283,11 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 			)
 
 			// Offer rollback if snapshot exists
-			if snapshot != nil && e.rollbackSnapshotID != "" {
-				// Create response channel for rollback confirmation
-				rollbackRespCh := make(chan bool, 1)
-				eventsCh <- events.NewEventWithExtra(
-					events.EventTypeRollbackOffer,
-					"Execution failed. Rollback to pre-execution state?",
-					map[string]any{
-						"snapshot_id":  e.rollbackSnapshotID,
-						"files":        snapshot.Files,
-						"reason":       result.reason,
-						"response_ch":  rollbackRespCh,
-					},
-					requestID,
-				)
-
-				// Wait for user confirmation with timeout
-				select {
-				case confirmed := <-rollbackRespCh:
-					if confirmed && e.rollbackMgr != nil {
-						// Execute rollback
-						rollbackResult, err := e.rollbackMgr.Rollback(ctx, snapshot.ID)
+			if snapshot != nil && e.rollbackSnapshotID != "" && e.rollbackConfirmFn != nil {
+				confirmed, err := e.rollbackConfirmFn(ctx, e.rollbackSnapshotID, snapshot.Files, result.reason)
+				if err == nil && confirmed && e.rollbackMgr != nil {
+					// Execute rollback
+					rollbackResult, err := e.rollbackMgr.Rollback(ctx, snapshot.ID)
 						if err != nil {
 							e.logger.Error().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: rollback failed")
 							eventsCh <- events.NewEventWithExtra(
@@ -329,17 +313,11 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 							)
 						}
 						e.rollbackSnapshotID = ""
-					}
-					// User chose not to rollback or rollback complete - stop execution
-					return
-				case <-ctx.Done():
-					// Context cancelled during rollback wait
-					return
-				case <-time.After(rollbackConfirmationTimeout):
-					// Timeout - skip rollback, continue execution
-					e.logger.Warn().Str("module", "engine").Msg("runExplicitPlanningLoop: rollback confirmation timeout")
+				} else {
 					e.rollbackSnapshotID = ""
 				}
+				// Stop execution after failure
+				return
 			}
 
 			// Attempt revision for high-risk failed steps
@@ -422,59 +400,37 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 	if !verifyResult.passed {
 		eventsCh <- events.NewEvent(events.EventTypeError, fmt.Sprintf("Verification failed: %d failures", len(verifyResult.failures)), requestID)
 		// Offer rollback if snapshot exists and verification failed
-		if snapshot != nil && e.rollbackSnapshotID != "" {
-			// Create response channel for rollback confirmation
-			rollbackRespCh := make(chan bool, 1)
-			eventsCh <- events.NewEventWithExtra(
-				events.EventTypeRollbackOffer,
-				"Verification failed. Rollback to pre-execution state?",
-				map[string]any{
-					"snapshot_id":  e.rollbackSnapshotID,
-					"files":        snapshot.Files,
-					"failures":     verifyResult.failures,
-					"response_ch":  rollbackRespCh,
-				},
-				requestID,
-			)
-
-			// Wait for user confirmation with timeout
-			select {
-			case confirmed := <-rollbackRespCh:
-				if confirmed && e.rollbackMgr != nil {
-					// Execute rollback
-					rollbackResult, err := e.rollbackMgr.Rollback(ctx, snapshot.ID)
-					if err != nil {
-						e.logger.Error().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: verify rollback failed")
-						eventsCh <- events.NewEventWithExtra(
-							events.EventTypeRollbackComplete,
-							"",
-							map[string]any{
-								"success": false,
-								"files":   snapshot.Files,
-								"error":   err.Error(),
-							},
-							requestID,
-						)
-					} else {
-						eventsCh <- events.NewEventWithExtra(
-							events.EventTypeRollbackComplete,
-							"",
-							map[string]any{
-								"success": true,
-								"files":   rollbackResult.Files,
-								"message": rollbackResult.Message,
-							},
-							requestID,
-						)
-					}
-					e.rollbackSnapshotID = ""
+		if snapshot != nil && e.rollbackSnapshotID != "" && e.rollbackConfirmFn != nil {
+			confirmed, err := e.rollbackConfirmFn(ctx, e.rollbackSnapshotID, snapshot.Files, "verification failed")
+			if err == nil && confirmed && e.rollbackMgr != nil {
+				// Execute rollback
+				rollbackResult, err := e.rollbackMgr.Rollback(ctx, snapshot.ID)
+				if err != nil {
+					e.logger.Error().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: verify rollback failed")
+					eventsCh <- events.NewEventWithExtra(
+						events.EventTypeRollbackComplete,
+						"",
+						map[string]any{
+							"success": false,
+							"files":   snapshot.Files,
+							"error":   err.Error(),
+						},
+						requestID,
+					)
+				} else {
+					eventsCh <- events.NewEventWithExtra(
+						events.EventTypeRollbackComplete,
+						"",
+						map[string]any{
+							"success": true,
+							"files":   rollbackResult.Files,
+							"message": rollbackResult.Message,
+						},
+						requestID,
+					)
 				}
-			case <-ctx.Done():
-				// Context cancelled during rollback wait
-				return
-			case <-time.After(rollbackConfirmationTimeout):
-				// Timeout - skip rollback
-				e.logger.Warn().Str("module", "engine").Msg("runExplicitPlanningLoop: verify rollback confirmation timeout")
+				e.rollbackSnapshotID = ""
+			} else {
 				e.rollbackSnapshotID = ""
 			}
 		}
@@ -837,27 +793,10 @@ func (e *Engine) runVerifyPhase(ctx context.Context, eventsCh chan<- events.Even
 // Supports text input, single choice, and multi-choice questions.
 // Returns the user's answer or error if cancelled/timeout.
 func (e *Engine) askUserQuestion(ctx context.Context, eventsCh chan<- events.Event, question string, options []events.QuestionOption, questionType string, requestID string) (*events.QuestionResponse, error) {
-	respCh := make(chan events.QuestionResponse, 1)
-
-	// Emit confirmation request event
-	eventsCh <- events.NewEventWithExtra(events.EventTypeConfirmationRequest, "", map[string]any{
-		"type":          "question",
-		"question":      question,
-		"question_type": questionType,
-		"options":       options,
-		"response_ch":   respCh,
-	}, requestID)
-
-	// Wait for response with timeout
-	select {
-	case resp := <-respCh:
-		if resp.Cancelled {
-			return nil, fmt.Errorf("user cancelled the question")
-		}
-		return &resp, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	if e.askUserQuestionFn != nil {
+		return e.askUserQuestionFn(ctx, question, options, questionType)
 	}
+	return nil, fmt.Errorf("no ask user question handler configured")
 }
 
 // generateClarifyingQuestions generates questions to clarify plan details.

@@ -15,12 +15,8 @@ import (
 
 // handleChatEvent processes chat events from the agent.
 func (m Model) handleChatEvent(msg ChatEvent) (tea.Model, tea.Cmd) {
-	log.Debug().Str("type", string(msg.Type)).Str("content", msg.Content).Msg("handleChatEvent: received event")
-
-	// Log confirmation request for debugging
+	// Handle confirmation request
 	if msg.Type == EventTypeConfirmationRequest {
-		toolName, _ := msg.Extra["toolName"].(string)
-		log.Debug().Str("tool", toolName).Msg("handleChatEvent: received confirmation request")
 		model, cmd := m.handleEventConfirmationRequest(msg)
 		return model, cmd
 	}
@@ -122,9 +118,6 @@ func (m Model) handleChatEvent(msg ChatEvent) (tea.Model, tea.Cmd) {
 	case EventTypeSnapshotCreated:
 		model, cmd = m.handleEventSnapshotCreated(msg)
 
-	case EventTypeRollbackOffer:
-		model, cmd = m.handleEventRollbackOffer(msg)
-
 	case EventTypeRollbackComplete:
 		model, cmd = m.handleEventRollbackComplete(msg)
 
@@ -145,8 +138,6 @@ func (m Model) handleChatEvent(msg ChatEvent) (tea.Model, tea.Cmd) {
 // responses that accumulated chunks without a separate Response event.
 // For init mode: saves AURA.md and shows result.
 func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
-	log.Debug().Str("requestID", msg.RequestID).Msg("handleEventDone: processing done event")
-
 	// Handle init completion
 	if m.initPending {
 		return m.handleInitComplete()
@@ -157,7 +148,7 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 	// Only messages accumulated via AppendToLast (streaming chunks) have .Rendered == "".
 	lastMsg := m.messages.GetLastAssistantMessage()
 	if lastMsg != nil && lastMsg.Rendered != "" {
-		log.Debug().Msg("handleEventDone: skipping - last assistant message already displayed")
+		// Skip - already displayed
 	} else {
 		// Render the last assistant message (accumulated from chunks)
 		m.messages.RenderLast(m.renderer, m.styles, renderMessage)
@@ -169,7 +160,6 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 		// Combine all pending messages
 		combined := combinePendingMessages(m.pendingMessages)
 		m.pendingMessages = nil
-		log.Debug().Str("combined", combined).Msg("handleEventDone: sending pending messages")
 
 		// Add user message to store for the pending messages
 		m.messages.Add(MessageTypeUser, combined, nil, renderMessage, m.renderer, m.styles)
@@ -214,8 +204,6 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 // handleInitComplete handles the completion of /init command.
 // Saves accumulated content to AURA.md and shows result message.
 func (m Model) handleInitComplete() (tea.Model, tea.Cmd) {
-	log.Debug().Str("path", m.initAuraMdPath).Int("content_len", len(m.initContent)).Msg("handleInitComplete: saving AURA.md")
-
 	// Reset init state
 	m.initPending = false
 	auraMdPath := m.initAuraMdPath
@@ -340,25 +328,20 @@ func (m Model) handleEventResponseEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 // so skip if we already have content (prevents duplicate).
 // For init mode: accumulate content for AURA.md generation.
 func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
-	log.Debug().Str("content", msg.Content).Msg("handleEventResponse: processing response")
-
 	// Skip empty responses
 	if strings.TrimSpace(msg.Content) == "" {
-		log.Debug().Msg("handleEventResponse: empty content, skipping")
 		return m, nil
 	}
 
 	// Capture init content for AURA.md generation
 	if m.initPending {
 		m.initContent += msg.Content
-		log.Debug().Int("len", len(m.initContent)).Msg("handleEventResponse: accumulating init content")
 	}
 
 	// If we already have an assistant message (from accumulated streaming chunks),
 	// the response content is already included — skip to prevent duplicate.
 	lastMsg := m.messages.GetLastAssistantMessage()
 	if lastMsg != nil && lastMsg.Content != "" {
-		log.Debug().Msg("handleEventResponse: skipping — content already accumulated from streaming")
 		return m, nil
 	}
 
@@ -367,8 +350,6 @@ func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 
 	// Update token usage after response
 	m.updateTokenUsage()
-
-	log.Debug().Str("content", msg.Content).Msg("handleEventResponse: added response to viewport")
 
 	return m, tea.Sequence(
 		m.scrollToBottom(),
@@ -395,8 +376,6 @@ func (m Model) handleEventThinkingContent(msg ChatEvent) (tea.Model, tea.Cmd) {
 // Accumulates chunks in MessageStore for final glamour rendering.
 // Does not output anything - Done event will render the accumulated content.
 func (m Model) handleEventStreamChunk(msg ChatEvent) (tea.Model, tea.Cmd) {
-	log.Debug().Str("content", msg.Content).Msg("streamChunk")
-
 	// Accumulate chunk in MessageStore (no rendering)
 	m.messages.AppendToLast(msg.Content)
 
@@ -590,13 +569,6 @@ func (m Model) handleEventPlanModeExit(msg ChatEvent) (tea.Model, tea.Cmd) {
 // Adds a ToolStart message with executionID for precise matching when tool ends.
 // Note: "task" tool events are handled by handleEventTaskCreate/Update — skip to avoid duplicate output.
 func (m Model) handleEventToolStart(msg ChatEvent) (tea.Model, tea.Cmd) {
-	// Log execution_id for debugging
-	if msg.Extra != nil {
-		if id, ok := msg.Extra["execution_id"].(string); ok {
-			log.Debug().Str("execution_id", id).Str("tool", msg.Content).Msg("handleEventToolStart: 接收")
-		}
-	}
-
 	// Get params from Extra
 	params := ""
 	if msg.Extra != nil {
@@ -656,11 +628,6 @@ func (m Model) handleEventToolEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 		if t, ok := msg.Extra["tool"].(string); ok {
 			toolName = t
 		}
-	}
-
-	// Log execution_id for debugging
-	if executionID != "" {
-		log.Debug().Str("execution_id", executionID).Str("tool", toolName).Msg("handleEventToolEnd: 接收")
 	}
 
 	// Extract duration - compatible with multiple types (JSON serialization converts to float64)
@@ -747,8 +714,6 @@ func (m Model) handleEventCommandResult(msg ChatEvent) (tea.Model, tea.Cmd) {
 // handleEventConfirmationRequest handles confirmation request event.
 // Shows a confirmation dialog for sensitive tool execution, plan review, or questions.
 func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd) {
-	log.Debug().Msg("handleEventConfirmationRequest: called")
-
 	// Extract confirmation details
 	confType := ""
 	toolName := ""
@@ -811,24 +776,16 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 		}
 	}
 
-	// Use ResponseCh field directly
-	responseCh := msg.ResponseCh
-	// Get question response channel if present
-	questionRespCh := getQuestionRespCh(msg.Extra)
-
-	// Extract RequestID and InteractionType for event stream response (new architecture)
+	// Extract RequestID and InteractionType for event stream response
 	requestID := msg.RequestID
 	var interactionType events.InteractionType
 	if msg.Extra != nil {
 		if t, ok := msg.Extra["type"].(events.InteractionType); ok {
 			interactionType = t
 		} else if tStr, ok := msg.Extra["type"].(string); ok {
-			// Fallback: handle string type (from JSON deserialization)
 			interactionType = events.InteractionType(tStr)
 		}
 	}
-
-	log.Debug().Str("type", confType).Str("tool", toolName).Str("request_id", requestID).Bool("has_response_ch", responseCh != nil).Bool("has_question_resp_ch", questionRespCh != nil).Msg("handleEventConfirmationRequest: extracted details")
 
 	// Clear thinking widget so user attention is drawn to the confirmation dialog
 	if m.thinking != nil {
@@ -842,7 +799,6 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 
 	// Set display state to confirm
 	m.state.SetDisplayState(DisplayConfirm)
-	log.Debug().Msg("handleEventConfirmationRequest: cleared thinking, set DisplayConfirm")
 
 	// Show confirmation dialog
 	m.confirmState = ConfirmState{
@@ -851,18 +807,16 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 		RequestID:       requestID,
 		InteractionType: interactionType,
 		Request: &ConfirmationRequest{
-			Type:           ConfirmationType(confType),
-			ToolName:       toolName,
-			Params:         params,
-			Message:        msg.Content,
-			PlanGoal:       planGoal,
-			PlanSteps:      planSteps,
-			ResponseCh:     responseCh,
-			Question:       question,
-			QuestionType:   QuestionType(questionType),
-			Options:        questionOptions,
-			DefaultAnswer:  defaultAnswer,
-			QuestionRespCh: questionRespCh,
+			Type:          ConfirmationType(confType),
+			ToolName:      toolName,
+			Params:        params,
+			Message:       msg.Content,
+			PlanGoal:      planGoal,
+			PlanSteps:     planSteps,
+			Question:      question,
+			QuestionType:  QuestionType(questionType),
+			Options:       questionOptions,
+			DefaultAnswer: defaultAnswer,
 		},
 	}
 
@@ -871,47 +825,9 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 		m.confirmState.TextInput = defaultAnswer
 	}
 
-	log.Debug().Bool("waiting", m.confirmState.Waiting).Str("type", confType).Msg("handleEventConfirmationRequest: confirmState set")
-
 	// Return nil command — Bubble Tea v2 calls View() after Update() returns,
 	// so the confirmation dialog will be rendered immediately.
 	return m, nil
-}
-
-// getQuestionRespCh extracts the question response channel from extra.
-func getQuestionRespCh(extra map[string]any) chan QuestionResponse {
-	if extra == nil {
-		return nil
-	}
-	// Try direct channel type
-	if ch, ok := extra["questionRespCh"].(chan QuestionResponse); ok {
-		return ch
-	}
-	// Try events.QuestionOption channel (from engine)
-	if ch, ok := extra["questionRespCh"].(chan events.QuestionResponse); ok {
-		// Convert to TUI QuestionResponse channel
-		// Note: This requires adapter logic - the engine sends events.QuestionResponse
-		// but TUI expects tui.QuestionResponse. We'll handle this in the response handler.
-		return adaptQuestionRespCh(ch)
-	}
-	return nil
-}
-
-// adaptQuestionRespCh adapts an events.QuestionResponse channel to TUI channel.
-func adaptQuestionRespCh(src chan events.QuestionResponse) chan QuestionResponse {
-	dst := make(chan QuestionResponse, 1)
-	go func() {
-		if resp := <-src; !resp.Cancelled {
-			dst <- QuestionResponse{
-				Answer:    resp.Answer,
-				Answers:   resp.Answers,
-				Cancelled: resp.Cancelled,
-			}
-		} else {
-			dst <- QuestionResponse{Cancelled: true}
-		}
-	}()
-	return dst
 }
 
 // getStringFromMap safely extracts a string from a map.
@@ -1075,49 +991,6 @@ func (m Model) handleEventSnapshotCreated(msg ChatEvent) (tea.Model, tea.Cmd) {
 	)
 }
 
-// handleEventRollbackOffer handles the rollback_offer event.
-// Shows a confirmation dialog offering rollback after execution/verification failure.
-func (m Model) handleEventRollbackOffer(msg ChatEvent) (tea.Model, tea.Cmd) {
-	snapshotID, _ := msg.Extra["snapshot_id"].(string)
-	var files []string
-	if rawFiles, ok := msg.Extra["files"].([]string); ok {
-		files = rawFiles
-	}
-	reason, _ := msg.Extra["reason"].(string)
-
-	// Extract response channel for rollback confirmation
-	var responseCh chan bool
-	if ch, ok := msg.Extra["response_ch"].(chan bool); ok {
-		responseCh = ch
-	}
-
-	// Clear thinking widget so user attention is drawn to the rollback dialog
-	if m.thinking != nil {
-		m.thinking.Clear()
-	}
-
-	// Set display state to confirm
-	m.state.SetDisplayState(DisplayConfirm)
-
-	// Build rollback confirmation request
-	m.confirmState = ConfirmState{
-		Waiting:  true,
-		Selected: 0, // Default to Yes (rollback)
-		Request: &ConfirmationRequest{
-			Type:       ConfirmationRollback,
-			Message:    fmt.Sprintf(i18n.T("rollback.offer"), reason),
-			PlanGoal:   i18n.T("rollback.goal"),
-			PlanSteps:  files,
-			ResponseCh: responseCh, // Channel to send rollback confirmation
-		},
-	}
-
-	// Store snapshot ID for rollback action (legacy, now handled via channel)
-	m.rollbackSnapshotID = snapshotID
-
-	return m, nil
-}
-
 // handleEventRollbackComplete handles the rollback_complete event.
 // Shows notification that rollback was completed.
 func (m Model) handleEventRollbackComplete(msg ChatEvent) (tea.Model, tea.Cmd) {
@@ -1141,7 +1014,6 @@ func (m Model) handleEventRollbackComplete(msg ChatEvent) (tea.Model, tea.Cmd) {
 	m.tasks.Reset()
 	m.plan.Reset()
 	m.state.ResetForNewInteraction()
-	m.rollbackSnapshotID = ""
 
 	return m, tea.Sequence(
 		m.input.EnableAndFocus(),
