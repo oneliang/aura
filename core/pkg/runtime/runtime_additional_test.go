@@ -351,8 +351,8 @@ func TestAgentRuntime_Initialize_Success(t *testing.T) {
 	_ = err
 }
 
-// TestAgentRuntime_Process_AfterInit tests Process after initialization.
-func TestAgentRuntime_Process_AfterInit(t *testing.T) {
+// TestAgentRuntime_EventStream_AfterInit tests event stream after initialization.
+func TestAgentRuntime_EventStream_AfterInit(t *testing.T) {
 	cfg := DefaultRuntimeConfig()
 	cfg.LLM.Provider = "ollama"
 	cfg.LLM.Model = "qwen3:8b"
@@ -371,11 +371,29 @@ func TestAgentRuntime_Process_AfterInit(t *testing.T) {
 		t.Skipf("Skipping test due to initialization failure: %v", err)
 	}
 
-	// Process should return a channel, not error
-	_, err = runtime.Process(ctx, "test input")
+	// Start event stream
+	err = runtime.Start(ctx)
 	if err != nil {
-		t.Errorf("Process() returned error: %v", err)
+		t.Errorf("Start() returned error: %v", err)
 	}
+
+	// Send user input event
+	requestID := "test_request_001"
+	userEvent := events.NewEvent(events.EventTypeUserInput, "test input", requestID)
+	err = runtime.SendEvent(ctx, userEvent)
+	if err != nil {
+		t.Errorf("SendEvent() returned error: %v", err)
+	}
+
+	// Collect events
+	for ev := range runtime.Events() {
+		if ev.Type() == EventTypeDone {
+			break
+		}
+	}
+
+	// Stop event stream
+	runtime.Stop(ctx)
 }
 
 // TestNew_WithSessionID tests WithSessionID option.
@@ -445,8 +463,8 @@ func TestWithIntentService(t *testing.T) {
 	// intentService can be nil
 }
 
-// TestAgentRuntime_Process_NotInitialized tests Process before initialization.
-func TestAgentRuntime_Process_NotInitialized(t *testing.T) {
+// TestAgentRuntime_Start_NotInitialized tests Start before initialization.
+func TestAgentRuntime_Start_NotInitialized(t *testing.T) {
 	cfg := DefaultRuntimeConfig()
 	runtime, err := New(cfg)
 	if err != nil {
@@ -454,10 +472,11 @@ func TestAgentRuntime_Process_NotInitialized(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err = runtime.Process(ctx, "test input")
+	err = runtime.Start(ctx)
 
 	if err == nil {
-		t.Error("Process() should return error when not initialized")
+		t.Error("Start() should return error when not initialized")
+		runtime.Stop(ctx) // Cleanup if unexpectedly succeeded
 	}
 }
 

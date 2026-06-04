@@ -13,6 +13,7 @@ import (
 	"github.com/oneliang/aura/session/pkg/model"
 	"github.com/oneliang/aura/session/pkg/storage"
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/events"
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 	"github.com/oneliang/aura/shared/pkg/utils"
 	skillloader "github.com/oneliang/aura/skill/pkg/loader"
@@ -209,13 +210,29 @@ func (w *AdapterResourceManager) GetRuntime(ctx context.Context, sessionID strin
 }
 
 // ProcessMessage processes a message through the session's runtime.
+// Uses event stream pattern: Start -> SendEvent -> Events -> Stop.
 func (w *AdapterResourceManager) ProcessMessage(ctx context.Context, sessionID, content string) (<-chan sdk.Event, error) {
 	rt, err := w.GetRuntime(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	return rt.Process(ctx, content)
+	// Start runtime event stream
+	if err := rt.Start(ctx); err != nil {
+		return nil, err
+	}
+
+	// Send user input event
+	requestID := fmt.Sprintf("adapter_%d", time.Now().UnixNano())
+	userEvent := events.NewEvent(events.EventTypeUserInput, content, requestID)
+	if err := rt.SendEvent(ctx, userEvent); err != nil {
+		rt.Stop(ctx)
+		return nil, err
+	}
+
+	// Return events channel for caller to consume
+	// Caller should call rt.Stop(ctx) after consuming events
+	return rt.Events(), nil
 }
 
 // SessionStore returns the session store.

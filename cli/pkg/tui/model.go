@@ -332,12 +332,11 @@ func (m *Model) sendMessage(input string) tea.Cmd {
 
 // sendMessageWithConfig sends a message with a custom runtime config.
 // This is used for special operations like /init that need a different system prompt.
-// Events are still forwarded to eventChan for UI updates.
+// Events are forwarded to eventChan for UI updates using the event stream pattern.
 // Note: AutoApprove is enabled - all confirmations including plan review are auto-approved.
 func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.Cmd {
 	return func() tea.Msg {
 		m.currentRunCtx, m.currentRunCancel = context.WithCancel(m.ctx)
-
 
 		// Create temporary runtime with custom config
 		// AutoApprove will auto-approve all confirmations (tools + plan review)
@@ -371,41 +370,65 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			return nil
 		}
 
-		// Run Process() in background goroutine
-		go func() {
-			events, err := tempRt.Process(m.currentRunCtx, input)
-			if err != nil {
-				select {
-				case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
-				default:
-				}
-				select {
-				case m.eventChan <- ChatEvent{Type: EventTypeDone}:
-				default:
-				}
-				tempRt.Shutdown()
-				return
+		// Start temporary runtime with event stream pattern
+		if err := tempRt.Start(m.currentRunCtx); err != nil {
+			tempRt.Shutdown()
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
+			default:
 			}
-
-
-			adapter := NewAdapter()
-			count := 0
-			for ev := range events {
-				count++
-				select {
-				case m.eventChan <- adapter.ConvertSDKEvent(ev):
-				case <-m.currentRunCtx.Done():
-					tempRt.Shutdown()
-					return
-				}
-			}
-
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
 			default:
 			}
-			tempRt.Shutdown()
+			return nil
+		}
+
+		// Run event stream forwarding in background goroutine
+		go func() {
+			adapter := NewAdapter()
+			agentEvents := tempRt.Events()
+
+			for {
+				select {
+				case <-m.currentRunCtx.Done():
+					tempRt.Stop(m.currentRunCtx)
+					tempRt.Shutdown()
+					return
+				case ev, ok := <-agentEvents:
+					if !ok {
+						// Events channel closed, send Done and cleanup
+						select {
+						case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+						default:
+						}
+						tempRt.Shutdown()
+						return
+					}
+					select {
+					case m.eventChan <- adapter.ConvertSDKEvent(ev):
+					default:
+						// Channel full, skip event
+					}
+				}
+			}
 		}()
+
+		// Send user input event to runtime
+		requestID := fmt.Sprintf("init_%d", time.Now().UnixNano())
+		userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
+		if err := tempRt.SendEvent(m.currentRunCtx, userEvent); err != nil {
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
+			default:
+			}
+			select {
+			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			default:
+			}
+			tempRt.Stop(m.currentRunCtx)
+			tempRt.Shutdown()
+		}
 
 		return nil
 	}

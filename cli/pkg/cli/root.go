@@ -16,6 +16,7 @@ import (
 	"github.com/oneliang/aura/personality/pkg/profile"
 	"github.com/oneliang/aura/shared/pkg/config"
 	"github.com/oneliang/aura/shared/pkg/constants"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/i18n"
 	"github.com/oneliang/aura/shared/pkg/user"
 	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
@@ -397,13 +398,23 @@ func runInteractiveWithRuntime(ctx context.Context, rt *sdk.Runtime, sl *tui.Ses
 			sl.Observe(input)
 		}
 
-		events, err := rt.Process(ctx, input)
-		if err != nil {
+		// Start runtime event stream
+		if err := rt.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return
 		}
 
-		for ev := range events {
+		// Send user input event
+		requestID := fmt.Sprintf("cli_%d", time.Now().UnixNano())
+		userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
+		if err := rt.SendEvent(ctx, userEvent); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			rt.Stop(ctx)
+			return
+		}
+
+		// Process events from stream
+		for ev := range rt.Events() {
 			switch ev.Type() {
 			case sdk.EventTypeThinkingStart:
 				fmt.Printf("\033[90m%s\033[0m\n", ev.Content())
@@ -433,8 +444,12 @@ func runInteractiveWithRuntime(ctx context.Context, rt *sdk.Runtime, sl *tui.Ses
 				fmt.Printf("\033[32m[%s] %s\033[0m\n", i18n.T("cli.plan_complete_label"), ev.Content())
 			case sdk.EventTypeError:
 				fmt.Fprintf(os.Stderr, "\033[31mError: %s\033[0m\n", ev.Content())
+			case sdk.EventTypeDone:
+				// Done event signals completion
+				break
 			}
 		}
+		rt.Stop(ctx)
 		// Print newline after response complete
 		fmt.Println()
 	}

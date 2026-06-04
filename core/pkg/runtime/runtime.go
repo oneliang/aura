@@ -360,6 +360,11 @@ func NewSubAgentRuntime(parent *AgentRuntime, subCfg *RuntimeConfig, disabledToo
 // Sub-agent runtimes (skipInitialize=true) do NOT stop MCP servers as they
 // are owned by the parent runtime.
 func (r *AgentRuntime) Shutdown() {
+	// Stop Engine's processInputQueue goroutine first
+	if r.agent != nil {
+		r.agent.Shutdown()
+	}
+
 	// Wait for all pending memory persistence operations to complete
 	if r.memory != nil {
 		r.memory.Shutdown()

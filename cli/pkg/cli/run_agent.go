@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/oneliang/aura/cli/pkg/tui"
 	cmds "github.com/oneliang/aura/commands/pkg"
@@ -227,14 +228,30 @@ func setupCommandProviderHandlers(
 
 // runSingleMessage runs a single message query and returns.
 func runSingleMessage(runCtx context.Context, rt *sdk.Runtime, args []string, eventHandler func(sdk.Event)) {
-	events, err := rt.Process(runCtx, strings.Join(args, " "))
-	if err != nil {
+	// Start runtime event stream
+	if err := rt.Start(runCtx); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
 	}
-	for ev := range events {
+
+	// Send user input event
+	input := strings.Join(args, " ")
+	requestID := fmt.Sprintf("single_%d", time.Now().UnixNano())
+	userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
+	if err := rt.SendEvent(runCtx, userEvent); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		rt.Stop(runCtx)
+		return
+	}
+
+	// Process events from stream
+	for ev := range rt.Events() {
+		if ev.Type() == sdk.EventTypeDone {
+			break
+		}
 		eventHandler(ev)
 	}
+	rt.Stop(runCtx)
 	// Print newline after streaming complete
 	fmt.Println()
 }

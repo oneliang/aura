@@ -2308,5 +2308,5 @@ make test-coverage
 
 ## 参考资料
 
-- [Skill 系统](../modules/skill/README.md)
+- [Skill 系统](../skill/README.md)
 - [Agent 测试](agent-testing.md)

@@ -28,6 +28,7 @@ import (
 	"github.com/oneliang/aura/session/pkg/subscription"
 	"github.com/oneliang/aura/session/pkg/trigger"
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/logger"
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 	"github.com/oneliang/aura/shared/pkg/user"
@@ -786,15 +787,26 @@ func (s *Server) processEvent(ctx context.Context, event trigger.Event) error {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		events, err := rt.Process(ctx, event.Content)
-		if err != nil {
-			s.logger.Error().Err(err).Str("module", "server").Msg("Failed to process webhook event")
+		// Start runtime event stream
+		if err := rt.Start(ctx); err != nil {
+			s.logger.Error().Err(err).Str("module", "server").Msg("Failed to start runtime")
+			return
+		}
+		// Send user input event
+		requestID := fmt.Sprintf("webhook_%d", time.Now().UnixNano())
+		userEvent := events.NewEvent(events.EventTypeUserInput, event.Content, requestID)
+		if err := rt.SendEvent(ctx, userEvent); err != nil {
+			s.logger.Error().Err(err).Str("module", "server").Msg("Failed to send event")
+			rt.Stop(ctx)
 			return
 		}
 		// Consume events (they are already persisted by the runtime)
-		for range events {
-			// Events are handled by the event handler
+		for ev := range rt.Events() {
+			if ev.Type() == sdk.EventTypeDone {
+				break
+			}
 		}
+		rt.Stop(ctx)
 	}()
 
 	return nil
@@ -837,18 +849,32 @@ func (s *Server) SendMessage(ctx context.Context, sessionID, content string) err
 	processCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	events, err := rt.Process(processCtx, content)
-	if err != nil {
+	// Start runtime event stream
+	if err := rt.Start(processCtx); err != nil {
 		s.logger.Error().Str("module", "server").Str("session_id", sessionID).
-			Err(err).Msg("Failed to process message")
-		return fmt.Errorf("failed to process message: %w", err)
+			Err(err).Msg("Failed to start runtime")
+		return fmt.Errorf("failed to start runtime: %w", err)
+	}
+
+	// Send user input event
+	requestID := fmt.Sprintf("send_%d", time.Now().UnixNano())
+	userEvent := events.NewEvent(events.EventTypeUserInput, content, requestID)
+	if err := rt.SendEvent(processCtx, userEvent); err != nil {
+		rt.Stop(processCtx)
+		s.logger.Error().Str("module", "server").Str("session_id", sessionID).
+			Err(err).Msg("Failed to send event")
+		return fmt.Errorf("failed to send event: %w", err)
 	}
 
 	// Consume events — the engine will close the channel when done or cancelled
 	eventCount := 0
-	for range events {
+	for ev := range rt.Events() {
 		eventCount++
+		if ev.Type() == sdk.EventTypeDone {
+			break
+		}
 	}
+	rt.Stop(processCtx)
 
 	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).
 		Int("event_count", eventCount).
@@ -903,17 +929,27 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 	}
 
 	// Process message
-	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Calling rt.Process()")
-	events, err := rt.Process(r.Context(), req.Content)
-	if err != nil {
-		s.logger.Error().Str("module", "server").Str("session_id", sessionID).Err(err).Msg("rt.Process() returned error")
-		s.sendSSEError(w, flusher, "Failed to process message")
+	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Starting runtime event stream")
+	// Start runtime event stream
+	if err := rt.Start(r.Context()); err != nil {
+		s.logger.Error().Str("module", "server").Str("session_id", sessionID).Err(err).Msg("Failed to start runtime")
+		s.sendSSEError(w, flusher, "Failed to start runtime")
+		return
+	}
+
+	// Send user input event
+	requestID := fmt.Sprintf("sse_%d", time.Now().UnixNano())
+	userEvent := events.NewEvent(events.EventTypeUserInput, req.Content, requestID)
+	if err := rt.SendEvent(r.Context(), userEvent); err != nil {
+		s.logger.Error().Str("module", "server").Str("session_id", sessionID).Err(err).Msg("Failed to send event")
+		rt.Stop(r.Context())
+		s.sendSSEError(w, flusher, "Failed to send event")
 		return
 	}
 
 	// Stream events directly from event stream
 	var responseContent strings.Builder
-	for ev := range events {
+	for ev := range rt.Events() {
 		s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Str("event_type", string(ev.Type())).Msg("Consumed event")
 
 		// Send SSE events based on event type
@@ -948,6 +984,7 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 			break
 		}
 	}
+	rt.Stop(r.Context())
 
 	// Send completion event
 	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Sending SSE done event")

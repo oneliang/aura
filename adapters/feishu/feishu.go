@@ -14,6 +14,7 @@ import (
 	"github.com/larksuite/oapi-sdk-go/v3/ws"
 	"github.com/oneliang/aura/adapters"
 	sdk "github.com/oneliang/aura/core/pkg/sdk"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/logger"
 )
 
@@ -407,18 +408,29 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 	}
 
 	// Process message (agent.Run will automatically add user message to memory)
-	events, err := rt.Process(ctx, content)
-	if err != nil {
-		a.logger.Error().Str("module", "feishu").Err(err).Msg("Process message failed")
-		// Remove processing reaction on error
+	// Start runtime event stream
+	if err := rt.Start(ctx); err != nil {
+		a.logger.Error().Str("module", "feishu").Err(err).Msg("Start runtime failed")
 		if hasProcessingReaction && msgInfo.MessageID != "" {
 			a.removeProcessingReaction(ctx, msgInfo.MessageID)
 		}
 		return
 	}
 
-	// Process events directly from stream
-	for ev := range events {
+	// Send user input event
+	requestID := fmt.Sprintf("feishu_%d", time.Now().UnixNano())
+	userEvent := events.NewEvent(events.EventTypeUserInput, content, requestID)
+	if err := rt.SendEvent(ctx, userEvent); err != nil {
+		a.logger.Error().Str("module", "feishu").Err(err).Msg("Send event failed")
+		rt.Stop(ctx)
+		if hasProcessingReaction && msgInfo.MessageID != "" {
+			a.removeProcessingReaction(ctx, msgInfo.MessageID)
+		}
+		return
+	}
+
+	// Process events from stream
+	for ev := range rt.Events() {
 		// Collect response for reply
 		if ev.Type() == sdk.EventTypeResponse || ev.Type() == sdk.EventTypeResponseChunk {
 			responseBuilder.WriteString(ev.Content())
@@ -426,7 +438,11 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 		}
 		// Log for debugging
 		a.logger.Debug().Str("module", "feishu").Str("event_type", string(ev.Type())).Msg("Event received")
+		if ev.Type() == sdk.EventTypeDone {
+			break
+		}
 	}
+	rt.Stop(ctx)
 
 	a.logger.Debug().Str("module", "feishu").Bool("has_response", hasResponse).Msg("Processed message")
 

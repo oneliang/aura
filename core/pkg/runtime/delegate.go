@@ -12,6 +12,7 @@ import (
 	agentpkg "github.com/oneliang/aura/agent/pkg/agent"
 	"github.com/oneliang/aura/core/pkg/engine"
 	"github.com/oneliang/aura/core/pkg/permissions"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/hooks"
 	"github.com/oneliang/aura/shared/pkg/logger"
 )
@@ -122,13 +123,21 @@ func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task st
 	subAgentLog := subAgentRuntime.logger.With().Str("subAgentID", subAgentID).Logger()
 	subAgentLog.Debug().Str("task_preview", task[:min(len(task), 100)]).Msg("executeSubAgent: starting sub-agent execution")
 
-	events, err := subAgentRuntime.Process(ctx, task)
-	if err != nil {
-		return "", fmt.Errorf("failed to process task: %w", err)
+	// Start sub-agent runtime event stream
+	if err := subAgentRuntime.Start(ctx); err != nil {
+		return "", fmt.Errorf("failed to start sub-agent: %w", err)
 	}
 
-	// Process events directly from the event stream
-	for ev := range events {
+	// Send task as user input event
+	requestID := fmt.Sprintf("subagent_%d", time.Now().UnixNano())
+	taskEvent := events.NewEvent(events.EventTypeUserInput, task, requestID)
+	if err := subAgentRuntime.SendEvent(ctx, taskEvent); err != nil {
+		subAgentRuntime.Stop(ctx)
+		return "", fmt.Errorf("failed to send task to sub-agent: %w", err)
+	}
+
+	// Process events from stream
+	for ev := range subAgentRuntime.Events() {
 		eventCount++
 		mu.Lock()
 		switch ev.Type() {
@@ -136,9 +145,13 @@ func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task st
 			result = ev.Content()
 		case EventTypeError:
 			lastError = fmt.Errorf("%s", ev.Content())
+		case EventTypeDone:
+			// Done event signals completion
+			break
 		}
 		mu.Unlock()
 	}
+	subAgentRuntime.Stop(ctx)
 
 	mu.Lock()
 	defer mu.Unlock()

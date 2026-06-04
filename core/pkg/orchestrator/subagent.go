@@ -9,6 +9,7 @@ import (
 	"github.com/oneliang/aura/core/pkg/runtime"
 	"github.com/oneliang/aura/core/pkg/workspace"
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/oneliang/aura/shared/pkg/memory"
 )
@@ -252,24 +253,36 @@ func (sa *SubAgent) processDocument(doc *CollaboDoc) {
 	// Build the prompt from the document
 	prompt := sa.buildPromptFromDoc(doc)
 
-	// Process through the agent runtime
-	events, err := sa.runtime.Process(sa.ctx, prompt)
-	if err != nil {
+	// Start runtime event stream
+	if err := sa.runtime.Start(sa.ctx); err != nil {
+		sa.handleProcessingError(doc, err)
+		return
+	}
+
+	// Send task as user input event
+	requestID := fmt.Sprintf("orch_%d", time.Now().UnixNano())
+	taskEvent := events.NewEvent(events.EventTypeUserInput, prompt, requestID)
+	if err := sa.runtime.SendEvent(sa.ctx, taskEvent); err != nil {
+		sa.runtime.Stop(sa.ctx)
 		sa.handleProcessingError(doc, err)
 		return
 	}
 
 	// Collect results from event stream
 	var result string
-	for ev := range events {
+	for ev := range sa.runtime.Events() {
 		switch ev.Type() {
 		case runtime.EventTypeResponse:
 			result = ev.Content()
 		case runtime.EventTypeError:
+			sa.runtime.Stop(sa.ctx)
 			sa.handleProcessingError(doc, fmt.Errorf("%s", ev.Content()))
 			return
+		case runtime.EventTypeDone:
+			break
 		}
 	}
+	sa.runtime.Stop(sa.ctx)
 
 	// Mark document as completed
 	if err := sa.coordinator.MarkCompleted(doc.ID, sa.ID, result); err != nil {

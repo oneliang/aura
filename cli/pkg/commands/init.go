@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	initpkg "github.com/oneliang/aura/commands/pkg/init"
 	"github.com/oneliang/aura/core/pkg/engine"
@@ -102,16 +103,26 @@ func runInit(cmd *cobra.Command, args []string) {
 	fmt.Println("Exploring workspace...")
 
 	// Process and collect events
-	eventChan, err := rt.Process(ctx, prompt)
-	if err != nil {
+	// Start runtime event stream
+	if err := rt.Start(ctx); err != nil {
 		rt.Shutdown()
-		fmt.Fprintf(os.Stderr, "Error processing: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error starting runtime: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Send user input event
+	requestID := fmt.Sprintf("init_%d", time.Now().UnixNano())
+	userEvent := events.NewEvent(events.EventTypeUserInput, prompt, requestID)
+	if err := rt.SendEvent(ctx, userEvent); err != nil {
+		rt.Stop(ctx)
+		rt.Shutdown()
+		fmt.Fprintf(os.Stderr, "Error sending event: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Collect response content
 	var contentBuilder strings.Builder
-	for event := range eventChan {
+	for event := range rt.Events() {
 		switch event.Type() {
 		case events.EventTypeResponse, events.EventTypeResponseChunk:
 			if event.Content() != "" {
@@ -119,8 +130,11 @@ func runInit(cmd *cobra.Command, args []string) {
 			}
 		case events.EventTypeError:
 			fmt.Fprintf(os.Stderr, "Error: %s\n", event.Content())
+		case events.EventTypeDone:
+			break
 		}
 	}
+	rt.Stop(ctx)
 
 	// Shutdown runtime
 	rt.Shutdown()
