@@ -83,6 +83,7 @@ type AgentRuntime struct {
 	// 输入队列（顺序处理，避免嵌套事件循环）
 	inputQueue  chan inputRequest
 	processWg   sync.WaitGroup // 等待处理完成
+	processCancel context.CancelFunc // Cancel function for processInputQueue context
 
 	// Session management
 	sessionID    string
@@ -709,11 +710,16 @@ func (r *AgentRuntime) Start(ctx context.Context) error {
 	r.eventOutCh = make(chan Event, 100)
 	r.interactionPending = make(map[string]chan events.InteractionResponse)
 	r.inputQueue = make(chan inputRequest, 10)
+
+	// Create cancellable context for processInputQueue
+	processCtx, processCancel := context.WithCancel(ctx)
+	r.processCancel = processCancel
+
 	r.runMu.Unlock()
 
 	// 启动输入处理goroutine（顺序处理，避免嵌套）
 	r.processWg.Add(1) // Add before go to avoid race
-	go r.processInputQueue(ctx)
+	go r.processInputQueue(processCtx)
 
 	// 发送启动事件
 	r.sendEvent(events.NewEvent(events.EventTypeAgentStart, "", ""))
@@ -732,8 +738,15 @@ func (r *AgentRuntime) Stop(ctx context.Context) error {
 	r.eventOutCh = nil
 	inputQueue := r.inputQueue
 	r.inputQueue = nil
+	processCancel := r.processCancel
+	r.processCancel = nil
 	r.running = false
 	r.runMu.Unlock()
+
+	// Cancel processInputQueue context first (stops goroutine waiting in select)
+	if processCancel != nil {
+		processCancel()
+	}
 
 	// 关闭输入队列，等待处理goroutine退出
 	if inputQueue != nil {
