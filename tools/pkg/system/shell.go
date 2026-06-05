@@ -36,7 +36,7 @@ func init() {
 		Module: "shell",
 	})
 	// Write a test log entry to verify logger is working
-	shellLog.Info().Str("status", "initialized").Str("logPath", logPath).Msg("Shell logger initialized")
+	shellLog.Info("Shell logger initialized", "status", "initialized", "logPath", logPath)
 }
 
 // ShellTool executes shell commands.
@@ -169,7 +169,7 @@ func (t *ShellTool) Execute(ctx context.Context, params map[string]any) (*tools.
 	}
 
 	// Log execution result to shell.log
-	shellLog.Info().Str("command", command).Str("output", output).Str("cwd", cwd).Err(err).Msg("Shell command executed")
+	shellLog.Info("Shell command executed", "command", command, "output", output, "cwd", cwd, "error", err)
 
 	// Get exit code
 	exitCode := 0

@@ -19,7 +19,7 @@ func (r *AgentRuntime) createConfirmationHandler() enginepkg.ToolConfirmationHan
 	}
 	return func(ctx context.Context, toolName string, params map[string]any) (bool, error) {
 		allowed, requiresConfirm, reason := r.permMgr.CheckPermission(ctx, toolName, params)
-		r.logger.Debug().Str("module", "runtime").Str("tool", toolName).Bool("allowed", allowed).Bool("requiresConfirm", requiresConfirm).Msg("ConfirmationHandler: permission check result")
+		r.logger.Debug("ConfirmationHandler: permission check result", "module", "runtime", "tool", toolName, "allowed", allowed, "requiresConfirm", requiresConfirm)
 		if !allowed {
 			return false, fmt.Errorf("permission denied: %s", reason)
 		}
@@ -47,7 +47,7 @@ func (r *AgentRuntime) createConfirmationHandler() enginepkg.ToolConfirmationHan
 // Uses event stream for confirmation requests.
 // Returns true if confirmed by user, false otherwise.
 func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill) bool {
-	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: called")
+	r.logger.Debug("checkSkillPermission: called", "module", "runtime", "skill", sk.Name)
 
 	// Check permission manager first (respects config default_level and per-tool settings)
 	if r.permMgr != nil {
@@ -58,11 +58,11 @@ func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill
 			"permission_level": sk.PermissionLevel,
 		})
 		if !allowed {
-			r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Str("reason", reason).Msg("checkSkillPermission: denied by PermissionMgr")
+			r.logger.Debug("checkSkillPermission: denied by PermissionMgr", "module", "runtime", "skill", sk.Name, "reason", reason)
 			return false
 		}
 		if !requiresConfirm {
-			r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: allowed by PermissionMgr, no confirmation needed")
+			r.logger.Debug("checkSkillPermission: allowed by PermissionMgr, no confirmation needed", "module", "runtime", "skill", sk.Name)
 			return true
 		}
 		// PermissionMgr says ask, fall through to user confirmation below
@@ -71,7 +71,7 @@ func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill
 	// Use event stream for confirmation
 	// If outer context is already cancelled, deny immediately
 	if ctx.Err() != nil {
-		r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: outer context cancelled, denying")
+		r.logger.Debug("checkSkillPermission: outer context cancelled, denying", "module", "runtime", "skill", sk.Name)
 		return false
 	}
 
@@ -82,9 +82,9 @@ func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill
 		Timeout:    60 * time.Second,
 	}
 
-	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Msg("checkSkillPermission: sending confirmation request via event stream")
+	r.logger.Debug("checkSkillPermission: sending confirmation request via event stream", "module", "runtime", "skill", sk.Name)
 	resp := r.requestInteraction(ctx, req)
 
-	r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Bool("approved", resp.Approved).Msg("checkSkillPermission: received response")
+	r.logger.Debug("checkSkillPermission: received response", "module", "runtime", "skill", sk.Name, "approved", resp.Approved)
 	return resp.Approved
 }

@@ -327,10 +327,7 @@ func (sa *SubAgent) handleProcessingError(doc *CollaboDoc, err error) {
 	// Mark document as rejected with error reason
 	if markErr := sa.coordinator.MarkRejected(doc.ID, sa.ID, err.Error()); markErr != nil {
 		if sa.logger != nil {
-			sa.logger.Error().Err(markErr).
-				Str("doc_id", doc.ID).
-				Str("agent_id", sa.ID).
-				Msg("Failed to mark document as rejected")
+			sa.logger.Error("Failed to mark document as rejected", "error", markErr.Error(), "doc_id", doc.ID, "agent_id", sa.ID)
 		}
 	}
 }

@@ -80,7 +80,7 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 	eventsCh <- events.NewEvent(events.EventTypeStep, i18n.T("engine.exploration_phase"), requestID)
 	explorationSummary := e.runParallelExploration(ctx, eventsCh, input, requestID)
 	if explorationSummary != "" {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Int("summary_len", len(explorationSummary)).Msg("runExplicitPlanningLoop: exploration complete")
+		e.logger.Debug("runExplicitPlanningLoop: exploration complete", "module", "engine", "requestID", requestID, "summary_len", len(explorationSummary))
 	}
 
 	// Phase 2: Design — create plan with exploration context
@@ -109,7 +109,7 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 	}
 	planPath := fmt.Sprintf("plan-%s.md", safeGoal)
 	if err := plan.WriteToFile(planPath); err != nil {
-		e.logger.Warn().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: failed to write plan file")
+		e.logger.Warn("runExplicitPlanningLoop: failed to write plan file", "module", "engine", "error", err.Error())
 	}
 	e.SetPlanFilePath(planPath)
 
@@ -169,7 +169,7 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 		snapshotID := fmt.Sprintf("plan-%s-%d", requestID, time.Now().Unix())
 		snapshot, err = e.rollbackMgr.CreateSnapshot(ctx, snapshotID, criticalFiles)
 		if err != nil {
-			e.logger.Warn().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: failed to create rollback snapshot")
+			e.logger.Warn("runExplicitPlanningLoop: failed to create rollback snapshot", "module", "engine", "error", err.Error())
 		} else if snapshot != nil {
 			e.rollbackSnapshotID = snapshot.ID
 			eventsCh <- events.NewEventWithExtra(
@@ -289,7 +289,7 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 					// Execute rollback
 					rollbackResult, err := e.rollbackMgr.Rollback(ctx, snapshot.ID)
 						if err != nil {
-							e.logger.Error().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: rollback failed")
+							e.logger.Error("runExplicitPlanningLoop: rollback failed", "module", "engine", "error", err.Error())
 							eventsCh <- events.NewEventWithExtra(
 								events.EventTypeRollbackComplete,
 								"",
@@ -322,14 +322,14 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 
 			// Attempt revision for high-risk failed steps
 			if step.RiskLevel == "high" {
-				e.logger.Debug().Str("module", "engine").Str("step_id", step.ID).Msg("runExplicitPlanningLoop: attempting plan revision")
+				e.logger.Debug("runExplicitPlanningLoop: attempting plan revision", "module", "engine", "step_id", step.ID)
 				if revised, err := e.planner.RevisePlan(ctx, plan, e.currentStepIndex, step.Description, result.reason); err == nil && revised != nil {
 					plan = revised
 					e.currentPlan = revised
 
 					// Persist revised plan to disk
 					if err := plan.WriteToFile(planPath); err != nil {
-						e.logger.Warn().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: failed to write revised plan file")
+						e.logger.Warn("runExplicitPlanningLoop: failed to write revised plan file", "module", "engine", "error", err.Error())
 					}
 
 					// Emit revised plan to TUI widget
@@ -363,7 +363,7 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 
 		// Persist progress to disk
 		if err := plan.WriteToFile(planPath); err != nil {
-			e.logger.Warn().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: failed to write plan progress")
+			e.logger.Warn("runExplicitPlanningLoop: failed to write plan progress", "module", "engine", "error", err.Error())
 		}
 
 		if task := e.taskList.FindByPlanStepID(step.ID); task != nil {
@@ -406,7 +406,7 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 				// Execute rollback
 				rollbackResult, err := e.rollbackMgr.Rollback(ctx, snapshot.ID)
 				if err != nil {
-					e.logger.Error().Err(err).Str("module", "engine").Msg("runExplicitPlanningLoop: verify rollback failed")
+					e.logger.Error("runExplicitPlanningLoop: verify rollback failed", "module", "engine", "error", err.Error())
 					eventsCh <- events.NewEventWithExtra(
 						events.EventTypeRollbackComplete,
 						"",
@@ -485,7 +485,7 @@ After exploring, summarize what you found.`, input)
 		response, toolCalls, _, err := e.streamAndBufferResponse(ctx, eventsCh, messages, requestID, "")
 		// thinking_end is now sent inside streamAndBufferResponse
 		if err != nil {
-			e.logger.Warn().Err(err).Msg("runExplorationPhase: LLM error")
+			e.logger.Warn("runExplorationPhase: LLM error", "error", err.Error())
 			return ""
 		}
 
@@ -855,7 +855,7 @@ func (e *Engine) runParallelExploration(ctx context.Context, eventsCh chan<- eve
 		areas = areas[:maxExplorers]
 	}
 
-	e.logger.Debug().Str("module", "engine").Int("areas", len(areas)).Msg("runParallelExploration: starting parallel exploration")
+	e.logger.Debug("runParallelExploration: starting parallel exploration", "module", "engine", "areas", len(areas))
 
 	// Create exploration tasks
 	tasks := make([]ExplorationTask, len(areas))
@@ -901,7 +901,7 @@ Respond with a JSON array of area names, nothing else. Example: ["authentication
 
 	resp, err := e.client.Complete(ctx, &llm.Request{Messages: messages})
 	if err != nil {
-		e.logger.Warn().Err(err).Msg("decomposeExplorationAreas: LLM error")
+		e.logger.Warn("decomposeExplorationAreas: LLM error", "error", err.Error())
 		return nil
 	}
 
@@ -931,7 +931,7 @@ Respond with a JSON array of area names, nothing else. Example: ["authentication
 
 	var areas []string
 	if err := json.Unmarshal([]byte(content), &areas); err != nil {
-		e.logger.Warn().Err(err).Str("content", content).Msg("decomposeExplorationAreas: JSON parse error")
+		e.logger.Warn("decomposeExplorationAreas: JSON parse error", "error", err.Error(), "content", content)
 		return nil
 	}
 
@@ -974,7 +974,7 @@ func (e *Engine) executeParallelExploration(ctx context.Context, tasks []Explora
 				"status":           status,
 			}, requestID)
 
-			e.logger.Debug().Str("module", "engine").Str("area", t.Area).Bool("success", err == nil).Msg("executeParallelExploration: task completed")
+			e.logger.Debug("executeParallelExploration: task completed", "module", "engine", "area", t.Area, "success", err == nil)
 		}(i, task)
 	}
 

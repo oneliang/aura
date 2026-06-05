@@ -18,6 +18,7 @@ import (
 	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/i18n"
+	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/oneliang/aura/shared/pkg/user"
 	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
 	"github.com/oneliang/aura/shared/pkg/version"
@@ -109,11 +110,17 @@ func initConfig() {
 
 // runAgent is the main entry point for the unified agent.
 func runAgent(cmd *cobra.Command, args []string) {
+	startTime := time.Now()
+	logger.RegistryDefault().Debug("[DIAG] runAgent: starting")
+
 	runCtx, cancel := context.WithCancel(context.Background())
 
 	setupSignalHandler(runCtx, cancel)
+	logger.RegistryDefault().Debug("[DIAG] runAgent: signal handler setup done", "elapsed", time.Since(startTime))
+
 	initConfig()
 	ctx := getCommandContext()
+	logger.RegistryDefault().Debug("[DIAG] runAgent: config init done", "elapsed", time.Since(startTime))
 
 	// Get default user from config (empty = legacy single-user mode)
 	ctx.UserID = user.GetDefaultUserID()
@@ -125,16 +132,20 @@ func runAgent(cmd *cobra.Command, args []string) {
 
 	// Check directory trust
 	checkDirectoryTrust(ctx, runCtx, useTUI)
+	logger.RegistryDefault().Debug("[DIAG] runAgent: directory trust check done", "elapsed", time.Since(startTime))
 
 	// Load profile and initialize session
 	prof := loadProfile(ctx.UserID)
 	sessionMgr, currentSessionID := initSessionServiceWrapper(ctx.Config)
+	logger.RegistryDefault().Debug("[DIAG] runAgent: session service init done", "elapsed", time.Since(startTime))
 
 	// Create command provider (creates SkillLoader internally)
 	cmdProvider := createCommandProvider(ctx, prof, sessionMgr)
+	logger.RegistryDefault().Debug("[DIAG] runAgent: command provider created", "elapsed", time.Since(startTime))
 
 	// Create and initialize runtime
 	rt, mcpManager := createRuntime(ctx, currentSessionID, cmdProvider, sessionMgr)
+	logger.RegistryDefault().Debug("[DIAG] runAgent: runtime created", "elapsed", time.Since(startTime))
 	if rt == nil {
 		os.Exit(1)
 	}
@@ -154,6 +165,7 @@ func runAgent(cmd *cobra.Command, args []string) {
 	// Setup event-driven command handlers
 	setupCommandProviderHandlers(cmdProvider, rt.GetMemory(), rt, ctx, runCtx, currentSessionID, sessionMgr)
 	ctx.CommandProvider = cmdProvider
+	logger.RegistryDefault().Debug("[DIAG] runAgent: command handlers setup done", "elapsed", time.Since(startTime))
 
 	// Determine mode and run
 	if len(args) > 0 && !cmd.Flags().Changed("tui") {
@@ -167,6 +179,7 @@ func runAgent(cmd *cobra.Command, args []string) {
 
 	// Interactive mode
 	sl := tui.LoadSessionLearner()
+	logger.RegistryDefault().Debug("[DIAG] runAgent: session learner loaded", "elapsed", time.Since(startTime))
 	if !useCLI {
 		runTUIMode(runCtx, rt, sl, sessionMgr, currentSessionID, ctx, prof.BasicInfo.Name, mcpManager)
 		return

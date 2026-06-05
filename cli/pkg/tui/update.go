@@ -668,7 +668,7 @@ func (m Model) eventLoop() tea.Cmd {
 			// Channel closed or zero-value event, stop event loop
 			return nil
 		}
-		log.Debug().Str("type", string(ev.Type)).Msg("eventLoop: received event")
+		log.Debug("eventLoop: received event", "type", string(ev.Type))
 		return ev
 	}
 }

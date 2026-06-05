@@ -20,7 +20,7 @@ func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		logger.Default().Error().Err(err).Msg("WriteJSON: failed to encode response")
+		logger.Default().Error("WriteJSON: failed to encode response", "error", err.Error())
 	}
 }
 
@@ -44,6 +44,6 @@ func WriteError(w http.ResponseWriter, message string, status int) {
 		Status: "error",
 		Error:  message,
 	}); err != nil {
-		logger.Default().Error().Err(err).Msg("WriteError: failed to encode response")
+		logger.Default().Error("WriteError: failed to encode response", "error", err.Error())
 	}
 }

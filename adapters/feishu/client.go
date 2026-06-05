@@ -66,11 +66,7 @@ func (c *Client) SendTextMessage(ctx context.Context, receiveID, receiveIDType, 
 	}
 	content := string(contentJSON)
 
-	c.logger.Debug().Str("module", "feishu").
-		Str("to", receiveID).
-		Str("type", receiveIDType).
-		Str("content", content).
-		Msg("Sending message")
+	c.logger.Debug("Sending message", "module", "feishu", "to", receiveID, "type", receiveIDType, "content", content)
 
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(receiveIDType).
@@ -83,21 +79,16 @@ func (c *Client) SendTextMessage(ctx context.Context, receiveID, receiveIDType, 
 
 	resp, err := c.apiClient.Im.Message.Create(ctx, req)
 	if err != nil {
-		c.logger.Error().Str("module", "feishu").Err(err).Msg("Failed to send message")
+		c.logger.Error("Failed to send message", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("failed to send message: %w", err)
 	}
 
 	if !resp.Success() {
-		c.logger.Error().Str("module", "feishu").
-			Int("code", resp.Code).
-			Str("msg", resp.Msg).
-			Msg("Send message failed")
+		c.logger.Error("Send message failed", "module", "feishu", "code", resp.Code, "msg", resp.Msg)
 		return newAPIError("SendTextMessage", resp.Code, resp.Msg)
 	}
 
-	c.logger.Info().Str("module", "feishu").
-		Str("to", receiveID).
-		Msg("Message sent")
+	c.logger.Info("Message sent", "module", "feishu", "to", receiveID)
 	return nil
 }
 
@@ -145,11 +136,7 @@ func (c *Client) SendPostMessage(ctx context.Context, receiveID, receiveIDType s
 		return fmt.Errorf("failed to marshal post content: %w", err)
 	}
 
-	c.logger.Debug().Str("module", "feishu").
-		Str("to", receiveID).
-		Str("type", receiveIDType).
-		Interface("content", postContent).
-		Msg("Sending post message")
+	c.logger.Debug("Sending post message", "module", "feishu", "to", receiveID, "type", receiveIDType, "content", postContent)
 
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(receiveIDType).
@@ -162,21 +149,16 @@ func (c *Client) SendPostMessage(ctx context.Context, receiveID, receiveIDType s
 
 	resp, err := c.apiClient.Im.Message.Create(ctx, req)
 	if err != nil {
-		c.logger.Error().Str("module", "feishu").Err(err).Msg("Failed to send post message")
+		c.logger.Error("Failed to send post message", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("failed to send post message: %w", err)
 	}
 
 	if !resp.Success() {
-		c.logger.Error().Str("module", "feishu").
-			Int("code", resp.Code).
-			Str("msg", resp.Msg).
-			Msg("Send post message failed")
+		c.logger.Error("Send post message failed", "module", "feishu", "code", resp.Code, "msg", resp.Msg)
 		return newAPIError("SendPostMessage", resp.Code, resp.Msg)
 	}
 
-	c.logger.Info().Str("module", "feishu").
-		Str("to", receiveID).
-		Msg("Post message sent")
+	c.logger.Info("Post message sent", "module", "feishu", "to", receiveID)
 	return nil
 }
 
@@ -188,11 +170,7 @@ func (c *Client) SendCardMessage(ctx context.Context, receiveID, receiveIDType s
 		return fmt.Errorf("failed to marshal card content: %w", err)
 	}
 
-	c.logger.Debug().Str("module", "feishu").
-		Str("to", receiveID).
-		Str("type", receiveIDType).
-		Interface("content", cardContent).
-		Msg("Sending card message")
+	c.logger.Debug("Sending card message", "module", "feishu", "to", receiveID, "type", receiveIDType, "content", cardContent)
 
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(receiveIDType).
@@ -205,21 +183,16 @@ func (c *Client) SendCardMessage(ctx context.Context, receiveID, receiveIDType s
 
 	resp, err := c.apiClient.Im.Message.Create(ctx, req)
 	if err != nil {
-		c.logger.Error().Str("module", "feishu").Err(err).Msg("Failed to send card message")
+		c.logger.Error("Failed to send card message", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("failed to send card message: %w", err)
 	}
 
 	if !resp.Success() {
-		c.logger.Error().Str("module", "feishu").
-			Int("code", resp.Code).
-			Str("msg", resp.Msg).
-			Msg("Send card message failed")
+		c.logger.Error("Send card message failed", "module", "feishu", "code", resp.Code, "msg", resp.Msg)
 		return newAPIError("SendCardMessage", resp.Code, resp.Msg)
 	}
 
-	c.logger.Info().Str("module", "feishu").
-		Str("to", receiveID).
-		Msg("Card message sent")
+	c.logger.Info("Card message sent", "module", "feishu", "to", receiveID)
 	return nil
 }
 
@@ -227,10 +200,7 @@ func (c *Client) SendCardMessage(ctx context.Context, receiveID, receiveIDType s
 // The reactionType should be a Feishu emoji type like "THINKING", "STANDARD_EMOJI_1", etc.
 // See https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce
 func (c *Client) AddMessageReaction(ctx context.Context, messageID string, reactionType string) error {
-	c.logger.Debug().Str("module", "feishu").
-		Str("message_id", messageID).
-		Str("reaction", reactionType).
-		Msg("Adding message reaction")
+	c.logger.Debug("Adding message reaction", "module", "feishu", "message_id", messageID, "reaction", reactionType)
 
 	req := larkim.NewCreateMessageReactionReqBuilder().
 		MessageId(messageID).
@@ -241,15 +211,12 @@ func (c *Client) AddMessageReaction(ctx context.Context, messageID string, react
 
 	resp, err := c.apiClient.Im.MessageReaction.Create(ctx, req)
 	if err != nil {
-		c.logger.Debug().Str("module", "feishu").Err(err).Msg("Failed to add message reaction")
+		c.logger.Debug("Failed to add message reaction", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("failed to add message reaction: %w", err)
 	}
 
 	if !resp.Success() {
-		c.logger.Debug().Str("module", "feishu").
-			Int("code", resp.Code).
-			Str("msg", resp.Msg).
-			Msg("Add message reaction failed")
+		c.logger.Debug("Add message reaction failed", "module", "feishu", "code", resp.Code, "msg", resp.Msg)
 		return newAPIError("AddMessageReaction", resp.Code, resp.Msg)
 	}
 
@@ -260,10 +227,7 @@ func (c *Client) AddMessageReaction(ctx context.Context, messageID string, react
 // Note: This requires the reaction_id which is returned when adding the reaction.
 // If you don't have the reaction_id, you can use RemoveMessageReactionByType which lists all reactions first.
 func (c *Client) RemoveMessageReaction(ctx context.Context, messageID, reactionID string) error {
-	c.logger.Debug().Str("module", "feishu").
-		Str("message_id", messageID).
-		Str("reaction_id", reactionID).
-		Msg("Removing message reaction")
+	c.logger.Debug("Removing message reaction", "module", "feishu", "message_id", messageID, "reaction_id", reactionID)
 
 	req := larkim.NewDeleteMessageReactionReqBuilder().
 		MessageId(messageID).
@@ -272,15 +236,12 @@ func (c *Client) RemoveMessageReaction(ctx context.Context, messageID, reactionI
 
 	resp, err := c.apiClient.Im.MessageReaction.Delete(ctx, req)
 	if err != nil {
-		c.logger.Debug().Str("module", "feishu").Err(err).Msg("Failed to remove message reaction")
+		c.logger.Debug("Failed to remove message reaction", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("failed to remove message reaction: %w", err)
 	}
 
 	if !resp.Success() {
-		c.logger.Debug().Str("module", "feishu").
-			Int("code", resp.Code).
-			Str("msg", resp.Msg).
-			Msg("Remove message reaction failed")
+		c.logger.Debug("Remove message reaction failed", "module", "feishu", "code", resp.Code, "msg", resp.Msg)
 		return newAPIError("RemoveMessageReaction", resp.Code, resp.Msg)
 	}
 
@@ -290,10 +251,7 @@ func (c *Client) RemoveMessageReaction(ctx context.Context, messageID, reactionI
 // RemoveMessageReactionByType removes an emoji reaction from a message by emoji type.
 // This method lists all reactions and finds the one matching the given type.
 func (c *Client) RemoveMessageReactionByType(ctx context.Context, messageID, reactionType string) error {
-	c.logger.Debug().Str("module", "feishu").
-		Str("message_id", messageID).
-		Str("reaction", reactionType).
-		Msg("Removing message reaction by type")
+	c.logger.Debug("Removing message reaction by type", "module", "feishu", "message_id", messageID, "reaction", reactionType)
 
 	// List all reactions for the message
 	listReq := larkim.NewListMessageReactionReqBuilder().
@@ -302,7 +260,7 @@ func (c *Client) RemoveMessageReactionByType(ctx context.Context, messageID, rea
 
 	listResp, err := c.apiClient.Im.MessageReaction.List(ctx, listReq)
 	if err != nil || !listResp.Success() {
-		c.logger.Debug().Str("module", "feishu").Err(err).Msg("Failed to list message reactions")
+		c.logger.Debug("Failed to list message reactions", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("failed to list message reactions: %w", err)
 	}
 
@@ -323,9 +281,7 @@ func (c *Client) RemoveMessageReactionByType(ctx context.Context, messageID, rea
 // DeleteMessage deletes a message by message ID.
 // This is used to remove temporary "processing" indicator messages.
 func (c *Client) DeleteMessage(ctx context.Context, messageID string) error {
-	c.logger.Debug().Str("module", "feishu").
-		Str("message_id", messageID).
-		Msg("Deleting message")
+	c.logger.Debug("Deleting message", "module", "feishu", "message_id", messageID)
 
 	req := larkim.NewDeleteMessageReqBuilder().
 		MessageId(messageID).
@@ -333,15 +289,12 @@ func (c *Client) DeleteMessage(ctx context.Context, messageID string) error {
 
 	resp, err := c.apiClient.Im.Message.Delete(ctx, req)
 	if err != nil {
-		c.logger.Debug().Str("module", "feishu").Err(err).Msg("Failed to delete message")
+		c.logger.Debug("Failed to delete message", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("failed to delete message: %w", err)
 	}
 
 	if !resp.Success() {
-		c.logger.Debug().Str("module", "feishu").
-			Int("code", resp.Code).
-			Str("msg", resp.Msg).
-			Msg("Delete message failed")
+		c.logger.Debug("Delete message failed", "module", "feishu", "code", resp.Code, "msg", resp.Msg)
 		return newAPIError("DeleteMessage", resp.Code, resp.Msg)
 	}
 

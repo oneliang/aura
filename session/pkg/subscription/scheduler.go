@@ -48,16 +48,13 @@ func (s *Scheduler) Start() {
 	subs := s.store.GetActive()
 	for _, sub := range subs {
 		if err := s.scheduleSubscription(sub); err != nil {
-			s.logger.Warn().Err(err).
-				Str("subscription_id", sub.ID).
-				Str("event_type", sub.EventType).
-				Msg("Failed to schedule subscription")
+			s.logger.Warn("Failed to schedule subscription", "error", err.Error(), "subscription_id", sub.ID, "event_type", sub.EventType)
 		}
 	}
 
 	s.cron.Start()
 	s.running = true
-	s.logger.Info().Str("module", "subscription").Int("count", len(s.entryIDs)).Msg("Scheduler started")
+	s.logger.Info("Scheduler started", "module", "subscription", "count", len(s.entryIDs))
 }
 
 // Stop stops the scheduler.
@@ -73,7 +70,7 @@ func (s *Scheduler) Stop() {
 	<-ctx.Done()
 	s.running = false
 	s.entryIDs = make(map[cron.EntryID]string)
-	s.logger.Info().Str("module", "subscription").Msg("Scheduler stopped")
+	s.logger.Info("Scheduler stopped", "module", "subscription")
 }
 
 // AddSubscription adds a new subscription and schedules it.
@@ -95,11 +92,7 @@ func (s *Scheduler) AddSubscription(sub *Subscription) error {
 		}
 	}
 
-	s.logger.Info().Str("module", "subscription").
-		Str("id", sub.ID).
-		Str("event_type", sub.EventType).
-		Str("cron", sub.CronExpr).
-		Msg("Subscription added")
+	s.logger.Info("Subscription added", "module", "subscription", "id", sub.ID, "event_type", sub.EventType, "cron", sub.CronExpr)
 
 	return nil
 }
@@ -123,9 +116,7 @@ func (s *Scheduler) RemoveSubscription(id string) error {
 		return fmt.Errorf("failed to delete subscription: %w", err)
 	}
 
-	s.logger.Info().Str("module", "subscription").
-		Str("id", id).
-		Msg("Subscription removed")
+	s.logger.Info("Subscription removed", "module", "subscription", "id", id)
 
 	return nil
 }
@@ -142,10 +133,7 @@ func (s *Scheduler) TriggerSubscription(id string) error {
 
 	ctx := context.Background()
 	if err := s.triggerFunc(ctx, sub); err != nil {
-		s.logger.Error().Err(err).
-			Str("module", "subscription").
-			Str("id", id).
-			Msg("Manual trigger failed")
+		s.logger.Error("Manual trigger failed", "error", err.Error(), "module", "subscription", "id", id)
 		return fmt.Errorf("trigger failed: %w", err)
 	}
 
@@ -159,25 +147,16 @@ func (s *Scheduler) scheduleSubscriptionLocked(sub *Subscription) error {
 
 	// Create job function
 	job := func() {
-		s.logger.Debug().Str("module", "subscription").
-			Str("id", subID).
-			Str("event_type", sub.EventType).
-			Msg("Triggering subscription")
+		s.logger.Debug("Triggering subscription", "module", "subscription", "id", subID, "event_type", sub.EventType)
 
 		ctx := context.Background()
 		if err := s.triggerFunc(ctx, sub); err != nil {
-			s.logger.Error().Err(err).
-				Str("module", "subscription").
-				Str("id", subID).
-				Msg("Scheduled trigger failed")
+			s.logger.Error("Scheduled trigger failed", "error", err.Error(), "module", "subscription", "id", subID)
 		} else {
 			// Update last trigger time
 			sub.Trigger()
 			if err := s.store.Update(sub); err != nil {
-				s.logger.Error().Err(err).
-					Str("module", "subscription").
-					Str("id", subID).
-					Msg("Failed to update subscription after trigger")
+				s.logger.Error("Failed to update subscription after trigger", "error", err.Error(), "module", "subscription", "id", subID)
 			}
 		}
 	}

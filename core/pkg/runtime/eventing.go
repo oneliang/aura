@@ -94,7 +94,7 @@ func (r *AgentRuntime) convertEvent(ev events.Event) Event {
 
 	// Unknown event types are logged but passed through (not dropped)
 	default:
-		r.logger.Warn().Str("module", "runtime").Str("event_type", string(ev.Type())).Msg("convertEvent: unknown event type, passing through")
+		r.logger.Warn("convertEvent: unknown event type, passing through", "module", "runtime", "event_type", string(ev.Type()))
 		return ev
 	}
 }

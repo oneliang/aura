@@ -66,7 +66,7 @@ func runServe(cmd *cobra.Command, args []string) {
 	})
 	defer logger.CloseAll()
 
-	globalLogger.Info().Msg("Starting Aura API Server...")
+	globalLogger.Info("Starting Aura API Server...")
 
 	// Use config values as defaults, CLI flags override
 	port := servePort
@@ -92,13 +92,12 @@ func runServe(cmd *cobra.Command, args []string) {
 	// Use default sessions directory
 	sessionsDir := ffp.MustAuraHomePath(constants.DirSessions)
 
-	globalLogger.Info().
-		Str("module", "serve").
-		Str("port", port).
-		Str("sessions_dir", sessionsDir).
-		Str("llm_url", llmURL).
-		Str("llm_model", llmModel).
-		Msg("Server configuration")
+	globalLogger.Info("Server configuration",
+		"module", "serve",
+		"port", port,
+		"sessions_dir", sessionsDir,
+		"llm_url", llmURL,
+		"llm_model", llmModel)
 
 	srv, err := server.NewServer(server.ServerConfig{
 		Port:        port,
@@ -109,7 +108,7 @@ func runServe(cmd *cobra.Command, args []string) {
 		UserID:      cmdCtx.UserID,
 	})
 	if err != nil {
-		globalLogger.Error().Err(err).Str("module", "serve").Msg("Failed to create server")
+		globalLogger.Error("Failed to create server", "module", "serve", "error", err.Error())
 		os.Exit(1)
 	}
 
@@ -118,7 +117,7 @@ func runServe(cmd *cobra.Command, args []string) {
 		skillLoader := skillloader.NewLoader(cfg.Skills.Directories)
 		skillMgr := skillmanager.NewSkillManager(skillLoader, cfg.Skills.Directories)
 		if _, err := skillLoader.Load(); err != nil {
-			logger.RegistryDefault().Warn().Err(err).Msg("Failed to load skills for API server")
+			logger.RegistryDefault().Warn("Failed to load skills for API server", "error", err.Error())
 		} else {
 			cmdProvider := cmds.NewCommandProvider(cmds.CommandProviderDeps{
 				Config:       cfg,
@@ -137,35 +136,35 @@ func runServe(cmd *cobra.Command, args []string) {
 
 	// Start server in goroutine
 	go func() {
-		globalLogger.Info().Str("module", "serve").Str("port", port).Msg("Server listening")
-		globalLogger.Info().Str("module", "serve").Msg("Press Ctrl+C to stop")
-		globalLogger.Info().Str("module", "serve").Msg("API Endpoints:")
-		globalLogger.Debug().Str("module", "serve").Msgf("  GET    http://localhost:%s/api/v1/health", port)
-		globalLogger.Debug().Str("module", "serve").Msgf("  GET    http://localhost:%s/api/v1/sessions", port)
-		globalLogger.Debug().Str("module", "serve").Msgf("  POST   http://localhost:%s/api/v1/sessions", port)
-		globalLogger.Debug().Str("module", "serve").Msgf("  GET    http://localhost:%s/api/v1/sessions/{id}", port)
-		globalLogger.Debug().Str("module", "serve").Msgf("  GET    http://localhost:%s/api/v1/sessions/{id}/messages", port)
-		globalLogger.Debug().Str("module", "serve").Msgf("  POST   http://localhost:%s/api/v1/sessions/{id}/message", port)
-		globalLogger.Debug().Str("module", "serve").Msgf("  DELETE http://localhost:%s/api/v1/sessions/{id}", port)
+		globalLogger.Info("Server listening", "module", "serve", "port", port)
+		globalLogger.Info("Press Ctrl+C to stop", "module", "serve")
+		globalLogger.Info("API Endpoints:", "module", "serve")
+		globalLogger.Debug(fmt.Sprintf("  GET    http://localhost:%s/api/v1/health", port), "module", "serve")
+		globalLogger.Debug(fmt.Sprintf("  GET    http://localhost:%s/api/v1/sessions", port), "module", "serve")
+		globalLogger.Debug(fmt.Sprintf("  POST   http://localhost:%s/api/v1/sessions", port), "module", "serve")
+		globalLogger.Debug(fmt.Sprintf("  GET    http://localhost:%s/api/v1/sessions/{id}", port), "module", "serve")
+		globalLogger.Debug(fmt.Sprintf("  GET    http://localhost:%s/api/v1/sessions/{id}/messages", port), "module", "serve")
+		globalLogger.Debug(fmt.Sprintf("  POST   http://localhost:%s/api/v1/sessions/{id}/message", port), "module", "serve")
+		globalLogger.Debug(fmt.Sprintf("  DELETE http://localhost:%s/api/v1/sessions/{id}", port), "module", "serve")
 
 		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
-			globalLogger.Error().Err(err).Str("module", "serve").Msg("Server error")
+			globalLogger.Error("Server error", "module", "serve", "error", err.Error())
 			os.Exit(1)
 		}
 	}()
 
 	// Wait for shutdown signal
 	<-sigChan
-	globalLogger.Info().Str("module", "serve").Msg("Shutting down...")
+	globalLogger.Info("Shutting down...", "module", "serve")
 
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		globalLogger.Error().Err(err).Str("module", "serve").Msg("Shutdown error")
+		globalLogger.Error("Shutdown error", "module", "serve", "error", err.Error())
 		os.Exit(1)
 	}
 
-	globalLogger.Info().Str("module", "serve").Msg("Server stopped.")
+	globalLogger.Info("Server stopped.", "module", "serve")
 }

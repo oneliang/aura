@@ -412,7 +412,7 @@ func (r *AgentRuntime) startCleanupGoroutine() {
 
 	retention := r.config.Memory.Retention
 	if retention.CleanupInterval <= 0 {
-		r.logger.Debug().Msg("Memory cleanup disabled (cleanup_interval not set)")
+		r.logger.Debug("Memory cleanup disabled (cleanup_interval not set)")
 		return
 	}
 
@@ -432,12 +432,12 @@ func (r *AgentRuntime) startCleanupGoroutine() {
 		ticker := time.NewTicker(retention.CleanupInterval)
 		defer ticker.Stop()
 
-		r.logger.Info().Dur("interval", retention.CleanupInterval).Msg("Memory cleanup goroutine started")
+		r.logger.Info("Memory cleanup goroutine started", "interval", retention.CleanupInterval)
 
 		for {
 			select {
 			case <-r.cleanupCtx.Done():
-				r.logger.Debug().Msg("Memory cleanup goroutine stopped")
+				r.logger.Debug("Memory cleanup goroutine stopped")
 				return
 			case <-ticker.C:
 				r.cleanupStaleMemory(retention.MaxInactiveAge)
@@ -474,7 +474,7 @@ func (r *AgentRuntime) cleanupStaleMemory(threshold time.Duration) {
 	}
 
 	if r.memory.IsStale(threshold) {
-		r.logger.Info().Dur("threshold", threshold).Msg("Memory is stale, clearing messages (preserving summary if available)")
+		r.logger.Info("Memory is stale, clearing messages (preserving summary if available)", "threshold", threshold)
 		// SessionMemory embeds BaseMemory which has ClearPreserveSummary
 		r.memory.ClearPreserveSummary()
 	}
@@ -527,7 +527,7 @@ func (r *AgentRuntime) PlanReviewHandler() func(ctx context.Context, goal string
 	return func(ctx context.Context, goal string, steps []string) (bool, error) {
 		// AutoApprove: skip confirmation and return true immediately
 		if r.config.AutoApprove {
-			r.logger.Debug().Str("module", "runtime").Msg("PlanReviewHandler: auto-approving plan (AutoApprove enabled)")
+			r.logger.Debug("PlanReviewHandler: auto-approving plan (AutoApprove enabled)", "module", "runtime")
 			return true, nil
 		}
 
@@ -918,7 +918,7 @@ func (r *AgentRuntime) sendEvent(event Event) {
 	case r.eventOutCh <- event:
 	default:
 		// 通道满，丢弃事件（或记录警告）
-		r.logger.Warn().Str("type", string(event.Type())).Msg("Event channel full, dropping event")
+		r.logger.Warn("Event channel full, dropping event", "type", string(event.Type()))
 	}
 }
 
@@ -1036,7 +1036,7 @@ func (r *AgentRuntime) requestInteraction(ctx context.Context, req events.Intera
 		r.interactionMu.Unlock()
 		// 超时 → 中断（而非自动批准）
 		// 用户后续可继续对话，LLM会重触发未完成内容
-		r.logger.Warn().Str("request_id", req.ID).Msg("Interaction request timeout, interrupting")
+		r.logger.Warn("Interaction request timeout, interrupting", "request_id", req.ID)
 		return events.InteractionResponse{
 			RequestID: req.ID,
 			Type:      req.Type,

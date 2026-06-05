@@ -178,18 +178,18 @@ func (r *AgentRuntime) initSkillSystem(ctx context.Context) {
 
 	r.skillLoader = loader.NewLoader(r.config.Skills.Directories)
 	if _, err := r.skillLoader.Load(); err != nil {
-		r.logger.Warn().Err(err).Msg("Failed to load skills")
+		r.logger.Warn("Failed to load skills", "error", err.Error())
 	}
 
 	// Initialize skill injector for skill_activate tool deduplication
 	if len(r.skillLoader.GetSkills()) > 0 {
 		r.skillInjector = skilltool.NewSkillInjector()
-		r.logger.Debug().Str("module", "runtime").Int("count", len(r.skillLoader.GetSkills())).Msg("Skills loaded and injector initialized")
+		r.logger.Debug("Skills loaded and injector initialized", "module", "runtime", "count", len(r.skillLoader.GetSkills()))
 		for _, sk := range r.skillLoader.GetSkills() {
-			r.logger.Debug().Str("module", "runtime").Str("skill", sk.Name).Str("description", sk.Description).Msg("Loaded skill")
+			r.logger.Debug("Loaded skill", "module", "runtime", "skill", sk.Name, "description", sk.Description)
 		}
 	} else {
-		r.logger.Debug().Str("module", "runtime").Msg("No skills loaded")
+		r.logger.Debug("No skills loaded", "module", "runtime")
 	}
 
 	// Create SkillSystem component
@@ -209,7 +209,7 @@ func (r *AgentRuntime) initAgentSystem(ctx context.Context) {
 
 	r.agentLoader = agentloader.NewLoader(r.config.Agents.Directories)
 	if _, err := r.agentLoader.Load(); err != nil {
-		r.logger.Warn().Err(err).Msg("Failed to load agents")
+		r.logger.Warn("Failed to load agents", "error", err.Error())
 	}
 
 	// Create AgentSystem component
@@ -234,7 +234,7 @@ func (r *AgentRuntime) initMemoryAndPrompt(ctx context.Context) error {
 	// Create hooks engine from independent config file
 	hooksCfg, err := hooks.LoadHooksConfig("")
 	if err != nil {
-		r.logger.Warn().Err(err).Msg("Failed to load hooks config, hooks disabled")
+		r.logger.Warn("Failed to load hooks config, hooks disabled", "error", err.Error())
 	}
 	r.hookEngine = hooks.NewEngine(hooksCfg, r.logger)
 
@@ -320,7 +320,7 @@ func (r *AgentRuntime) initEngine(ctx context.Context) error {
 		if err == nil {
 			rollbackMgr := rollback.NewManager(workDir, r.logger)
 			agentFactoryOpts = append(agentFactoryOpts, factory.WithRollbackManager(rollbackMgr))
-			r.logger.Debug().Str("module", "runtime").Str("workDir", workDir).Msg("rollback manager initialized")
+			r.logger.Debug("rollback manager initialized", "module", "runtime", "workDir", workDir)
 		}
 	}
 
@@ -353,7 +353,7 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 	if taskList != nil && saveTasksFn != nil {
 		taskTool := tasktool.New(nil, "", taskList, saveTasksFn, r.hookEngine)
 		r.agent.AddTool(taskTool)
-		r.logger.Debug().Str("module", "runtime").Msg("task tool registered")
+		r.logger.Debug("task tool registered", "module", "runtime")
 	}
 
 	toolReg := factory.NewToolRegistry(
@@ -380,7 +380,7 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 		r.toolNamesMu.Lock()
 		r.toolNames = append(r.toolNames, skillActivateTool.Name())
 		r.toolNamesMu.Unlock()
-		r.logger.Debug().Str("module", "runtime").Msg("skill_activate tool registered")
+		r.logger.Debug("skill_activate tool registered", "module", "runtime")
 	}
 
 	r.toolNames = factory.GetToolNames(r.agent)
@@ -396,7 +396,7 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 		mcpTools, err := r.mcp.StartAll(mcpCtx)
 		mcpCancel()
 		if err != nil {
-			r.logger.Warn().Err(err).Msg("Failed to start MCP servers")
+			r.logger.Warn("Failed to start MCP servers", "error", err.Error())
 		} else {
 			for _, t := range mcpTools {
 				r.agent.AddTool(t)
@@ -405,7 +405,7 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 				r.toolNamesMu.Unlock()
 			}
 			if len(mcpTools) > 0 {
-				r.logger.Info().Int("count", len(mcpTools)).Msg("MCP tools registered")
+				r.logger.Info("MCP tools registered", "count", len(mcpTools))
 			}
 		}
 	}
@@ -415,7 +415,7 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 func (r *AgentRuntime) initPostSetup(ctx context.Context) error {
 	// Initialize delegation audit logger (ensures log file exists before first delegation)
 	if dl := logger.GetDelegationAuditLogger(); dl != nil {
-		r.logger.Info().Msg("Delegation audit logger initialized")
+		r.logger.Info("Delegation audit logger initialized")
 	}
 
 	// Set up agent delegation function if command provider supports it
@@ -425,7 +425,7 @@ func (r *AgentRuntime) initPostSetup(ctx context.Context) error {
 		if cp, ok := r.commandProvider.(*commands.CommandProvider); ok {
 			cp.SetAgentDelegateFn(r.agentDelegateFn)
 		} else {
-			r.logger.Warn().Msg("Agent delegation: commandProvider type assertion failed, delegation will not work")
+			r.logger.Warn("Agent delegation: commandProvider type assertion failed, delegation will not work")
 		}
 		// Set delegateFn in AgentSystem component
 		if r.agents != nil {
@@ -454,7 +454,7 @@ func (r *AgentRuntime) initPostSetup(ctx context.Context) error {
 		var err error
 		r.habitManager, err = manager.New(habitCfg)
 		if err != nil {
-			r.logger.Warn().Err(err).Str("module", "runtime").Msg("Failed to create habit manager, continuing without habit tracking")
+			r.logger.Warn("Failed to create habit manager, continuing without habit tracking", "module", "runtime", "error", err.Error())
 		}
 		// Set habitManager in SessionContext component
 		if r.session != nil {
@@ -500,7 +500,7 @@ func (r *AgentRuntime) initializeSubAgent(ctx context.Context) error {
 	confirmHandler := r.createConfirmationHandler()
 
 	// Create Engine using shared LLM client and permission manager
-	r.logger.Info().Str("llmClient_type", fmt.Sprintf("%T", r.llmClient)).Msg("initializeSubAgent: creating engine with shared LLM client")
+	r.logger.Info("initializeSubAgent: creating engine with shared LLM client", "llmClient_type", fmt.Sprintf("%T", r.llmClient))
 	agentFactoryOpts := []factory.EngineFactoryOption{
 		factory.WithSystemPrompt(systemPrompt),
 		factory.WithConfirmationHandler(confirmHandler),
@@ -637,7 +637,7 @@ func (r *AgentRuntime) loadProjectAuraMd() string {
 	}
 
 	log := logger.RegistryDefault().WithModule("runtime")
-	log.Info().Str("path", auraMdPath).Msg("Loaded project-level AURA.md")
+	log.Info("Loaded project-level AURA.md", "path", auraMdPath)
 
 	return "\n\n## Project Instructions (AURA.md)\n\n" + string(content)
 }

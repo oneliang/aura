@@ -147,7 +147,7 @@ func (a *Adapter) setupClients(ctx context.Context) error {
 	userStoreFile := filepath.Join(a.config.DataDir, "feishu_users.json")
 	userStore, err := NewUserStore(userStoreFile)
 	if err != nil {
-		a.logger.Warn().Err(err).Str("module", "feishu").Msg("Failed to create user store, using in-memory only")
+		a.logger.Warn("Failed to create user store, using in-memory only", "module", "feishu", "error", err.Error())
 		userStore, _ = NewUserStore("")
 	}
 	a.userStore = userStore
@@ -159,20 +159,20 @@ func (a *Adapter) setupClients(ctx context.Context) error {
 		if event.Event != nil && event.Event.Message != nil && event.Event.Message.MessageId != nil {
 			msgID = *event.Event.Message.MessageId
 		}
-		a.logger.Info().Str("module", "feishu").Str("msg_id", msgID).Msg("Received message")
+		a.logger.Info("Received message", "module", "feishu", "msg_id", msgID)
 		return a.handleMessageEvent(ctx, event)
 	})
 	eventDispatcher.OnP2MessageReadV1(func(ctx context.Context, event *larkim.P2MessageReadV1) error {
-		a.logger.Debug().Str("module", "feishu").Msg("Ignored message_read event")
+		a.logger.Debug("Ignored message_read event", "module", "feishu")
 		return nil
 	})
 	// Reaction events - log as warning for future implementation
 	eventDispatcher.OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
-		a.logger.Warn().Str("module", "feishu").Str("event_type", "im.message.reaction.created_v1").Msg("Event received but not implemented")
+		a.logger.Warn("Event received but not implemented", "module", "feishu", "event_type", "im.message.reaction.created_v1")
 		return nil
 	})
 	eventDispatcher.OnP2MessageReactionDeletedV1(func(ctx context.Context, event *larkim.P2MessageReactionDeletedV1) error {
-		a.logger.Warn().Str("module", "feishu").Str("event_type", "im.message.reaction.deleted_v1").Msg("Event received but not implemented")
+		a.logger.Warn("Event received but not implemented", "module", "feishu", "event_type", "im.message.reaction.deleted_v1")
 		return nil
 	})
 
@@ -304,20 +304,20 @@ func (a *Adapter) handleMessageEvent(ctx context.Context, event *larkim.P2Messag
 	// Get sender identifier
 	senderID := a.getSenderID(event)
 	if senderID == "" {
-		a.logger.Error().Str("module", "feishu").Msg("Cannot get sender ID")
+		a.logger.Error("Cannot get sender ID", "module", "feishu")
 		return fmt.Errorf("cannot get sender id")
 	}
 
-	a.logger.Info().Str("module", "feishu").Str("sender", senderID).Msg("Processing message from sender")
+	a.logger.Info("Processing message from sender", "module", "feishu", "sender", senderID)
 
 	// Get or create session
 	sessionID, err := a.mgr.GetOrCreateSession(ctx, "feishu", senderID)
 	if err != nil {
-		a.logger.Error().Str("module", "feishu").Err(err).Msg("Get or create session failed")
+		a.logger.Error("Get or create session failed", "module", "feishu", "error", err.Error())
 		return fmt.Errorf("get or create session: %w", err)
 	}
 
-	a.logger.Debug().Str("module", "feishu").Str("session_id", sessionID).Msg("Session created/retrieved")
+	a.logger.Debug("Session created/retrieved", "module", "feishu", "session_id", sessionID)
 
 	// Auto-save user identity mapping
 	a.saveUserInfo(ctx, sessionID, senderID, event)
@@ -325,11 +325,11 @@ func (a *Adapter) handleMessageEvent(ctx context.Context, event *larkim.P2Messag
 	// Parse message content
 	content := a.getMessageText(event)
 	if strings.TrimSpace(content) == "" {
-		a.logger.Debug().Str("module", "feishu").Msg("Skipping empty message")
+		a.logger.Debug("Skipping empty message", "module", "feishu")
 		return nil // Skip empty messages
 	}
 
-	a.logger.Info().Str("module", "feishu").Str("content", content).Msg("Message content")
+	a.logger.Info("Message content", "module", "feishu", "content", content)
 
 	// Process message asynchronously if configured
 	if a.config.AsyncProcessing {
@@ -337,7 +337,7 @@ func (a *Adapter) handleMessageEvent(ctx context.Context, event *larkim.P2Messag
 		shuttingDown := !a.status.Running
 		a.mu.RUnlock()
 		if shuttingDown {
-			a.logger.Debug().Str("module", "feishu").Msg("Skipping async processing, adapter shutting down")
+			a.logger.Debug("Skipping async processing, adapter shutting down", "module", "feishu")
 			return nil
 		}
 		a.wg.Add(1)
@@ -351,7 +351,7 @@ func (a *Adapter) handleMessageEvent(ctx context.Context, event *larkim.P2Messag
 			})
 		}()
 	} else {
-		a.logger.Debug().Str("module", "feishu").Msg("Processing message synchronously")
+		a.logger.Debug("Processing message synchronously", "module", "feishu")
 		a.processMessage(ctx, sessionID, content, &MessageEventInfo{
 			ChatID:    a.getChatID(event),
 			MessageID: a.getMessageID(event),
@@ -374,12 +374,12 @@ type MessageEventInfo struct {
 
 // processMessage processes a message through Aura and sends reply if configured.
 func (a *Adapter) processMessage(ctx context.Context, sessionID, content string, msgInfo *MessageEventInfo) {
-	a.logger.Debug().Str("module", "feishu").Str("session", sessionID).Str("content", content).Msg("Processing message")
+	a.logger.Debug("Processing message", "module", "feishu", "session", sessionID, "content", content)
 
 	// Get runtime for session
 	rt, err := a.mgr.GetRuntime(ctx, sessionID)
 	if err != nil {
-		a.logger.Error().Str("module", "feishu").Err(err).Msg("Get runtime failed")
+		a.logger.Error("Get runtime failed", "module", "feishu", "error", err.Error())
 		return
 	}
 
@@ -401,7 +401,7 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 	var hasProcessingReaction bool
 	if a.config.ShowProcessingIndicator && msgInfo.MessageID != "" {
 		if err := a.addProcessingReaction(ctx, msgInfo.MessageID); err != nil {
-			a.logger.Debug().Str("module", "feishu").Err(err).Msg("Failed to add processing reaction")
+			a.logger.Debug("Failed to add processing reaction", "module", "feishu", "error", err.Error())
 		} else {
 			hasProcessingReaction = true
 		}
@@ -410,7 +410,7 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 	// Process message (agent.Run will automatically add user message to memory)
 	// Start runtime event stream
 	if err := rt.Start(ctx); err != nil {
-		a.logger.Error().Str("module", "feishu").Err(err).Msg("Start runtime failed")
+		a.logger.Error("Start runtime failed", "module", "feishu", "error", err.Error())
 		if hasProcessingReaction && msgInfo.MessageID != "" {
 			a.removeProcessingReaction(ctx, msgInfo.MessageID)
 		}
@@ -421,7 +421,7 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 	requestID := fmt.Sprintf("feishu_%d", time.Now().UnixNano())
 	userEvent := events.NewEvent(events.EventTypeUserInput, content, requestID)
 	if err := rt.SendEvent(ctx, userEvent); err != nil {
-		a.logger.Error().Str("module", "feishu").Err(err).Msg("Send event failed")
+		a.logger.Error("Send event failed", "module", "feishu", "error", err.Error())
 		rt.Stop(ctx)
 		if hasProcessingReaction && msgInfo.MessageID != "" {
 			a.removeProcessingReaction(ctx, msgInfo.MessageID)
@@ -437,14 +437,14 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 			hasResponse = true
 		}
 		// Log for debugging
-		a.logger.Debug().Str("module", "feishu").Str("event_type", string(ev.Type())).Msg("Event received")
+		a.logger.Debug("Event received", "module", "feishu", "event_type", string(ev.Type()))
 		if ev.Type() == sdk.EventTypeDone {
 			break
 		}
 	}
 	rt.Stop(ctx)
 
-	a.logger.Debug().Str("module", "feishu").Bool("has_response", hasResponse).Msg("Processed message")
+	a.logger.Debug("Processed message", "module", "feishu", "has_response", hasResponse)
 
 	// Remove processing reaction before sending reply
 	if hasProcessingReaction && msgInfo.MessageID != "" {
@@ -454,26 +454,26 @@ func (a *Adapter) processMessage(ctx context.Context, sessionID, content string,
 	// Send reply if auto-reply is enabled and we have a response
 	if a.config.AutoReply && hasResponse {
 		responseText := responseBuilder.String()
-		a.logger.Info().Str("module", "feishu").Str("response", responseText).Msg("Sending reply")
+		a.logger.Info("Sending reply", "module", "feishu", "response", responseText)
 		if err := a.client.SendTextMessage(ctx, targetID, targetType, responseText); err != nil {
-			a.logger.Error().Str("module", "feishu").Err(err).Msg("Send reply message failed")
+			a.logger.Error("Send reply message failed", "module", "feishu", "error", err.Error())
 		} else {
-			a.logger.Info().Str("module", "feishu").Str("to", targetID).Msg("Sent reply message")
+			a.logger.Info("Sent reply message", "module", "feishu", "to", targetID)
 		}
 	}
 }
 
 // addProcessingReaction adds a THINKING emoji reaction to the user's message.
 func (a *Adapter) addProcessingReaction(ctx context.Context, messageID string) error {
-	a.logger.Debug().Str("module", "feishu").Str("message_id", messageID).Msg("Adding THINKING reaction")
+	a.logger.Debug("Adding THINKING reaction", "module", "feishu", "message_id", messageID)
 	return a.client.AddMessageReaction(ctx, messageID, "THINKING")
 }
 
 // removeProcessingReaction removes the THINKING emoji reaction from the user's message.
 func (a *Adapter) removeProcessingReaction(ctx context.Context, messageID string) {
-	a.logger.Debug().Str("module", "feishu").Str("message_id", messageID).Msg("Removing THINKING reaction")
+	a.logger.Debug("Removing THINKING reaction", "module", "feishu", "message_id", messageID)
 	if err := a.client.RemoveMessageReactionByType(ctx, messageID, "THINKING"); err != nil {
-		a.logger.Debug().Str("module", "feishu").Err(err).Msg("Failed to remove processing reaction")
+		a.logger.Debug("Failed to remove processing reaction", "module", "feishu", "error", err.Error())
 	}
 }
 
@@ -549,15 +549,9 @@ func (a *Adapter) saveUserInfo(ctx context.Context, sessionID, openID string, ev
 	}
 
 	if err := a.userStore.Set(userInfo); err != nil {
-		a.logger.Warn().Err(err).Str("module", "feishu").
-			Str("session_id", sessionID).
-			Str("open_id", openID).
-			Msg("Failed to save user info")
+		a.logger.Warn("Failed to save user info", "module", "feishu", "error", err.Error(), "session_id", sessionID, "open_id", openID)
 	} else {
-		a.logger.Debug().Str("module", "feishu").
-			Str("session_id", sessionID).
-			Str("open_id", openID).
-			Msg("Saved user info")
+		a.logger.Debug("Saved user info", "module", "feishu", "session_id", sessionID, "open_id", openID)
 	}
 }
 
@@ -585,15 +579,10 @@ func (a *Adapter) BroadcastMessage(ctx context.Context, targets []adapters.Messa
 	for _, target := range targets {
 		if err := a.PushMessage(ctx, target.TargetType, target.TargetID, msgType, content); err != nil {
 			results[target.TargetID] = err
-			a.logger.Error().Str("module", "feishu").
-				Str("target", target.TargetID).
-				Err(err).
-				Msg("Broadcast message failed")
+			a.logger.Error("Broadcast message failed", "module", "feishu", "target", target.TargetID, "error", err.Error())
 		} else {
 			results[target.TargetID] = nil
-			a.logger.Debug().Str("module", "feishu").
-				Str("target", target.TargetID).
-				Msg("Broadcast message sent")
+			a.logger.Debug("Broadcast message sent", "module", "feishu", "target", target.TargetID)
 		}
 	}
 	return results

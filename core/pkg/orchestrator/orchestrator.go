@@ -368,12 +368,12 @@ func (o *Orchestrator) GetHealthReport() map[string]interface{} {
 
 // handleCoordinationEvent handles events from the coordinator.
 func (o *Orchestrator) handleCoordinationEvent(event CoordinationEvent) {
-	o.logger.Debug().Str("type", string(event.Type)).Str("message", event.Message).Msg("orchestrator coordination event")
+	o.logger.Debug("orchestrator coordination event", "type", string(event.Type), "message", event.Message)
 }
 
 // handleSupervisionEvent handles events from the supervisor.
 func (o *Orchestrator) handleSupervisionEvent(event SupervisionEvent) {
-	o.logger.Debug().Str("type", string(event.Type)).Str("message", event.Message).Msg("orchestrator supervision event")
+	o.logger.Debug("orchestrator supervision event", "type", string(event.Type), "message", event.Message)
 }
 
 // generateDocID generates a unique document ID.

@@ -504,7 +504,7 @@ func (e *Engine) AddTool(tool tools.Tool) {
 func (e *Engine) saveTasks() {
 	if e.taskStore != nil {
 		if err := e.taskStore.Save(e.taskList.List()); err != nil {
-			e.logger.Warn().Err(err).Msg("saveTasks: failed to persist tasks")
+			e.logger.Warn("saveTasks: failed to persist tasks", "error", err.Error())
 		}
 	}
 }
@@ -559,7 +559,7 @@ func (e *Engine) Run(ctx context.Context, input string) (<-chan events.Event, er
 		EventChan: perRequestEventCh,
 	}
 
-	e.logger.Info().Str("requestID", requestID).Str("input", input).Msg("Run: submitting request")
+	e.logger.Info("Run: submitting request", "requestID", requestID, "input", input)
 
 	select {
 	case e.inputQueue <- request:
@@ -590,14 +590,13 @@ func (e *Engine) processInputQueue() {
 		// when EventTypeUserInput is received via SendEvent. We don't add it again here
 		// to avoid duplication in session storage.
 
-		e.logger.Info().Str("requestID", request.RequestID).Msg("processInputQueue: starting ReAct loop")
+		e.logger.Info("processInputQueue: starting ReAct loop", "requestID", request.RequestID)
 
 		// Start ReAct loop in background
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					e.logger.Error().Str("requestID", request.RequestID).
-						Msgf("ReAct loop goroutine panicked: %v", r)
+					e.logger.Error(fmt.Sprintf("ReAct loop goroutine panicked: %v", r), "requestID", request.RequestID)
 					select {
 					case eventCh <- events.NewEvent(events.EventTypeError, fmt.Sprintf("Internal error: %v", r), request.RequestID):
 					default:
@@ -667,18 +666,18 @@ func (e *Engine) processInputQueue() {
 
 		// Send done event to signal request completion
 		doneEvent := events.NewEvent(events.EventTypeDone, "", request.RequestID)
-		e.logger.Info().Str("requestID", request.RequestID).Msg("processInputQueue: sending done event")
+		e.logger.Info("processInputQueue: sending done event", "requestID", request.RequestID)
 		select {
 		case eventCh <- doneEvent:
-			e.logger.Debug().Str("requestID", request.RequestID).Msg("processInputQueue: done event sent")
+			e.logger.Debug("processInputQueue: done event sent", "requestID", request.RequestID)
 		case <-time.After(5 * time.Second):
-			e.logger.Warn().Str("requestID", request.RequestID).Msg("processInputQueue: done event timed out")
+			e.logger.Warn("processInputQueue: done event timed out", "requestID", request.RequestID)
 		}
 
 		// Close event channel after done event
 		close(eventCh)
 
-		e.logger.Info().Str("requestID", request.RequestID).Msg("processInputQueue: request completed")
+		e.logger.Info("processInputQueue: request completed", "requestID", request.RequestID)
 		e.processingMu.Unlock()
 	}
 }

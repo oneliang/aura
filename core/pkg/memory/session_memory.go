@@ -155,7 +155,7 @@ func (m *SessionMemory) persistWithType(role, content string, msgType sharedmemo
 		UserID:    m.userID,
 	}
 	if err := m.store.Append(ctx, &sessionMsg); err != nil {
-		logger.Default().Warn().Err(err).Str("sessionID", m.sessionID).Msg("Failed to persist session message")
+		logger.Default().Warn("Failed to persist session message", "error", err.Error(), "sessionID", m.sessionID)
 	}
 }
 
@@ -252,7 +252,7 @@ func (m *SessionMemory) persistWithBlocks(role string, blocks []sharedmemory.Con
 	}
 
 	if err := m.store.Append(ctx, &sessionMsg); err != nil {
-		logger.Default().Warn().Err(err).Str("sessionID", m.sessionID).Msg("Failed to persist session message with blocks")
+		logger.Default().Warn("Failed to persist session message with blocks", "error", err.Error(), "sessionID", m.sessionID)
 	}
 }
 
@@ -273,7 +273,7 @@ func (m *SessionMemory) Clear() {
 
 	if m.store != nil {
 		if err := m.store.TruncateSession(m.sessionID); err != nil {
-			logger.Default().Warn().Err(err).Str("sessionID", m.sessionID).Msg("Failed to truncate session file")
+			logger.Default().Warn("Failed to truncate session file", "error", err.Error(), "sessionID", m.sessionID)
 		}
 	}
 }
@@ -473,6 +473,6 @@ func (m *SessionMemory) persistCompactBoundary(ctx context.Context, preTokens, p
 	}
 
 	if err := m.store.Append(ctx, &boundaryMsg); err != nil {
-		logger.Default().Warn().Err(err).Str("sessionID", m.sessionID).Msg("Failed to persist compact boundary")
+		logger.Default().Warn("Failed to persist compact boundary", "error", err.Error(), "sessionID", m.sessionID)
 	}
 }

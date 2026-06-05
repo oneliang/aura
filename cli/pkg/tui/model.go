@@ -139,8 +139,12 @@ type (
 // NewWithRuntime creates a new TUI model with runtime reference.
 // This is the new architecture: TUI holds runtime reference and uses event stream.
 func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.SessionManager, summarizer *sdk.Summarizer, modelProvider *ModelProvider, commandProvider commands.Command, mcpManager *sdk.MCPManager) *Model {
+	startTime := time.Now()
+	log.Debug("[DIAG] NewWithRuntime: starting")
+
 	// Initialize i18n constants (must be called after i18n.Init)
 	InitI18nConstants()
+	log.Debug("[DIAG] NewWithRuntime: InitI18nConstants done", "elapsed", time.Since(startTime))
 
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -148,11 +152,13 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 	renderer := NewMarkdownRenderer(80)
 	messages := NewMessageStore(500, config.UserName)
 	input := NewInputManager(styles)
+	log.Debug("[DIAG] NewWithRuntime: styles/renderer/messages/input created", "elapsed", time.Since(startTime))
 
 	state := NewState()
 	state.SetDebugMode(config.DebugMode)
 	state.SetTokenMax(config.TokenMax)
 	state.SetShowTokens(config.ShowTokens)
+	log.Debug("[DIAG] NewWithRuntime: state created", "elapsed", time.Since(startTime))
 
 	m := Model{
 		state:               state,
@@ -184,9 +190,11 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 		autoScroll:        AutoScrollDefault,
 		viewportReady:     false,
 	}
+	log.Debug("[DIAG] NewWithRuntime: Model struct created", "elapsed", time.Since(startTime))
 
 	m.statusBar = NewStatusBarWidget(styles, state, &m)
 	m.commandPopup = &CommandPopupWidget{styles: styles}
+	log.Debug("[DIAG] NewWithRuntime: statusBar/commandPopup created", "elapsed", time.Since(startTime))
 
 	// Set greeting (fixed header, not cleared by /clear)
 	versionInfo := styles.Help.Render(version.FullVersion())
@@ -197,10 +205,12 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 	if modelProvider != nil {
 		modelProvider.Set(&m)
 	}
+	log.Debug("[DIAG] NewWithRuntime: greeting/modelProvider done", "elapsed", time.Since(startTime))
 
 	// Load sessions if session manager is available
 	if sessionMgr != nil {
 		items, err := sessionMgr.ListSessions()
+		log.Debug("[DIAG] NewWithRuntime: ListSessions done", "elapsed", time.Since(startTime))
 		if err == nil {
 			m.sessionItems = sessionInfosToItems(items)
 
@@ -215,6 +225,7 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 				}
 			}
 		}
+		log.Debug("[DIAG] NewWithRuntime: sessionItems set", "elapsed", time.Since(startTime))
 
 		// Load session history if current session exists
 		if m.currentSession != nil {
@@ -223,8 +234,10 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 		} else {
 			m.sessionInfo = ""
 		}
+		log.Debug("[DIAG] NewWithRuntime: loadSessionHistory done", "elapsed", time.Since(startTime))
 	}
 
+	log.Debug("[DIAG] NewWithRuntime: completed", "elapsed", time.Since(startTime))
 	return &m
 }
 
@@ -238,13 +251,13 @@ func (m Model) Init() tea.Cmd {
 // Returns true if history was loaded.
 func (m *Model) loadSessionHistory() bool {
 	if m.sessionMgr == nil || m.currentSession == nil {
-		log.Debug().Msg("loadSessionHistory: sessionMgr or currentSession is nil")
+		log.Debug("loadSessionHistory: sessionMgr or currentSession is nil")
 		return false
 	}
 
 	store := m.sessionMgr.GetStore()
 	if store == nil {
-		log.Debug().Msg("loadSessionHistory: store is nil")
+		log.Debug("loadSessionHistory: store is nil")
 		return false
 	}
 
@@ -252,15 +265,15 @@ func (m *Model) loadSessionHistory() bool {
 	ctx := context.Background()
 	msgs, err := store.GetMessages(ctx, m.currentSession.ID(), 0) // Load all messages
 	if err != nil {
-		log.Debug().Err(err).Str("sessionID", m.currentSession.ID()).Msg("loadSessionHistory: error loading messages")
+		log.Debug("loadSessionHistory: error loading messages", "error", err.Error(), "sessionID", m.currentSession.ID())
 		return false
 	}
 	if len(msgs) == 0 {
-		log.Debug().Str("sessionID", m.currentSession.ID()).Msg("loadSessionHistory: no messages")
+		log.Debug("loadSessionHistory: no messages", "sessionID", m.currentSession.ID())
 		return false
 	}
 
-	log.Debug().Int("count", len(msgs)).Str("sessionID", m.currentSession.ID()).Msg("loadSessionHistory: loaded messages")
+	log.Debug("loadSessionHistory: loaded messages", "count", len(msgs), "sessionID", m.currentSession.ID())
 
 	// Filter user messages for input history (newest first)
 	var userInputs []string
@@ -323,7 +336,7 @@ func (m *Model) sendMessage(input string) tea.Cmd {
 		select {
 		case m.eventOutCh <- userEvent:
 		default:
-			log.Warn().Msg("sendMessage: eventOutCh full, dropping user input")
+			log.Warn("sendMessage: eventOutCh full, dropping user input")
 		}
 
 		return nil
@@ -473,7 +486,7 @@ func (m *Model) ReceiveEvent(event events.Event) {
 	select {
 	case m.eventChan <- chatEvent:
 	default:
-		log.Warn().Str("type", string(event.Type())).Msg("ReceiveEvent: eventChan full, dropping event")
+		log.Warn("ReceiveEvent: eventChan full, dropping event", "type", string(event.Type()))
 	}
 }
 
@@ -606,7 +619,7 @@ func (m *Model) sendUserInput(input string) {
 	select {
 	case m.eventOutCh <- event:
 	default:
-		log.Warn().Msg("eventOutCh full, dropping user input event")
+		log.Warn("eventOutCh full, dropping user input event")
 	}
 }
 
@@ -637,7 +650,7 @@ func (m *Model) sendInteractionResponse(approved bool, extraFields ...map[string
 	select {
 	case m.eventOutCh <- event:
 	default:
-		log.Warn().Msg("eventOutCh full, dropping interaction response event")
+		log.Warn("eventOutCh full, dropping interaction response event")
 	}
 
 	// 重置确认状态

@@ -56,7 +56,7 @@ func (m *Manager) CreateSnapshot(ctx context.Context, id string, files []string)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.logger.Debug().Str("module", "rollback").Str("id", id).Msg("CreateSnapshot: creating snapshot")
+	m.logger.Debug("CreateSnapshot: creating snapshot", "module", "rollback", "id", id)
 
 	// Check if git is available
 	if !m.isGitAvailable(ctx) {
@@ -69,7 +69,7 @@ func (m *Manager) CreateSnapshot(ctx context.Context, id string, files []string)
 	if err != nil {
 		// If no changes to stash, create an empty snapshot marker
 		if strings.Contains(err.Error(), "no local changes") {
-			m.logger.Debug().Str("module", "rollback").Msg("CreateSnapshot: no changes to stash, creating empty snapshot")
+			m.logger.Debug("CreateSnapshot: no changes to stash, creating empty snapshot", "module", "rollback")
 			snapshot := &Snapshot{
 				ID:        id,
 				StashRef:  "",
@@ -92,7 +92,7 @@ func (m *Manager) CreateSnapshot(ctx context.Context, id string, files []string)
 	}
 
 	m.snapshots[id] = snapshot
-	m.logger.Debug().Str("module", "rollback").Str("id", id).Str("stash_ref", stashRef).Msg("CreateSnapshot: snapshot created")
+	m.logger.Debug("CreateSnapshot: snapshot created", "module", "rollback", "id", id, "stash_ref", stashRef)
 
 	return snapshot, nil
 }
@@ -103,7 +103,7 @@ func (m *Manager) Rollback(ctx context.Context, snapshotID string) (*RollbackRes
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.logger.Debug().Str("module", "rollback").Str("id", snapshotID).Msg("Rollback: starting rollback")
+	m.logger.Debug("Rollback: starting rollback", "module", "rollback", "id", snapshotID)
 
 	snapshot, exists := m.snapshots[snapshotID]
 	if !exists {
@@ -112,7 +112,7 @@ func (m *Manager) Rollback(ctx context.Context, snapshotID string) (*RollbackRes
 
 	// Empty snapshot (no changes were stashed) - nothing to restore
 	if snapshot.StashRef == "" {
-		m.logger.Debug().Str("module", "rollback").Str("id", snapshotID).Msg("Rollback: empty snapshot, nothing to restore")
+		m.logger.Debug("Rollback: empty snapshot, nothing to restore", "module", "rollback", "id", snapshotID)
 		return &RollbackResult{
 			Success: true,
 			Message: "No changes to restore (empty snapshot)",
@@ -129,7 +129,7 @@ func (m *Manager) Rollback(ctx context.Context, snapshotID string) (*RollbackRes
 	// Remove snapshot after successful rollback
 	delete(m.snapshots, snapshotID)
 
-	m.logger.Debug().Str("module", "rollback").Str("id", snapshotID).Msg("Rollback: rollback completed")
+	m.logger.Debug("Rollback: rollback completed", "module", "rollback", "id", snapshotID)
 
 	return &RollbackResult{
 		Success: true,
@@ -158,12 +158,12 @@ func (m *Manager) Cleanup(ctx context.Context, snapshotID string) error {
 	// Drop the stash
 	err := m.gitStashDrop(ctx, snapshot.StashRef)
 	if err != nil {
-		m.logger.Warn().Str("module", "rollback").Str("id", snapshotID).Err(err).Msg("Cleanup: failed to drop stash")
+		m.logger.Warn("Cleanup: failed to drop stash", "module", "rollback", "id", snapshotID, "error", err.Error())
 		// Still remove from tracking even if drop fails
 	}
 
 	delete(m.snapshots, snapshotID)
-	m.logger.Debug().Str("module", "rollback").Str("id", snapshotID).Msg("Cleanup: snapshot cleaned up")
+	m.logger.Debug("Cleanup: snapshot cleaned up", "module", "rollback", "id", snapshotID)
 
 	return nil
 }

@@ -126,15 +126,15 @@ func TestParseLevel(t *testing.T) {
 func TestLoggerMethods(t *testing.T) {
 	log := Default()
 
-	// zerolog uses chaining with Msg()
-	log.Debug().Msg("debug message")
-	log.Info().Msg("info message")
-	log.Warn().Msg("warn message")
-	log.Error().Msg("error message")
+	// Key-value style logging
+	log.Debug("debug message")
+	log.Info("info message")
+	log.Warn("warn message")
+	log.Error("error message")
 
 	// With fields
-	log.WithField("test", "value").Info().Msg("message with field")
-	log.WithFields(map[string]interface{}{"k": "v"}).Info().Msg("message with fields")
+	log.WithField("test", "value").Info("message with field")
+	log.WithFields(map[string]interface{}{"k": "v"}).Info("message with fields")
 }
 
 // TestConfigStruct tests config struct creation.

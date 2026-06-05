@@ -151,7 +151,7 @@ func (e *Engine) streamAndBufferResponse(ctx context.Context, eventsCh chan<- ev
 	for chunk := range ch {
 		chunkCount++
 		// Log chunk content for debugging
-		e.logger.Debug().Int("chunk", chunkCount).Str("content", chunk.Content).Str("reasoning", chunk.ReasoningContent).Msg("streamAndBufferResponse: received chunk")
+		e.logger.Debug("streamAndBufferResponse: received chunk", "chunk", chunkCount, "content", chunk.Content, "reasoning", chunk.ReasoningContent)
 		// Check for cancellation during streaming
 		select {
 		case <-ctx.Done():
@@ -294,7 +294,7 @@ func (e *Engine) runReActLoop(ctx context.Context, eventsCh chan<- events.Event,
 	defer e.handleReActLoopPanic(eventsCh, requestID)
 
 	step := 0
-	e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Msg("runReActLoop: starting")
+	e.logger.Debug("runReActLoop: starting", "module", "engine", "requestID", requestID)
 
 	for {
 		// Check for cancellation
@@ -358,7 +358,7 @@ func (e *Engine) runReActLoop(ctx context.Context, eventsCh chan<- events.Event,
 			// Check if hookResult is valid before using it
 			if hookResult != nil && e.hookEngine.ShouldBlock(hookResult) {
 				// Hook blocked the response
-				e.logger.Info().Str("requestID", requestID).Msg("PreResponse hook blocked response")
+				e.logger.Info("PreResponse hook blocked response", "requestID", requestID)
 				if hookResult.Parsed != nil && hookResult.Parsed.RetryReason != "" {
 					eventsCh <- events.NewEvent(events.EventTypeResponse, fmt.Sprintf("Response blocked: %s", hookResult.Parsed.RetryReason), requestID)
 				} else {
@@ -370,11 +370,11 @@ func (e *Engine) runReActLoop(ctx context.Context, eventsCh chan<- events.Event,
 			if hookResult != nil && hookResult.Parsed != nil && hookResult.Parsed.ReflectionFeedback != "" {
 				finalResponse = fmt.Sprintf("%s\n\n[Reflection feedback: %s]", response, hookResult.Parsed.ReflectionFeedback)
 				hookProvidedReflection = true
-				e.logger.Debug().Str("requestID", requestID).Msg("Using hook-provided reflection feedback, skipping internal reflection")
+				e.logger.Debug("Using hook-provided reflection feedback, skipping internal reflection", "requestID", requestID)
 			}
 			// Check if hook requests retry (logged for awareness, retry requires loop restart)
 			if hookResult != nil && hookResult.Parsed != nil && hookResult.Parsed.ShouldRetry {
-				e.logger.Info().Str("requestID", requestID).Str("reason", hookResult.Parsed.RetryReason).Msg("PreResponse hook signaled retry request")
+				e.logger.Info("PreResponse hook signaled retry request", "requestID", requestID, "reason", hookResult.Parsed.RetryReason)
 				// Note: Full retry would require restarting ReAct loop - currently logged but proceeds
 			}
 		}
@@ -393,7 +393,7 @@ func (e *Engine) runReActLoop(ctx context.Context, eventsCh chan<- events.Event,
 func (e *Engine) handleReActLoopPanic(eventsCh chan<- events.Event, requestID string) {
 	if r := recover(); r != nil {
 		err := fmt.Errorf("ReAct loop panicked: %v", r)
-		e.logger.Error().Err(err).Str("requestID", requestID).Msg("ReAct loop panic recovered")
+		e.logger.Error("ReAct loop panic recovered", "error", err.Error(), "requestID", requestID)
 		e.hookEngine.Fire(context.Background(), hooks.EventStopFailure, map[string]any{
 			"request_id":  requestID,
 			"panic_value": r,
@@ -410,7 +410,7 @@ func (e *Engine) handleReActLoopPanic(eventsCh chan<- events.Event, requestID st
 func (e *Engine) checkReActCancellation(ctx context.Context, eventsCh chan<- events.Event, requestID string) bool {
 	select {
 	case <-ctx.Done():
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Msg("runReActLoop: context cancelled")
+		e.logger.Debug("runReActLoop: context cancelled", "module", "engine", "requestID", requestID)
 		eventsCh <- events.NewEvent(events.EventTypeResponse, constants.MessageInterrupted, requestID)
 		return true
 	default:
@@ -420,7 +420,7 @@ func (e *Engine) checkReActCancellation(ctx context.Context, eventsCh chan<- eve
 
 // emitReActStepEvent emits the step progress event.
 func (e *Engine) emitReActStepEvent(eventsCh chan<- events.Event, step int, requestID string) {
-	e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Int("step", step).Msg("runReActLoop: step")
+	e.logger.Debug("runReActLoop: step", "module", "engine", "requestID", requestID, "step", step)
 	eventsCh <- events.NewEventWithExtra(events.EventTypeStep, "", map[string]any{"step": step}, requestID)
 }
 
@@ -440,33 +440,33 @@ func (e *Engine) checkReActMaxSteps(ctx context.Context, eventsCh chan<- events.
 func (e *Engine) getReActLLMResponse(ctx context.Context, eventsCh chan<- events.Event, requestID string) (string, []llm.ToolCall, string, bool) {
 	buildStart := time.Now()
 	messages := e.buildReActMessages(ctx)
-	e.logger.Info().Str("phase", "build_messages").Dur("duration", time.Since(buildStart)).Int("message_count", len(messages)).Msg("[DIAG] buildReActMessages completed")
+	e.logger.Info("[DIAG] buildReActMessages completed", "phase", "build_messages", "duration", time.Since(buildStart), "message_count", len(messages))
 
 	// Note: ThinkingStart event is now managed inside streamAndBufferResponse
 	// to avoid duplicate events and ensure proper lifecycle management
 
 	llmStart := time.Now()
 	response, toolCalls, thinkingContent, err := e.streamAndBufferResponse(ctx, eventsCh, messages, requestID, "")
-	e.logger.Info().Str("phase", "llm_stream").Dur("duration", time.Since(llmStart)).Int("response_length", len(response)).Msg("[DIAG] LLM stream completed")
+	e.logger.Info("[DIAG] LLM stream completed", "phase", "llm_stream", "duration", time.Since(llmStart), "response_length", len(response))
 	if err != nil {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Err(err).Msg("runReActLoop: LLM error")
+		e.logger.Debug("runReActLoop: LLM error", "module", "engine", "requestID", requestID, "error", err.Error())
 		eventsCh <- events.NewEvent(events.EventTypeError, err.Error(), requestID)
 		return "", nil, "", false
 	}
 
-	e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Int("response_length", len(response)).Msg("runReActLoop: LLM response received")
+	e.logger.Debug("runReActLoop: LLM response received", "module", "engine", "requestID", requestID, "response_length", len(response))
 	return response, toolCalls, thinkingContent, true
 }
 
 // logReActActions logs parsed actions for debugging.
 func (e *Engine) logReActActions(actions []*ToolAction, toolCalls []llm.ToolCall, requestID string) {
 	if len(toolCalls) > 0 {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Int("tool_call_count", len(toolCalls)).Msg("runReActLoop: extracted tool calls")
+		e.logger.Debug("runReActLoop: extracted tool calls", "module", "engine", "requestID", requestID, "tool_call_count", len(toolCalls))
 	}
 	if len(actions) > 0 {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Int("action_count", len(actions)).Msg("runReActLoop: parsed actions")
+		e.logger.Debug("runReActLoop: parsed actions", "module", "engine", "requestID", requestID, "action_count", len(actions))
 	} else {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Msg("runReActLoop: no actions found, final response")
+		e.logger.Debug("runReActLoop: no actions found, final response", "module", "engine", "requestID", requestID)
 	}
 }
 
@@ -485,7 +485,7 @@ func (e *Engine) handleReActActions(ctx context.Context, eventsCh chan<- events.
 			Input: inputJSON,
 		}
 		e.memory.AddWithBlocks(sharedmemory.RoleAssistant, []sharedmemory.ContentBlock{toolUseBlock}, memory.MessageTypeAction)
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Str("tool", tc.Name).Str("tool_id", tc.ID).Msg("handleReActActions: persisted tool_use record")
+		e.logger.Debug("handleReActActions: persisted tool_use record", "module", "engine", "requestID", requestID, "tool", tc.Name, "tool_id", tc.ID)
 	}
 
 	// If no structured tool calls but actions exist, persist actions without IDs
@@ -535,7 +535,7 @@ func (e *Engine) handleReActActions(ctx context.Context, eventsCh chan<- events.
 	// Check if any tool was denied by user - stop execution
 	for _, tr := range results {
 		if tr.Result != nil && tr.Result.Error == constants.MsgDeniedByUser {
-			e.logger.Info().Str("module", "engine").Str("requestID", requestID).Msg("handleReActActions: tool denied by user, stopping")
+			e.logger.Info("handleReActActions: tool denied by user, stopping", "module", "engine", "requestID", requestID)
 			eventsCh <- events.NewEvent(events.EventTypeResponse, "Task cancelled: tool execution denied by user.", requestID)
 			return false
 		}
@@ -589,7 +589,7 @@ func (e *Engine) handleReActActions(ctx context.Context, eventsCh chan<- events.
 		e.recordMultipleToolResultsWithBlock(results, actions, toolUseIDs)
 	}
 
-	e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Msg("runReActLoop: added observations to memory, continuing loop")
+	e.logger.Debug("runReActLoop: added observations to memory, continuing loop", "module", "engine", "requestID", requestID)
 	return true
 }
 
@@ -618,7 +618,7 @@ func (e *Engine) recordSingleToolResultWithBlock(tr toolResult, toolName string,
 		IsError:   isError,
 	}
 	e.memory.AddWithBlocks(sharedmemory.RoleUser, []sharedmemory.ContentBlock{toolResultBlock}, memory.MessageTypeObservation)
-	e.logger.Debug().Str("module", "engine").Str("tool", toolName).Str("tool_use_id", toolUseID).Msg("recordSingleToolResultWithBlock: persisted tool_result")
+	e.logger.Debug("recordSingleToolResultWithBlock: persisted tool_result", "module", "engine", "tool", toolName, "tool_use_id", toolUseID)
 }
 
 // recordMultipleToolResultsWithBlock records multiple tool results as ToolResultBlocks.
@@ -649,7 +649,7 @@ func (e *Engine) recordMultipleToolResultsWithBlock(results []toolResult, action
 			IsError:   isError,
 		}
 		e.memory.AddWithBlocks(sharedmemory.RoleUser, []sharedmemory.ContentBlock{toolResultBlock}, memory.MessageTypeObservation)
-		e.logger.Debug().Str("module", "engine").Str("tool", action.Tool).Str("tool_use_id", toolUseID).Msg("recordMultipleToolResultsWithBlock: persisted tool_result")
+		e.logger.Debug("recordMultipleToolResultsWithBlock: persisted tool_result", "module", "engine", "tool", action.Tool, "tool_use_id", toolUseID)
 	}
 }
 
@@ -675,7 +675,7 @@ func (e *Engine) handleReActFinalAnswer(eventsCh chan<- events.Event, response s
 	} else {
 		e.memory.AddWithType(sharedmemory.RoleAssistant, response, memory.MessageTypeAssistant)
 	}
-	e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Int("response_length", len(response)).Msg("runReActLoop: final response saved to memory")
+	e.logger.Debug("runReActLoop: final response saved to memory", "module", "engine", "requestID", requestID, "response_length", len(response))
 }
 
 // reflectOnAnswer performs a reflection step on the answer before final emission.
@@ -699,7 +699,7 @@ func (e *Engine) reflectOnAnswer(ctx context.Context, response string, requestID
 	req := e.buildRequest(messages)
 	resp, err := e.client.Complete(ctx, req)
 	if err != nil {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Err(err).Msg("reflectOnAnswer: LLM error, returning original response")
+		e.logger.Debug("reflectOnAnswer: LLM error, returning original response", "module", "engine", "requestID", requestID, "error", err.Error())
 		return response
 	}
 
@@ -712,13 +712,13 @@ func (e *Engine) reflectOnAnswer(ctx context.Context, response string, requestID
 		}
 	}
 	if strings.Contains(reflectionContent, "VERDICT: PASS") {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Msg("reflectOnAnswer: reflection passed, returning original response")
+		e.logger.Debug("reflectOnAnswer: reflection passed, returning original response", "module", "engine", "requestID", requestID)
 		return response
 	}
 
 	// If reflection suggests improvements, append feedback
 	if strings.Contains(reflectionContent, "VERDICT: PARTIAL") || strings.Contains(reflectionContent, "VERDICT: FAIL") {
-		e.logger.Info().Str("module", "engine").Str("requestID", requestID).Msg("reflectOnAnswer: reflection identified issues, appending feedback")
+		e.logger.Info("reflectOnAnswer: reflection identified issues, appending feedback", "module", "engine", "requestID", requestID)
 		// Extract improvement suggestions
 		improvements := e.extractReflectionImprovements(reflectionContent)
 		if improvements != "" {
@@ -870,7 +870,7 @@ func (e *Engine) generateBestEffortAnswer(ctx context.Context, requestID string)
 	req := e.buildRequest(messages)
 	resp, err := e.client.Complete(ctx, req)
 	if err != nil {
-		e.logger.Debug().Str("module", "engine").Str("requestID", requestID).Err(err).Msg("generateBestEffortAnswer: LLM error")
+		e.logger.Debug("generateBestEffortAnswer: LLM error", "module", "engine", "requestID", requestID, "error", err.Error())
 		return "I've reached my thinking limit and cannot provide a more detailed response. Here's what I know so far based on our conversation."
 	}
 	// Extract text from ContentBlocks

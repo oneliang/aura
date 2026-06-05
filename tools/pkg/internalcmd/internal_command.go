@@ -54,9 +54,9 @@ func (t *InternalCommandTool) Execute(ctx context.Context, params map[string]any
 	}
 
 	log := logger.RegistryDefault().WithModule("internal_command")
-	log.Debug().Str("command", cmdName).Interface("params", cmdParams).Msg("Execute: dispatching command")
+	log.Debug("Execute: dispatching command", "command", cmdName, "params", cmdParams)
 	result, err := t.executor(ctx, cmdName, cmdParams)
-	log.Debug().Str("command", cmdName).Int("result_len", len(result)).Err(err).Msg("Execute: command returned")
+	log.Debug("Execute: command returned", "command", cmdName, "result_len", len(result), "error", err)
 
 	if err != nil {
 		return &tools.ToolResult{Status: tools.ToolStatusError, Error: err.Error()}, nil

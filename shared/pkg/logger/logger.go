@@ -2,20 +2,24 @@
 package logger
 
 import (
-	"fmt"
-	"io"
 	"os"
-	"path/filepath"
-
-	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
-	"github.com/rs/zerolog"
 )
 
-// Logger wraps zerolog.Logger.
+// Level represents log level.
+type Level int
+
+const (
+	DebugLevel Level = iota
+	InfoLevel
+	WarnLevel
+	ErrorLevel
+)
+
+// Logger provides structured logging with key-value pairs.
 type Logger struct {
-	zerolog.Logger
-	logFile   *os.File // Keep reference for cleanup (primary output)
-	jsonlFile *os.File // Keep reference for cleanup (JSONL secondary output)
+	target  Log       // 唯一输出源
+	logFile *os.File  // 用于清理（从 zerologTarget 获取）
+	module  string    // 模块名（自动添加到所有日志）
 }
 
 // Config represents logger configuration.
@@ -28,120 +32,101 @@ type Config struct {
 	JSONLPath string // if non-empty, also write JSONL entries to this file (no ConsoleWriter)
 }
 
-// New creates a new logger instance.
+// New creates a new logger instance with default zerologTarget.
 func New(cfg Config) *Logger {
-	var writers []io.Writer
-	var logFile *os.File
-
-	// Primary output
-	var primary io.Writer = os.Stdout
-	var primaryFile *os.File
-
-	if cfg.Output == "file" {
-		logPath := cfg.Path
-		if logPath == "" {
-			logPath = ffp.AuraHomePathOrDefault("aura.log")
-			if logPath == "" {
-				logPath = "aura.log"
-			}
-		}
-
-		logDir := filepath.Dir(logPath)
-		if err := ffp.EnsureDir(logDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: cannot create log directory %s: %v, using stdout\n", logDir, err)
-		} else {
-			var err error
-			primaryFile, err = os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: cannot open log file %s: %v, using stdout\n", logPath, err)
-			} else {
-				primary = primaryFile
-				logFile = primaryFile
-			}
-		}
-	} else if cfg.Output == "stderr" {
-		primary = os.Stderr
-	}
-
-	// Apply text format (ConsoleWriter) only for non-file primary output
-	// or when file output succeeded and format is text
-	if cfg.Format == "text" {
-		noColor := cfg.Output == "file"
-		primary = zerolog.ConsoleWriter{
-			Out:        primary,
-			TimeFormat: "2006-01-02 15:04:05",
-			NoColor:    noColor,
-		}
-	}
-	writers = append(writers, primary)
-
-	// Optional JSONL secondary output (audit/debug log to separate file)
-	var jsonlFile *os.File
-	if cfg.JSONLPath != "" {
-		jsonlDir := filepath.Dir(cfg.JSONLPath)
-		if err := ffp.EnsureDir(jsonlDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: cannot create JSONL log directory %s: %v\n", jsonlDir, err)
-		} else {
-			var err error
-			jsonlFile, err = os.OpenFile(cfg.JSONLPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: cannot open JSONL log file %s: %v\n", cfg.JSONLPath, err)
-			} else {
-				writers = append(writers, jsonlFile)
-			}
-		}
-	}
-
-	var output io.Writer
-	if len(writers) == 1 {
-		output = writers[0]
-	} else {
-		output = io.MultiWriter(writers...)
-	}
-
-	level := parseLevel(cfg.Level)
-	zl := zerolog.New(output).Level(level)
-
-	// Add module field to context if specified
-	ctx := zl.With().Timestamp()
-	if cfg.Module != "" {
-		ctx = ctx.Str("module", cfg.Module)
-	}
-
+	target := newZerologTarget(cfg)
 	return &Logger{
-		Logger:    ctx.Logger(),
-		logFile:   logFile,
-		jsonlFile: jsonlFile,
+		target:  target,
+		logFile: target.logFile,
+		module:  cfg.Module,
+	}
+}
+
+// SetTarget replaces the output target.
+// Use this to inject external logger implementations.
+func (l *Logger) SetTarget(target Log) {
+	l.target = target
+}
+
+// Debug logs a debug message with key-value pairs.
+func (l *Logger) Debug(msg string, kv ...any) {
+	l.log(DebugLevel, msg, kv...)
+}
+
+// Info logs an info message with key-value pairs.
+func (l *Logger) Info(msg string, kv ...any) {
+	l.log(InfoLevel, msg, kv...)
+}
+
+// Warn logs a warning message with key-value pairs.
+func (l *Logger) Warn(msg string, kv ...any) {
+	l.log(WarnLevel, msg, kv...)
+}
+
+// Error logs an error message with key-value pairs.
+func (l *Logger) Error(msg string, kv ...any) {
+	l.log(ErrorLevel, msg, kv...)
+}
+
+// log writes a message at the specified level.
+func (l *Logger) log(level Level, msg string, kv ...any) {
+	// Prepend module if set
+	if l.module != "" {
+		kv = append([]any{"module", l.module}, kv...)
+	}
+
+	switch level {
+	case DebugLevel:
+		l.target.Debug(msg, kv...)
+	case InfoLevel:
+		l.target.Info(msg, kv...)
+	case WarnLevel:
+		l.target.Warn(msg, kv...)
+	case ErrorLevel:
+		l.target.Error(msg, kv...)
+	}
+}
+
+// WithModule returns a new Logger with the "module" field set.
+func (l *Logger) WithModule(module string) *Logger {
+	return &Logger{
+		target:  l.target,
+		logFile: l.logFile,
+		module:  module,
+	}
+}
+
+// WithField returns a new Logger with a preset field.
+// Note: This creates a wrapper that prepends the field to each log call.
+func (l *Logger) WithField(key string, value any) *Logger {
+	// For compatibility, return a Logger that will prepend this field
+	// We implement this by creating a wrapper target
+	return &Logger{
+		target:  &fieldWrapper{base: l.target, fields: []any{key, value}},
+		logFile: l.logFile,
+		module:  l.module,
+	}
+}
+
+// WithFields returns a new Logger with multiple preset fields.
+func (l *Logger) WithFields(fields map[string]any) *Logger {
+	kv := make([]any, 0, len(fields)*2)
+	for k, v := range fields {
+		kv = append(kv, k, v)
+	}
+	return &Logger{
+		target:  &fieldWrapper{base: l.target, fields: kv},
+		logFile: l.logFile,
+		module:  l.module,
 	}
 }
 
 // Close closes the log files if opened.
 func (l *Logger) Close() error {
-	var err error
-	if l.jsonlFile != nil {
-		err = l.jsonlFile.Close()
-	}
 	if l.logFile != nil {
-		if err2 := l.logFile.Close(); err2 != nil {
-			err = err2
-		}
+		return l.logFile.Close()
 	}
-	return err
-}
-
-func parseLevel(level string) zerolog.Level {
-	switch level {
-	case "debug":
-		return zerolog.DebugLevel
-	case "info":
-		return zerolog.InfoLevel
-	case "warn":
-		return zerolog.WarnLevel
-	case "error":
-		return zerolog.ErrorLevel
-	default:
-		return zerolog.InfoLevel
-	}
+	return nil
 }
 
 // Default creates a default logger with text format.
@@ -153,27 +138,46 @@ func Default() *Logger {
 	})
 }
 
-// WithField adds a field to the logger.
-func (l *Logger) WithField(key string, value interface{}) *Logger {
-	return &Logger{Logger: l.Logger.With().Interface(key, value).Logger()}
-}
-
-// WithFields adds multiple fields to the logger.
-func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
-	ctx := l.Logger.With()
-	for k, v := range fields {
-		ctx = ctx.Interface(k, v)
-	}
-	return &Logger{Logger: ctx.Logger()}
-}
-
-// WithModule returns a new Logger with the "module" field set.
-func (l *Logger) WithModule(module string) *Logger {
-	return &Logger{Logger: l.Logger.With().Str("module", module).Logger()}
-}
-
-// NewNamed creates a logger with a module name baked into the zerolog context.
-// Equivalent to New(cfg).WithModule(cfg.Module) but more efficient.
+// NewNamed creates a logger with a module name.
+// Equivalent to New(cfg) but cfg.Module is used.
 func NewNamed(cfg Config) *Logger {
 	return New(cfg)
+}
+
+// parseLevel converts string level to Level type.
+func parseLevel(level string) Level {
+	switch level {
+	case "debug":
+		return DebugLevel
+	case "info":
+		return InfoLevel
+	case "warn":
+		return WarnLevel
+	case "error":
+		return ErrorLevel
+	default:
+		return InfoLevel
+	}
+}
+
+// fieldWrapper wraps a Log target and prepends preset fields.
+type fieldWrapper struct {
+	base   Log
+	fields []any
+}
+
+func (w *fieldWrapper) Debug(msg string, kv ...any) {
+	w.base.Debug(msg, append(w.fields, kv...)...)
+}
+
+func (w *fieldWrapper) Info(msg string, kv ...any) {
+	w.base.Info(msg, append(w.fields, kv...)...)
+}
+
+func (w *fieldWrapper) Warn(msg string, kv ...any) {
+	w.base.Warn(msg, append(w.fields, kv...)...)
+}
+
+func (w *fieldWrapper) Error(msg string, kv ...any) {
+	w.base.Error(msg, append(w.fields, kv...)...)
 }

@@ -16,7 +16,7 @@ import (
 
 // auditLogger wraps a zerolog-based logger writing to a JSONL file.
 type auditLogger struct {
-	log     *Logger
+	log     zerolog.Logger
 	file    *os.File
 	mu      sync.Mutex
 	enabled bool
@@ -36,7 +36,7 @@ func newAuditLogger(path string) (*auditLogger, error) {
 	zl := zerolog.New(f).With().Timestamp().Logger()
 
 	return &auditLogger{
-		log:     &Logger{Logger: zl},
+		log:     zl,
 		file:    f,
 		enabled: true,
 	}, nil
@@ -50,7 +50,7 @@ func (a *auditLogger) write(entry map[string]any) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.log == nil || a.file == nil {
+	if a.file == nil {
 		return
 	}
 
@@ -367,13 +367,17 @@ func NewDelegationFileLogger(requestID, agentName string) (*DelegationFileLogger
 		return nil, fmt.Errorf("failed to open delegation log file: %w", err)
 	}
 
-	zl := zerolog.New(f).With().Timestamp().
-		Str("request_id", requestID).
-		Str("agent_name", agentName).
-		Logger()
+	// Create a zerolog target for this delegation file
+	zlTarget := &delegationZerologTarget{
+		zl: zerolog.New(f).With().Timestamp().
+			Str("request_id", requestID).
+			Str("agent_name", agentName).
+			Logger(),
+		file: f,
+	}
 
 	return &DelegationFileLogger{
-		log:       &Logger{Logger: zl},
+		log:       &Logger{target: zlTarget, logFile: f},
 		file:      f,
 		path:      logPath,
 		requestID: requestID,
@@ -432,4 +436,37 @@ func TruncateStr(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// delegationZerologTarget is a simple zerolog target for delegation file logger.
+type delegationZerologTarget struct {
+	zl   zerolog.Logger
+	file *os.File
+}
+
+func (t *delegationZerologTarget) Debug(msg string, kv ...any) {
+	t.log(zerolog.DebugLevel, msg, kv)
+}
+
+func (t *delegationZerologTarget) Info(msg string, kv ...any) {
+	t.log(zerolog.InfoLevel, msg, kv)
+}
+
+func (t *delegationZerologTarget) Warn(msg string, kv ...any) {
+	t.log(zerolog.WarnLevel, msg, kv)
+}
+
+func (t *delegationZerologTarget) Error(msg string, kv ...any) {
+	t.log(zerolog.ErrorLevel, msg, kv)
+}
+
+func (t *delegationZerologTarget) log(level zerolog.Level, msg string, kv []any) {
+	event := t.zl.WithLevel(level)
+	for i := 0; i < len(kv); i += 2 {
+		if i+1 < len(kv) {
+			key := fmt.Sprintf("%v", kv[i])
+			event.Interface(key, kv[i+1])
+		}
+	}
+	event.Msg(msg)
 }

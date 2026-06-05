@@ -103,7 +103,7 @@ func createCommandProvider(
 		skillLoader = skillloader.NewLoader(ctx.Config.Skills.Directories)
 		skillMgr = skillmanager.NewSkillManager(skillLoader, ctx.Config.Skills.Directories)
 		if _, err := skillLoader.Load(); err != nil {
-			logger.RegistryDefault().Warn().Err(err).Msg("Failed to load skills for CommandProvider")
+			logger.RegistryDefault().Warn("Failed to load skills for CommandProvider", "error", err.Error())
 			skillLoader = nil
 			skillMgr = nil
 		}
@@ -268,7 +268,11 @@ func runTUIMode(
 	profName string,
 	mcpManager *sdk.MCPManager,
 ) {
+	startTime := time.Now()
+	logger.RegistryDefault().Debug("[DIAG] runTUIMode: starting")
+
 	modelProvider := tui.NewModelProvider()
+	logger.RegistryDefault().Debug("[DIAG] runTUIMode: model provider created", "elapsed", time.Since(startTime))
 
 	summarizer := rt.GetSummarizer()
 
@@ -284,11 +288,13 @@ func runTUIMode(
 		EnableReview:       ctx.Config.Agent.Plan.EnableReview,
 		GetSystemPrompt:    func() string { return rt.GetSystemPrompt() },
 	}
+	logger.RegistryDefault().Debug("[DIAG] runTUIMode: config prepared", "elapsed", time.Since(startTime))
 
 	// Store config in context for command handlers to access
 	runCtx = config.WithConfig(runCtx, ctx.Config)
 
 	// 新架构：直接传递runtime，不再创建runFn adapter
+	logger.RegistryDefault().Debug("[DIAG] runTUIMode: calling RunWithConfig", "elapsed", time.Since(startTime))
 	if err := tui.RunWithConfig(runCtx, rt, cfg, sessionMgr, summarizer, modelProvider, ctx.CommandProvider, mcpManager); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 	}

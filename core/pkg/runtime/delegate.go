@@ -120,8 +120,8 @@ func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task st
 		eventCount int
 	)
 
-	subAgentLog := subAgentRuntime.logger.With().Str("subAgentID", subAgentID).Logger()
-	subAgentLog.Debug().Str("task_preview", task[:min(len(task), 100)]).Msg("executeSubAgent: starting sub-agent execution")
+	subAgentLog := subAgentRuntime.logger.WithField("subAgentID", subAgentID)
+	subAgentLog.Debug("executeSubAgent: starting sub-agent execution", "task_preview", task[:min(len(task), 100)])
 
 	// Start sub-agent runtime event stream
 	if err := subAgentRuntime.Start(ctx); err != nil {
@@ -170,7 +170,7 @@ func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task st
 		return "", fmt.Errorf("sub-agent execution failed: %w", lastError)
 	}
 
-	subAgentLog.Debug().Int("events", eventCount).Int("result_len", len(result)).Msg("executeSubAgent: sub-agent completed")
+	subAgentLog.Debug("executeSubAgent: sub-agent completed", "events", eventCount, "result_len", len(result))
 	return result, nil
 }
 
@@ -178,7 +178,7 @@ func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task st
 func (r *AgentRuntime) createAgentDelegateFn(ctx context.Context) func(ctx context.Context, agentName string, task string) (string, error) {
 	return func(ctx context.Context, agentName string, task string) (string, error) {
 		subAgentID := fmt.Sprintf("sa-%s", uuid.New().String()[:8])
-		r.logger.Info().Str("agent", agentName).Int("task_len", len(task)).Str("subAgentID", subAgentID).Msg("createAgentDelegateFn: delegation started")
+		r.logger.Info("createAgentDelegateFn: delegation started", "agent", agentName, "task_len", len(task), "subAgentID", subAgentID)
 		dl := logger.GetDelegationAuditLogger()
 		reqID := uuid.New().String()
 		startTime := time.Now()
@@ -186,11 +186,11 @@ func (r *AgentRuntime) createAgentDelegateFn(ctx context.Context) func(ctx conte
 		// Find the agent
 		foundAgent, err := r.findAgent(agentName)
 		if err != nil {
-			r.logger.Warn().Str("agent", agentName).Str("subAgentID", subAgentID).Err(err).Msg("createAgentDelegateFn: agent not found")
+			r.logger.Warn("createAgentDelegateFn: agent not found", "agent", agentName, "subAgentID", subAgentID, "error", err.Error())
 			dl.Error(reqID, agentName, "find_agent", time.Since(startTime).Milliseconds(), err)
 			return "", err
 		}
-		r.logger.Info().Str("agent", agentName).Str("subAgentID", subAgentID).Msg("createAgentDelegateFn: agent found, starting delegation")
+		r.logger.Info("createAgentDelegateFn: agent found, starting delegation", "agent", agentName, "subAgentID", subAgentID)
 		dl.Start(reqID, r.sessionID, agentName, task)
 
 		// Create per-delegation independent log file
@@ -227,7 +227,7 @@ func (r *AgentRuntime) createAgentDelegateFn(ctx context.Context) func(ctx conte
 		subCtx, subCancel := context.WithTimeout(ctx, 10*time.Minute)
 		defer subCancel()
 
-		r.logger.Info().Str("subAgentID", subAgentID).Str("agent", agentName).Msg("createAgentDelegateFn: initializing sub-agent runtime")
+		r.logger.Info("createAgentDelegateFn: initializing sub-agent runtime", "subAgentID", subAgentID, "agent", agentName)
 		if err := subAgentRuntime.Initialize(subCtx); err != nil {
 			if fileLogger != nil {
 				fileLogger.Close()
@@ -254,16 +254,16 @@ func (r *AgentRuntime) createAgentDelegateFn(ctx context.Context) func(ctx conte
 			// Use configured reviewer agent name (must be explicitly set)
 			reviewerName := foundAgent.Meta.ReviewerAgent
 			if reviewerName == "" {
-				r.logger.Warn().Msg("createAgentDelegateFn: UseReviewer enabled but ReviewerAgent not configured, skipping review")
+				r.logger.Warn("createAgentDelegateFn: UseReviewer enabled but ReviewerAgent not configured, skipping review")
 				// Skip review if reviewer agent name not configured
 			} else {
 				// Validate reviewer agent exists before delegating
 				_, reviewErr := r.findAgent(reviewerName)
 				if reviewErr != nil {
-					r.logger.Warn().Str("reviewer", reviewerName).Err(reviewErr).Msg("createAgentDelegateFn: reviewer agent not found, skipping review")
+					r.logger.Warn("createAgentDelegateFn: reviewer agent not found, skipping review", "reviewer", reviewerName, "error", reviewErr.Error())
 					// Skip review if reviewer agent doesn't exist (log warning, don't fail)
 				} else {
-					r.logger.Debug().Str("reviewer", reviewerName).Msg("createAgentDelegateFn: reviewer agent found, starting review")
+					r.logger.Debug("createAgentDelegateFn: reviewer agent found, starting review", "reviewer", reviewerName)
 					reviewResult, reviewErr := r.agentDelegateFn(ctx, reviewerName, fmt.Sprintf("Review the following sub-agent result for quality and correctness:\n\nAgent: %s\nTask: %s\nResult: %s", agentName, task, result))
 					if reviewErr == nil && strings.Contains(reviewResult, "VERDICT: FAIL") {
 						if fileLogger != nil {
@@ -273,14 +273,14 @@ func (r *AgentRuntime) createAgentDelegateFn(ctx context.Context) func(ctx conte
 						return "", fmt.Errorf("sub-agent result rejected by reviewer '%s': %s", reviewerName, extractReviewReason(reviewResult))
 					}
 					dl.Step(reqID, "review", time.Since(startTime).Milliseconds())
-					r.logger.Debug().Str("reviewer", reviewerName).Bool("passed", reviewErr != nil || !strings.Contains(reviewResult, "VERDICT: FAIL")).Msg("createAgentDelegateFn: review completed")
+					r.logger.Debug("createAgentDelegateFn: review completed", "reviewer", reviewerName, "passed", reviewErr != nil || !strings.Contains(reviewResult, "VERDICT: FAIL"))
 				}
 			}
 		}
 
 		totalDuration := time.Since(startTime).Milliseconds()
 		formattedResult := fmt.Sprintf("【SubAgent %s completed the task】\n\n%s", agentName, result)
-		r.logger.Info().Str("agent", agentName).Str("subAgentID", subAgentID).Int64("duration_ms", totalDuration).Int("result_len", len(formattedResult)).Msg("createAgentDelegateFn: delegation completed")
+		r.logger.Info("createAgentDelegateFn: delegation completed", "agent", agentName, "subAgentID", subAgentID, "duration_ms", totalDuration, "result_len", len(formattedResult))
 		dl.Complete(reqID, agentName, totalDuration, "fast", formattedResult)
 
 		return formattedResult, nil

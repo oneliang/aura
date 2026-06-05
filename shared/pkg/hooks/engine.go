@@ -79,7 +79,7 @@ func (e *Engine) Fire(ctx context.Context, eventType HookEventType, input any) e
 				go func(h HookConfig) {
 					result, err := executeCommand(ctx, h.Command, input, h.Timeout)
 					if err != nil {
-						e.logger.Error().Err(err).Str("event", string(eventType)).Str("command", h.Command).Msg("hook execution error")
+						e.logger.Error("hook execution error", "event", string(eventType), "command", h.Command, "error", err.Error())
 					} else {
 						e.logResult(eventType, h.Command, result)
 					}
@@ -111,7 +111,7 @@ func (e *Engine) FireBlocking(ctx context.Context, eventType HookEventType, inpu
 			}
 			result, err := executeCommand(ctx, hc.Command, input, hc.Timeout)
 			if err != nil {
-				e.logger.Error().Err(err).Str("event", string(eventType)).Str("command", hc.Command).Msg("blocking hook execution error")
+				e.logger.Error("blocking hook execution error", "event", string(eventType), "command", hc.Command, "error", err.Error())
 				// Error in blocking hook: don't block the main flow
 				continue
 			}
@@ -131,7 +131,7 @@ func (e *Engine) Shutdown() {
 	if e == nil {
 		return
 	}
-	e.logger.Info().Msg("hooks engine shut down")
+	e.logger.Info("hooks engine shut down")
 }
 
 // compileMatchers precompiles regex matchers for all event types.
@@ -159,7 +159,7 @@ func (e *Engine) compileMatchers() {
 			cm := compiledMatcher{hooks: ev.Hooks}
 			if ev.Matcher != "" {
 				if re, err := regexp.Compile(ev.Matcher); err != nil {
-					e.logger.Warn().Err(err).Str("matcher", ev.Matcher).Msg("invalid hook matcher regex")
+					e.logger.Warn("invalid hook matcher regex", "matcher", ev.Matcher, "error", err.Error())
 				} else {
 					cm.regex = re
 				}
@@ -193,19 +193,20 @@ func (e *Engine) logResult(eventType HookEventType, command string, result *Hook
 	if result == nil {
 		return
 	}
-	fields := e.logger.Debug().Str("event", string(eventType)).Str("command", command).Int("exit_code", result.ExitCode)
+	// Build key-value args
+	args := []any{"event", string(eventType), "command", command, "exit_code", result.ExitCode}
 	if result.Stderr != "" {
-		fields = fields.Str("stderr", truncateString(result.Stderr, 200))
+		args = append(args, "stderr", truncateString(result.Stderr, 200))
 	}
 	if result.Parsed != nil {
 		if result.Parsed.StopReason != "" {
-			fields = fields.Str("stop_reason", result.Parsed.StopReason)
+			args = append(args, "stop_reason", result.Parsed.StopReason)
 		}
 		if result.Parsed.Continue != nil {
-			fields = fields.Bool("continue", *result.Parsed.Continue)
+			args = append(args, "continue", *result.Parsed.Continue)
 		}
 	}
-	fields.Msg("hook executed")
+	e.logger.Debug("hook executed", args...)
 }
 
 // matchToolName checks if a tool name matches the given compiled matchers.
@@ -259,7 +260,7 @@ func (e *Engine) FireWithToolName(ctx context.Context, eventType HookEventType, 
 				defer wg.Done()
 				result, err := executeCommand(ctx, h.Command, input, h.Timeout)
 				if err != nil {
-					e.logger.Error().Err(err).Str("event", string(eventType)).Str("command", h.Command).Msg("hook execution error")
+					e.logger.Error("hook execution error", "event", string(eventType), "command", h.Command, "error", err.Error())
 				} else {
 					e.logResult(eventType, h.Command, result)
 				}
@@ -294,7 +295,7 @@ func (e *Engine) FireBlockingWithToolName(ctx context.Context, eventType HookEve
 		}
 		result, err := executeCommand(ctx, hc.Command, input, hc.Timeout)
 		if err != nil {
-			e.logger.Error().Err(err).Str("event", string(eventType)).Str("command", hc.Command).Msg("blocking hook execution error")
+			e.logger.Error("blocking hook execution error", "event", string(eventType), "command", hc.Command, "error", err.Error())
 			continue
 		}
 		e.logResult(eventType, hc.Command, result)

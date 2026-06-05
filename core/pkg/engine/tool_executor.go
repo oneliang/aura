@@ -223,20 +223,20 @@ func (e *Engine) checkToolExists(toolName string) (tools.Tool, *tools.ToolResult
 
 // toolNotAllowedResult creates error result for disallowed tool.
 func (e *Engine) toolNotAllowedResult(toolName string) *tools.ToolResult {
-	e.logger.Debug().Str("module", "engine").Str("tool", toolName).Msg("executeTool: tool not allowed in current phase")
+	e.logger.Debug("executeTool: tool not allowed in current phase", "module", "engine", "tool", toolName)
 	return &tools.ToolResult{Status: tools.ToolStatusError, Error: fmt.Sprintf(i18n.T("tool.not_allowed_phase"), toolName)}
 }
 
 // invalidParamsResult creates error result for invalid parameters.
 func (e *Engine) invalidParamsResult(validationErr string) *tools.ToolResult {
-	e.logger.Warn().Str("error", validationErr).Msg("executeTool: parameter validation failed")
+	e.logger.Warn("executeTool: parameter validation failed", "error", validationErr)
 	return &tools.ToolResult{Status: tools.ToolStatusError, Error: fmt.Sprintf(constants.MsgInvalidParams, validationErr)}
 }
 
 // handleToolConfirmation checks if tool requires confirmation and handles it.
 // Returns (approved, error) - approved is false if denied, error if handler failed.
 func (e *Engine) handleToolConfirmation(ctx context.Context, tool tools.Tool, action *ToolAction) (bool, error) {
-	e.logger.Debug().Str("module", "engine").Str("tool", action.Tool).Msg("executeTool: checking confirmation requirement")
+	e.logger.Debug("executeTool: checking confirmation requirement", "module", "engine", "tool", action.Tool)
 
 	// Check PermissionTool interface (preferred)
 	if permTool, ok := tool.(PermissionTool); ok {
@@ -244,7 +244,7 @@ func (e *Engine) handleToolConfirmation(ctx context.Context, tool tools.Tool, ac
 		if parsePermissionLevel(permLevel).RequiresConfirmation() {
 			return e.requestConfirmation(ctx, action.Tool, action.Parameters)
 		}
-		e.logger.Debug().Str("module", "engine").Str("tool", action.Tool).Str("perm_level", permLevel).Msg("executeTool: tool does NOT require confirmation")
+		e.logger.Debug("executeTool: tool does NOT require confirmation", "module", "engine", "tool", action.Tool, "perm_level", permLevel)
 		return true, nil
 	}
 
@@ -253,7 +253,7 @@ func (e *Engine) handleToolConfirmation(ctx context.Context, tool tools.Tool, ac
 		return e.requestConfirmation(ctx, action.Tool, action.Parameters)
 	}
 
-	e.logger.Debug().Str("module", "engine").Str("tool", action.Tool).Msg("executeTool: tool is NOT sensitive")
+	e.logger.Debug("executeTool: tool is NOT sensitive", "module", "engine", "tool", action.Tool)
 	return true, nil
 }
 
@@ -261,17 +261,17 @@ func (e *Engine) handleToolConfirmation(ctx context.Context, tool tools.Tool, ac
 // Returns (approved, error) - approved is false if denied.
 func (e *Engine) requestConfirmation(ctx context.Context, toolName string, params map[string]any) (bool, error) {
 	if e.config.ConfirmationHandler == nil {
-		e.logger.Debug().Str("module", "engine").Str("tool", toolName).Msg("executeTool: no confirmation handler")
+		e.logger.Debug("executeTool: no confirmation handler", "module", "engine", "tool", toolName)
 		return true, nil
 	}
 
-	e.logger.Debug().Str("module", "engine").Str("tool", toolName).Msg("executeTool: calling confirmation handler")
+	e.logger.Debug("executeTool: calling confirmation handler", "module", "engine", "tool", toolName)
 	approved, err := e.config.ConfirmationHandler(ctx, toolName, params)
 	if err != nil {
 		return false, err
 	}
 
-	e.logger.Debug().Str("module", "engine").Str("tool", toolName).Bool("approved", approved).Msg("executeTool: confirmation result")
+	e.logger.Debug("executeTool: confirmation result", "module", "engine", "tool", toolName, "approved", approved)
 	return approved, nil
 }
 
@@ -282,7 +282,7 @@ func (e *Engine) firePreToolUseHook(ctx context.Context, action *ToolAction) *to
 		"tool_input": action.Parameters,
 	})
 	if hookErr != nil {
-		e.logger.Warn().Err(hookErr).Str("tool", action.Tool).Msg("executeTool: PreToolUse hook error")
+		e.logger.Warn("executeTool: PreToolUse hook error", "error", hookErr.Error(), "tool", action.Tool)
 		return nil
 	}
 	if hookResult == nil {
@@ -406,7 +406,7 @@ func (e *Engine) createToolExecutionContext(ctx context.Context, tool tools.Tool
 // validateAndAugmentOutput validates output schema and augments content with warnings.
 func (e *Engine) validateAndAugmentOutput(toolName string, result *tools.ToolResult) {
 	if schemaErr := e.validateOutputSchema(toolName, result); schemaErr != "" {
-		e.logger.Warn().Str("tool", toolName).Str("error", schemaErr).Msg("executeTool: output schema validation failed")
+		e.logger.Warn("executeTool: output schema validation failed", "tool", toolName, "error", schemaErr)
 		result.Content += fmt.Sprintf("\n[Output schema validation warning: %s]", schemaErr)
 	}
 }
@@ -447,7 +447,7 @@ func emitToolStartEvent(log *logger.Logger, eventsCh chan<- events.Event, toolNa
 		},
 		requestID,
 	)
-	log.Debug().Str("execution_id", executionID).Str("tool", toolName).Str("params", string(paramsJSON)).Msg("emitToolStartEvent: 发送完成")
+	log.Debug("emitToolStartEvent: 发送完成", "execution_id", executionID, "tool", toolName, "params", string(paramsJSON))
 }
 
 // emitToolEndEvent emits a tool end event with execution ID for precise matching.
@@ -464,7 +464,7 @@ func emitToolEndEvent(log *logger.Logger, eventsCh chan<- events.Event, toolName
 		},
 		requestID,
 	)
-	log.Debug().Str("execution_id", executionID).Str("tool", toolName).Msg("emitToolEndEvent: 发送完成")
+	log.Debug("emitToolEndEvent: 发送完成", "execution_id", executionID, "tool", toolName)
 }
 
 // executeToolWithEvents executes a single tool action, emitting start/end events

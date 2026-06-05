@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/oneliang/aura/commands/pkg"
@@ -39,13 +40,18 @@ func NewModelProvider() *ModelProvider {
 // Run starts the TUI program with event stream integration.
 // The runtime should already be initialized. Run will call Start() to begin event streaming.
 func Run(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.SessionManager, summarizer *sdk.Summarizer, modelProvider *ModelProvider, commandProvider commands.Command, mcpManager *sdk.MCPManager) error {
+	startTime := time.Now()
+	log.Debug("[DIAG] Run: starting")
+
 	// Start runtime event stream
 	if err := rt.Start(ctx); err != nil {
 		return err
 	}
+	log.Debug("[DIAG] Run: rt.Start done", "elapsed", time.Since(startTime))
 
 	// Create TUI model with runtime reference
 	m := NewWithRuntime(ctx, rt, config, sessionMgr, summarizer, modelProvider, commandProvider, mcpManager)
+	log.Debug("[DIAG] Run: NewWithRuntime done", "elapsed", time.Since(startTime))
 
 	// Create orchestrator for event stream integration
 	orchestrator := NewOrchestrator(rt, m)
@@ -56,7 +62,7 @@ func Run(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.Se
 	// Wait for orchestrator to be ready before starting UI
 	// This prevents race condition where user input arrives before goroutines are listening
 	orchestrator.WaitReady()
-	log.Debug().Msg("Run: orchestrator ready, starting Bubble Tea")
+	log.Debug("[DIAG] Run: orchestrator ready, starting Bubble Tea", "elapsed", time.Since(startTime))
 
 	// Run Bubble Tea program
 	p := tea.NewProgram(m)

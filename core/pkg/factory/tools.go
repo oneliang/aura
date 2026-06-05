@@ -180,7 +180,7 @@ func (r *ToolRegistry) registerKnowledgeTools(ctx context.Context, ag *engine.En
 
 	dataDir := ffp.AuraHomePathOrDefault(constants.DirKnowledge)
 	if dataDir == "" {
-		r.logger.Warn().Msg("cannot determine home directory, knowledge base disabled")
+		r.logger.Warn("cannot determine home directory, knowledge base disabled")
 		return
 	}
 
@@ -191,7 +191,7 @@ func (r *ToolRegistry) registerKnowledgeTools(ctx context.Context, ag *engine.En
 		EmbeddingFunc: embFn,
 	})
 	if err != nil {
-		r.logger.Warn().Err(err).Msg("knowledge base unavailable")
+		r.logger.Warn("knowledge base unavailable", "error", err.Error())
 		return
 	}
 	ag.AddTool(knowledgetool.NewSearchTool(col))

@@ -139,11 +139,11 @@ func (c *CommandProvider) SetAgentDelegateFn(fn func(ctx context.Context, agentN
 	log := logger.RegistryDefault().WithModule("command_provider")
 	if c.agentHandler == nil {
 		c.agentHandler = NewAgentHandlerWithManager(fn, c.agentManager)
-		log.Info().Msg("SetAgentDelegateFn: agentHandler created (was nil)")
+		log.Info("SetAgentDelegateFn: agentHandler created (was nil)")
 		return
 	}
 	c.agentHandler.SetDelegateFn(fn)
-	log.Info().Msg("SetAgentDelegateFn: delegateFn set on existing agentHandler")
+	log.Info("SetAgentDelegateFn: delegateFn set on existing agentHandler")
 }
 
 // SetMCPListFunc sets the MCP server list callback function.
@@ -191,8 +191,8 @@ func (c *CommandProvider) GetCommands() []CommandInfo {
 //   - command_skill_* -> SkillHandler (CRUD)
 //   - command_exit, command_quit, command_clear, command_compact, command_help, command_memory -> handled directly
 func (c *CommandProvider) Execute(ctx context.Context, cmd string, params map[string]any) (string, error) {
-	log := logger.RegistryDefault().WithModule("command_provider").With().Str("cmd", cmd).Logger()
-	log.Debug().Interface("params", params).Bool("agentHandler_nil", c.agentHandler == nil).Msg("Execute: routing command")
+	log := logger.RegistryDefault().WithModule("command_provider")
+	log.Debug("Execute: routing command", "cmd", cmd, "params", params, "agentHandler_nil", c.agentHandler == nil)
 
 	// Route command based on prefix
 	switch {
@@ -254,7 +254,7 @@ func (c *CommandProvider) Execute(ctx context.Context, cmd string, params map[st
 		}
 		// Has task parameter → delegation mode
 		if task, ok := params["task"].(string); ok && task != "" {
-			log.Debug().Str("subCmd", subCmd).Str("task", task).Bool("agentHandler_nil", c.agentHandler == nil).Msg("Execute: agent delegation mode")
+			log.Debug("Execute: agent delegation mode", "subCmd", subCmd, "task", task, "agentHandler_nil", c.agentHandler == nil)
 			if c.agentHandler == nil {
 				return i18n.T("command.agent_delegation_not_configured"), nil
 			}
@@ -264,7 +264,7 @@ func (c *CommandProvider) Execute(ctx context.Context, cmd string, params map[st
 			})
 		}
 		// No task parameter → management commands (list, create, etc.)
-		log.Debug().Str("subCmd", subCmd).Bool("agentHandler_nil", c.agentHandler == nil).Msg("Execute: agent management mode")
+		log.Debug("Execute: agent management mode", "subCmd", subCmd, "agentHandler_nil", c.agentHandler == nil)
 		if c.agentHandler == nil {
 			return i18n.T("command.agent_management_not_configured"), nil
 		}

@@ -40,8 +40,8 @@ func NewAgentHandlerWithManager(delegateFn func(ctx context.Context, agentName s
 
 // ExecuteCommand executes an agent-related command.
 func (h *AgentHandler) ExecuteCommand(ctx context.Context, cmd string, params map[string]any) (string, error) {
-	log := logger.RegistryDefault().WithModule("agent_handler").With().Str("cmd", cmd).Logger()
-	log.Debug().Interface("params", params).Bool("delegateFn_nil", h.delegateFn == nil).Msg("ExecuteCommand: dispatching agent command")
+	log := logger.RegistryDefault().WithModule("agent_handler")
+	log.Debug("ExecuteCommand: dispatching agent command", "cmd", cmd, "params", params, "delegateFn_nil", h.delegateFn == nil)
 	switch cmd {
 	case "delegate_to_agent", "delegate":
 		return h.delegateToAgent(ctx, params)
@@ -82,9 +82,9 @@ func (h *AgentHandler) delegateToAgent(ctx context.Context, params map[string]an
 	}
 
 	log := logger.RegistryDefault().WithModule("agent_handler")
-	log.Debug().Str("agent", agentName).Int("task_len", len(task)).Msg("delegateToAgent: delegating task to agent")
+	log.Debug("delegateToAgent: delegating task to agent", "agent", agentName, "task_len", len(task))
 	result, err := h.delegateFn(ctx, agentName, task)
-	log.Debug().Str("agent", agentName).Int("result_len", len(result)).Err(err).Msg("delegateToAgent: delegation result")
+	log.Debug("delegateToAgent: delegation result", "agent", agentName, "result_len", len(result), "error", err)
 	return result, err
 }
 

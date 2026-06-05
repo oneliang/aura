@@ -152,10 +152,10 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 	// Check trusted directories configuration (Serve mode does not auto-ask)
 	if len(cfg.Config.Permissions.TrustedDirs) == 0 {
-		log.Warn().Msg("No trusted directories configured. File operations may be restricted.")
-		log.Warn().Msg("Add trusted directories to ~/.aura/config.yaml or use --allow-all flag")
+		log.Warn("No trusted directories configured. File operations may be restricted.")
+		log.Warn("Add trusted directories to ~/.aura/config.yaml or use --allow-all flag")
 	} else {
-		log.Info().Strs("trusted_dirs", cfg.Config.Permissions.TrustedDirs).Msg("Trusted directories configured")
+		log.Info("Trusted directories configured", "trusted_dirs", cfg.Config.Permissions.TrustedDirs)
 	}
 
 	// Create subscription store and scheduler
@@ -206,7 +206,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	// Load and initialize adapters
 	if err := s.initializeAdapters(); err != nil {
 		// Log warning but don't fail - adapters are optional
-		s.logger.Warn().Err(err).Str("module", "server").Msg("Failed to initialize some adapters")
+		s.logger.Warn("Failed to initialize some adapters", "module", "server", "error", err.Error())
 	}
 
 	// Create handlers after adapter initialization
@@ -231,7 +231,7 @@ func (s *Server) initializeAdapters() error {
 
 	// Validate required config
 	if feishuConfig.AppID == "" || feishuConfig.AppSecret == "" {
-		s.logger.Warn().Str("module", "server").Msg("Feishu adapter enabled but app_id or app_secret is missing")
+		s.logger.Warn("Feishu adapter enabled but app_id or app_secret is missing", "module", "server")
 		return nil
 	}
 
@@ -269,7 +269,7 @@ func (s *Server) initializeAdapters() error {
 	// Store as NotificationSender interface using adapterNotifier
 	s.notifier = &adapterNotifier{adapter: feishuAdapter, registry: adapterReg}
 
-	s.logger.Info().Str("module", "server").Msg("Feishu adapter initialized (long connection mode)")
+	s.logger.Info("Feishu adapter initialized (long connection mode)", "module", "server")
 	return nil
 }
 
@@ -359,14 +359,11 @@ func (s *Server) loggingMiddleware(next http.Handler) http.HandlerFunc {
 		}
 
 		// Log request
-		logEntry := s.logger.Info().Str("module", "server").
-			Str("method", r.Method).
-			Str("path", r.URL.Path).
-			Str("remote_addr", r.RemoteAddr)
 		if requestBody != "" {
-			logEntry.Str("request_body", requestBody)
+			s.logger.Info("--> HTTP request received", "module", "server", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr, "request_body", requestBody)
+		} else {
+			s.logger.Info("--> HTTP request received", "module", "server", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 		}
-		logEntry.Msg("--> HTTP request received")
 
 		// Wrap response writer to capture status code and body
 		wrapped := &responseWriterWithBody{ResponseWriter: w, statusCode: http.StatusOK, body: &bytes.Buffer{}}
@@ -382,13 +379,7 @@ func (s *Server) loggingMiddleware(next http.Handler) http.HandlerFunc {
 		} else {
 			responseBody = utils.Truncate(wrapped.body.String(), maxLogPreview)
 		}
-		s.logger.Info().Str("module", "server").
-			Str("method", r.Method).
-			Str("path", r.URL.Path).
-			Int("status", wrapped.statusCode).
-			Dur("duration_ms", duration).
-			Str("response_body", responseBody).
-			Msg("<-- HTTP response sent")
+		s.logger.Info("<-- HTTP response sent", "module", "server", "method", r.Method, "path", r.URL.Path, "status", wrapped.statusCode, "duration_ms", duration, "response_body", responseBody)
 	}
 }
 
@@ -443,43 +434,43 @@ func (rw *responseWriterWithBody) Flush() {
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Web UI (must be before API routes to catch /)
 	mux.HandleFunc("/", s.handleIndex)
-	s.logger.Info().Str("module", "server").Msg("Web UI handler registered")
+	s.logger.Info("Web UI handler registered", "module", "server")
 
 	// Auth handlers (public routes - no auth required)
 	mux.HandleFunc("/api/auth/token", s.handleGetToken)
 	mux.HandleFunc("/api/auth/validate", s.handleValidateToken)
-	s.logger.Info().Str("module", "server").Msg("Auth handlers registered")
+	s.logger.Info("Auth handlers registered", "module", "server")
 
 	// Session handlers (protected routes - auth required)
 	auth := middleware.AuthMiddleware(s.userManager)
 	mux.Handle("/api/sessions", auth(http.HandlerFunc(s.handleSessions)))
 	mux.Handle("/api/sessions/", auth(http.HandlerFunc(s.handleSessionByID)))
-	s.logger.Info().Str("module", "server").Msg("Session handlers registered")
+	s.logger.Info("Session handlers registered", "module", "server")
 
 	// Notification handlers
 	mux.HandleFunc("/api/notifications", s.notificationHandler.HandleSendNotification)
 	mux.HandleFunc("/api/notifications/task", s.notificationHandler.HandleTaskNotification)
-	s.logger.Info().Str("module", "server").Msg("Notification handlers registered")
+	s.logger.Info("Notification handlers registered", "module", "server")
 
 	// Subscription handlers
 	mux.HandleFunc("/api/subscriptions", s.handleSubscriptions)
 	mux.HandleFunc("/api/subscriptions/trigger", s.subscriptionHandler.HandleTriggerSubscription)
 	mux.HandleFunc("/api/subscriptions/delete", s.subscriptionHandler.HandleDeleteSubscription)
-	s.logger.Info().Str("module", "server").Msg("Subscription handlers registered")
+	s.logger.Info("Subscription handlers registered", "module", "server")
 
 	// Webhook handlers
 	mux.HandleFunc("/api/webhooks/", s.handleWebhooks)
 	mux.HandleFunc("/api/cron", s.handleCronTrigger)
-	s.logger.Info().Str("module", "server").Msg("Webhook handlers registered")
+	s.logger.Info("Webhook handlers registered", "module", "server")
 
 	// Health check
 	mux.HandleFunc("/api/health", s.handleHealth)
-	s.logger.Info().Str("module", "server").Msg("Health check handler registered")
+	s.logger.Info("Health check handler registered", "module", "server")
 
 	// Skills handler
 	if s.skillsHandler != nil {
 		mux.HandleFunc("/api/skills", s.handleSkills)
-		s.logger.Info().Str("module", "server").Msg("Skills handler registered")
+		s.logger.Info("Skills handler registered", "module", "server")
 	}
 }
 
@@ -504,14 +495,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Shutdown adapters
 	if s.notifier != nil {
 		if err := s.notifier.Shutdown(ctx); err != nil {
-			s.logger.Warn().Err(err).Str("module", "server").Msg("Failed to shutdown adapters")
+			s.logger.Warn("Failed to shutdown adapters", "module", "server", "error", err.Error())
 		}
 	}
 
 	// Shutdown HTTP server
 	if s.httpServer != nil {
 		if err := s.httpServer.Shutdown(ctx); err != nil {
-			s.logger.Error().Err(err).Str("module", "server").Msg("HTTP server shutdown error")
+			s.logger.Error("HTTP server shutdown error", "module", "server", "error", err.Error())
 			return fmt.Errorf("http server shutdown: %w", err)
 		}
 	}
@@ -625,7 +616,7 @@ func (s *Server) getOrCreateRuntime(ctx context.Context, sessionID string) (*sdk
 		skillLoader = skillloader.NewLoader(s.config.Skills.Directories)
 		skillMgr = skillmanager.NewSkillManager(skillLoader, s.config.Skills.Directories)
 		if _, err := skillLoader.Load(); err != nil {
-			logger.RegistryDefault().Warn().Err(err).Msg("Failed to load skills for API server")
+			logger.RegistryDefault().Warn("Failed to load skills for API server", "error", err.Error())
 			skillLoader = nil
 			skillMgr = nil
 		}
@@ -789,14 +780,14 @@ func (s *Server) processEvent(ctx context.Context, event trigger.Event) error {
 		defer s.wg.Done()
 		// Start runtime event stream
 		if err := rt.Start(ctx); err != nil {
-			s.logger.Error().Err(err).Str("module", "server").Msg("Failed to start runtime")
+			s.logger.Error("Failed to start runtime", "module", "server", "error", err.Error())
 			return
 		}
 		// Send user input event
 		requestID := fmt.Sprintf("webhook_%d", time.Now().UnixNano())
 		userEvent := events.NewEvent(events.EventTypeUserInput, event.Content, requestID)
 		if err := rt.SendEvent(ctx, userEvent); err != nil {
-			s.logger.Error().Err(err).Str("module", "server").Msg("Failed to send event")
+			s.logger.Error("Failed to send event", "module", "server", "error", err.Error())
 			rt.Stop(ctx)
 			return
 		}
@@ -833,14 +824,11 @@ func (s *Server) AppendMessage(ctx context.Context, sessionID, role, content, so
 
 // SendMessage implements handlers.SessionService interface.
 func (s *Server) SendMessage(ctx context.Context, sessionID, content string) error {
-	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).
-		Str("content", utils.Truncate(content, 100)).
-		Msg("SendMessage called")
+	s.logger.Debug("SendMessage called", "module", "server", "session_id", sessionID, "content", utils.Truncate(content, 100))
 
 	rt, err := s.getOrCreateRuntime(ctx, sessionID)
 	if err != nil {
-		s.logger.Error().Str("module", "server").Str("session_id", sessionID).
-			Err(err).Msg("Failed to get runtime")
+		s.logger.Error("Failed to get runtime", "module", "server", "session_id", sessionID, "error", err.Error())
 		return fmt.Errorf("failed to get runtime: %w", err)
 	}
 
@@ -851,8 +839,7 @@ func (s *Server) SendMessage(ctx context.Context, sessionID, content string) err
 
 	// Start runtime event stream
 	if err := rt.Start(processCtx); err != nil {
-		s.logger.Error().Str("module", "server").Str("session_id", sessionID).
-			Err(err).Msg("Failed to start runtime")
+		s.logger.Error("Failed to start runtime", "module", "server", "session_id", sessionID, "error", err.Error())
 		return fmt.Errorf("failed to start runtime: %w", err)
 	}
 
@@ -861,8 +848,7 @@ func (s *Server) SendMessage(ctx context.Context, sessionID, content string) err
 	userEvent := events.NewEvent(events.EventTypeUserInput, content, requestID)
 	if err := rt.SendEvent(processCtx, userEvent); err != nil {
 		rt.Stop(processCtx)
-		s.logger.Error().Str("module", "server").Str("session_id", sessionID).
-			Err(err).Msg("Failed to send event")
+		s.logger.Error("Failed to send event", "module", "server", "session_id", sessionID, "error", err.Error())
 		return fmt.Errorf("failed to send event: %w", err)
 	}
 
@@ -876,9 +862,7 @@ func (s *Server) SendMessage(ctx context.Context, sessionID, content string) err
 	}
 	rt.Stop(processCtx)
 
-	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).
-		Int("event_count", eventCount).
-		Msg("SendMessage completed")
+	s.logger.Debug("SendMessage completed", "module", "server", "session_id", sessionID, "event_count", eventCount)
 
 	if processCtx.Err() != nil {
 		return fmt.Errorf("SendMessage timed out or was cancelled: %w", processCtx.Err())
@@ -929,10 +913,10 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 	}
 
 	// Process message
-	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Starting runtime event stream")
+	s.logger.Debug("Starting runtime event stream", "module", "server", "session_id", sessionID)
 	// Start runtime event stream
 	if err := rt.Start(r.Context()); err != nil {
-		s.logger.Error().Str("module", "server").Str("session_id", sessionID).Err(err).Msg("Failed to start runtime")
+		s.logger.Error("Failed to start runtime", "module", "server", "session_id", sessionID, "error", err.Error())
 		s.sendSSEError(w, flusher, "Failed to start runtime")
 		return
 	}
@@ -941,7 +925,7 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 	requestID := fmt.Sprintf("sse_%d", time.Now().UnixNano())
 	userEvent := events.NewEvent(events.EventTypeUserInput, req.Content, requestID)
 	if err := rt.SendEvent(r.Context(), userEvent); err != nil {
-		s.logger.Error().Str("module", "server").Str("session_id", sessionID).Err(err).Msg("Failed to send event")
+		s.logger.Error("Failed to send event", "module", "server", "session_id", sessionID, "error", err.Error())
 		rt.Stop(r.Context())
 		s.sendSSEError(w, flusher, "Failed to send event")
 		return
@@ -950,7 +934,7 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 	// Stream events directly from event stream
 	var responseContent strings.Builder
 	for ev := range rt.Events() {
-		s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Str("event_type", string(ev.Type())).Msg("Consumed event")
+		s.logger.Debug("Consumed event", "module", "server", "session_id", sessionID, "event_type", string(ev.Type()))
 
 		// Send SSE events based on event type
 		switch ev.Type() {
@@ -987,7 +971,7 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 	rt.Stop(r.Context())
 
 	// Send completion event
-	s.logger.Debug().Str("module", "server").Str("session_id", sessionID).Msg("Sending SSE done event")
+	s.logger.Debug("Sending SSE done event", "module", "server", "session_id", sessionID)
 	s.sendSSEEvent(w, flusher, sseEventDone, map[string]interface{}{
 		"status": "complete",
 	})
@@ -1007,7 +991,7 @@ func (s *Server) sendSSEEvent(w http.ResponseWriter, flusher http.Flusher, event
 	}
 	flusher.Flush()
 
-	s.logger.Debug().Str("module", "server").Str("event", eventType).Msg("SSE event sent")
+	s.logger.Debug("SSE event sent", "module", "server", "event", eventType)
 	return true
 }
 
@@ -1173,7 +1157,7 @@ func (s *Server) handleGetInputHistory(w http.ResponseWriter, r *http.Request, s
 	ctx := r.Context()
 	msgs, err := s.store.GetMessages(ctx, sessionID, limit, s.userID)
 	if err != nil {
-		s.logger.Error().Err(err).Str("sessionID", sessionID).Msg("handleGetInputHistory: error getting messages")
+		s.logger.Error("handleGetInputHistory: error getting messages", "error", err.Error(), "sessionID", sessionID)
 		handlers.WriteError(w, "Failed to get messages", http.StatusInternalServerError)
 		return
 	}
