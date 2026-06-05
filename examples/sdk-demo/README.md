@@ -28,7 +28,7 @@ Note: Since Aura uses Go workspaces, use `GOWORK=off` when building the demo sta
 | stream | Real-time events | `go run main.go -example stream` |
 | conversation | Multi-turn chat | `go run main.go -example conversation` |
 | timeout | LLM timeout configuration | `go run main.go -example timeout` |
-| auto | Auto-approve mode | `go run main.go -example auto` |
+| auto | Auto-approve mode (无需处理交互请求) | `go run main.go -example auto` |
 
 ## Core Integration Pattern
 
@@ -40,6 +40,7 @@ cfg := sdk.DefaultRuntimeConfig()
 runtime, err := sdk.NewRuntime(cfg,
     sdk.WithMode(sdk.RuntimeModeCLI),
     sdk.WithSessionID("demo-session"),
+    sdk.WithAutoApprove(),  // Optional: auto-approve all requests
 )
 
 // 3. Initialize
@@ -51,6 +52,12 @@ runtime.Start(ctx)
 runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "Hello!", "req-1"))
 for ev := range runtime.Events() {
     switch ev.Type() {
+    case sdk.EventTypeInteractionRequest:
+        // Handle if NOT using WithAutoApprove()
+        runtime.SendEvent(ctx, sdk.NewEventWithExtra(
+            sdk.EventTypeInteractionResponse, "",
+            map[string]any{"approved": true},
+            ev.RequestID()))
     case sdk.EventTypeResponse:
         fmt.Println(ev.Content())
     case sdk.EventTypeDone:
@@ -113,3 +120,57 @@ cfg.LLM.Timeout = 300 * time.Second  // 5 minutes
 **Note:** LLM timeout is different from context timeout:
 - `cfg.LLM.Timeout`: HTTP client timeout for LLM API calls
 - `context.WithTimeout`: Overall operation timeout for the entire task
+
+## Auto-Approve Mode
+
+For non-interactive environments (CI/CD, background automation, API integration):
+
+```go
+runtime, err := sdk.NewRuntime(cfg,
+    sdk.WithAutoApprove(),  // 自动批准所有工具执行请求
+)
+```
+
+**Behavior**:
+- All tool execution requests are automatically approved
+- Interaction requests timeout (60s) and auto-approve
+- Safety restrictions still active (dangerous commands blocked)
+- No need to handle `EventTypeInteractionRequest` events
+
+**When to use**:
+- Background automation tasks
+- CI/CD pipelines
+- API/SDK integration without user interaction
+- Batch processing scenarios
+
+Run the example: `go run main.go -example auto`
+
+## Interaction Handling
+
+For interactive environments where user confirmation is required:
+
+```go
+events := runtime.Events()
+for ev := range events {
+    switch ev.Type() {
+    case sdk.EventTypeInteractionRequest:
+        // Handle interaction request (tool confirmation, question, etc.)
+        extra := ev.Extra()
+        toolName := extra["tool"].(string)
+        
+        // Send response (approved or rejected)
+        runtime.SendEvent(ctx, sdk.NewEventWithExtra(
+            sdk.EventTypeInteractionResponse,
+            "",
+            map[string]any{"approved": true},  // or false to reject
+            ev.RequestID(),
+        ))
+    case sdk.EventTypeDone:
+        break
+    }
+}
+```
+
+**Important**: Without `WithAutoApprove()`, you MUST handle `EventTypeInteractionRequest` events. Otherwise, requests timeout after 60 seconds and are marked as cancelled.
+
+Run the example: `go run main.go -example confirm`
