@@ -27,6 +27,8 @@ Note: Since Aura uses Go workspaces, use `GOWORK=off` when building the demo sta
 | confirm | Confirmation handling | `go run main.go -example confirm` |
 | stream | Real-time events | `go run main.go -example stream` |
 | conversation | Multi-turn chat | `go run main.go -example conversation` |
+| timeout | LLM timeout configuration | `go run main.go -example timeout` |
+| auto | Auto-approve mode | `go run main.go -example auto` |
 
 ## Core Integration Pattern
 
@@ -89,3 +91,25 @@ cfg.LLM.Provider = "ollama"
 cfg.LLM.BaseURL = "http://localhost:11434"
 cfg.LLM.Model = "qwen3:8b"
 ```
+
+### Timeout Configuration
+
+For long-running LLM tasks (complex reasoning, large model inference), configure HTTP timeout:
+
+```go
+// Programmatic configuration
+cfg.LLM.Timeout = 300 * time.Second  // 5 minutes
+
+// Or via config file (configs/config.yaml):
+// llm:
+//   timeout: 300s  # 5 minutes
+```
+
+**Recommended timeout values:**
+- Simple tasks: 120s (default)
+- Complex reasoning: 300s-600s (5-10 minutes)
+- Large model inference: 600s-1200s (10-20 minutes)
+
+**Note:** LLM timeout is different from context timeout:
+- `cfg.LLM.Timeout`: HTTP client timeout for LLM API calls
+- `context.WithTimeout`: Overall operation timeout for the entire task

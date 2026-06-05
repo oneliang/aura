@@ -10,6 +10,7 @@ import (
 	"github.com/oneliang/aura/core/pkg/llm/ollama"
 	"github.com/oneliang/aura/core/pkg/llm/openai"
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/httpclient"
 )
 
@@ -37,12 +38,23 @@ func WithHTTPClient(client *http.Client) LLMFactoryOption {
 // NewLLMFactory creates a new LLM factory.
 func NewLLMFactory(cfg *config.LLMConfig, opts ...LLMFactoryOption) *LLMFactory {
 	f := &LLMFactory{
-		config:     cfg,
-		httpClient: httpclient.DefaultLLMClient(),
+		config: cfg,
 	}
+
+	// Apply options first (allows override)
 	for _, opt := range opts {
 		opt(f)
 	}
+
+	// Create HTTP client if not injected via option
+	if f.httpClient == nil {
+		timeout := cfg.Timeout
+		if timeout <= 0 {
+			timeout = constants.DefaultLLMTimeout
+		}
+		f.httpClient = httpclient.NewClient(timeout)
+	}
+
 	return f
 }
 

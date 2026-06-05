@@ -363,7 +363,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			default:
 			}
 			select {
-			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			case m.eventChan <- ChatEvent{Type: EventTypeDone, Reason: DoneReasonErrorRuntimeCreate}:
 			default:
 			}
 			return nil
@@ -377,7 +377,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			default:
 			}
 			select {
-			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			case m.eventChan <- ChatEvent{Type: EventTypeDone, Reason: DoneReasonErrorRuntimeInit}:
 			default:
 			}
 			return nil
@@ -391,7 +391,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			default:
 			}
 			select {
-			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			case m.eventChan <- ChatEvent{Type: EventTypeDone, Reason: DoneReasonErrorRuntimeStart}:
 			default:
 			}
 			return nil
@@ -412,7 +412,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 					if !ok {
 						// Events channel closed, send Done and cleanup
 						select {
-						case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+						case m.eventChan <- ChatEvent{Type: EventTypeDone, Reason: DoneReasonShutdown}:
 						default:
 						}
 						tempRt.Shutdown()
@@ -436,7 +436,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			default:
 			}
 			select {
-			case m.eventChan <- ChatEvent{Type: EventTypeDone}:
+			case m.eventChan <- ChatEvent{Type: EventTypeDone, Reason: DoneReasonErrorSendEvent}:
 			default:
 			}
 			tempRt.Stop(m.currentRunCtx)
@@ -562,9 +562,9 @@ func (m *Model) convertEventToChatEvent(event events.Event) ChatEvent {
 	case events.EventTypeAgentStop:
 		return ChatEvent{Type: EventTypeAgentStop, Content: event.Content(), RequestID: event.RequestID()}
 	case events.EventTypeDone:
-		return ChatEvent{Type: EventTypeDone, RequestID: event.RequestID()}
+		return ChatEvent{Type: EventTypeDone, RequestID: event.RequestID(), Reason: DoneReasonNormal}
 	default:
-		return ChatEvent{Type: EventTypeDone, RequestID: event.RequestID()}
+		return ChatEvent{Type: EventTypeDone, RequestID: event.RequestID(), Reason: DoneReasonNormal}
 	}
 }
 

@@ -773,7 +773,7 @@ func (r *AgentRuntime) SendEvent(ctx context.Context, event Event) error {
 	switch event.Type() {
 	case events.EventTypeUserInput:
 		// 用户文本输入
-		return r.handleUserInput(ctx, event.Content())
+		return r.handleUserInput(ctx, event)
 
 	case events.EventTypeUserMessage:
 		// 用户消息（带metadata）
@@ -799,14 +799,18 @@ func (r *AgentRuntime) Events() <-chan Event {
 }
 
 // handleUserInput 处理用户文本输入
-func (r *AgentRuntime) handleUserInput(ctx context.Context, input string) error {
+func (r *AgentRuntime) handleUserInput(ctx context.Context, event Event) error {
 	if !r.initialized {
 		return fmt.Errorf("runtime not initialized")
 	}
 
 	// 提交到输入队列，由processInputQueue顺序处理
-	requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
-	req := inputRequest{Input: input, RequestID: requestID}
+	// 使用原始 event 的 requestID，保持一致性
+	requestID := event.RequestID()
+	if requestID == "" {
+		requestID = fmt.Sprintf("req_%d", time.Now().UnixNano())
+	}
+	req := inputRequest{Input: event.Content(), RequestID: requestID}
 
 	select {
 	case r.inputQueue <- req:
@@ -971,8 +975,6 @@ func (r *AgentRuntime) processInputQueue(ctx context.Context) {
 				}
 			}
 
-			// 确保发送Done事件
-			r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
 		}
 	}
 }

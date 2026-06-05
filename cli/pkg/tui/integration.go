@@ -249,8 +249,8 @@ func (a *Adapter) ConvertSDKEvent(ev sdk.Event) ChatEvent {
 	case sdk.EventTypeAgentStop:
 		return ChatEvent{Type: EventTypeAgentStop, Content: ev.Content(), RequestID: ev.RequestID()}
 	case sdk.EventTypeDone:
-		return ChatEvent{Type: EventTypeDone, RequestID: ev.RequestID()}
+		return ChatEvent{Type: EventTypeDone, RequestID: ev.RequestID(), Reason: DoneReasonNormal}
 	default:
-		return ChatEvent{Type: EventTypeDone, RequestID: ev.RequestID()}
+		return ChatEvent{Type: EventTypeDone, RequestID: ev.RequestID(), Reason: DoneReasonNormal}
 	}
 }

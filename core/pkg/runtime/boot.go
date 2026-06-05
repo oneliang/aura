@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/events"
 	"github.com/oneliang/aura/shared/pkg/httpclient"
 	"github.com/oneliang/aura/shared/pkg/logger"
@@ -115,8 +116,12 @@ func (r *AgentRuntime) Initialize(ctx context.Context) error {
 
 // initClients creates HTTP clients, LLM client, and permission manager.
 func (r *AgentRuntime) initClients(ctx context.Context) error {
-	// Create shared HTTP clients
-	r.httpClient = httpclient.DefaultLLMClient()
+	// Create shared HTTP clients with configured timeouts
+	llmTimeout := r.config.LLM.Timeout
+	if llmTimeout <= 0 {
+		llmTimeout = constants.DefaultLLMTimeout
+	}
+	r.httpClient = httpclient.NewClient(llmTimeout)
 	r.webHttpClient = httpclient.DefaultWebClient()
 
 	// Create LLM factory with HTTP client injection

@@ -8,6 +8,11 @@ llm:
   api_key: ${DASHSCOPE_API_KEY}  # Set environment variable: export DASHSCOPE_API_KEY=your-key
   # embedding_model: text-embedding-v3  # Optional: only needed when using knowledge base features
 
+  # HTTP request timeout for LLM API calls (default: 120s)
+  # Recommended: 300s-600s (5-10 minutes) for long-running reasoning tasks
+  # Example: timeout: 300s or timeout: 5m
+  timeout: 300s  # 5 minutes
+
   # LLM request retry configuration
   retry:
     max_retries: 3       # Maximum number of retries (0 = disabled)

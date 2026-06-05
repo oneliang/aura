@@ -138,6 +138,10 @@ func (m Model) handleChatEvent(msg ChatEvent) (tea.Model, tea.Cmd) {
 // responses that accumulated chunks without a separate Response event.
 // For init mode: saves AURA.md and shows result.
 func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
+	// 记录完成原因，便于定位问题
+	hasError := strings.HasPrefix(string(msg.Reason), "error")
+	log.Debug("handleEventDone", "reason", msg.Reason, "requestID", msg.RequestID, "hasError", hasError)
+
 	// Handle init completion
 	if m.initPending {
 		return m.handleInitComplete()

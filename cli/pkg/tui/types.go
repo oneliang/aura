@@ -132,6 +132,20 @@ const (
 	MessageTypeSystem
 )
 
+// DoneReason describes why a Done event was sent.
+type DoneReason string
+
+const (
+	DoneReasonNormal              DoneReason = "normal"                // 正常完成
+	DoneReasonErrorRuntimeCreate  DoneReason = "error_runtime_create" // NewRuntime 失败
+	DoneReasonErrorRuntimeInit    DoneReason = "error_runtime_init"   // Initialize 失败
+	DoneReasonErrorRuntimeStart   DoneReason = "error_runtime_start"  // Start 失败
+	DoneReasonErrorSendEvent      DoneReason = "error_send_event"     // SendEvent 失败
+	DoneReasonErrorEngine         DoneReason = "error_engine"         // Engine 返回错误
+	DoneReasonCancelled           DoneReason = "cancelled"            // 用户取消
+	DoneReasonShutdown            DoneReason = "shutdown"             // Runtime 关闭
+)
+
 // Message represents a rendered message in the chat history.
 type Message struct {
 	ID            string
@@ -150,7 +164,8 @@ type ChatEvent struct {
 	Type      sdk.EventType
 	Content   string
 	Extra     map[string]any
-	RequestID string // Unique ID for each user request (tracks event grouping)
+	RequestID string     // Unique ID for each user request (tracks event grouping)
+	Reason    DoneReason // Done 事件的完成原因（仅 EventTypeDone 使用）
 }
 
 // GetSystemPromptFunc is the function signature for getting the system prompt.

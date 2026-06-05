@@ -86,6 +86,7 @@ type LLMConfig struct {
 	Model            string         `mapstructure:"model" yaml:"model"`
 	APIKey           string         `mapstructure:"api_key" yaml:"api_key"`         // optional for local providers
 	EmbeddingModel   string         `mapstructure:"embedding_model" yaml:"embedding_model"` // model used for embeddings
+	Timeout          time.Duration  `mapstructure:"timeout" yaml:"timeout"`         // HTTP client timeout for LLM requests
 	Retry            RetryConfig    `mapstructure:"retry" yaml:"retry"`           // retry configuration for LLM requests
 	Thinking         ThinkingConfig `mapstructure:"thinking" yaml:"thinking"`        // thinking/reasoning configuration
 	EnablePromptCache bool          `mapstructure:"enable_prompt_cache" yaml:"enable_prompt_cache"` // enable prompt caching
@@ -368,6 +369,7 @@ func DefaultConfig() *Config {
 			BaseURL:        constants.DefaultLLMBaseURL,
 			Model:          constants.DefaultLLMModel,
 			EmbeddingModel: "",
+			Timeout:        constants.DefaultLLMTimeout, // Default: 120s
 			Retry: RetryConfig{
 				MaxRetries:   3,
 				InitialDelay: 1 * time.Second,
