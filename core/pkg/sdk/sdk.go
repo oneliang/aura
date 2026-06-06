@@ -238,6 +238,19 @@ func WithAutoApprove() RuntimeOption {
 	return runtime.WithAutoApprove()
 }
 
+// WithSharedEventCh sets an externally provided shared event channel.
+// When set, runtime operates in shared mode - events are sent to this channel.
+// Multiple runtimes can share the same channel for unified event handling.
+func WithSharedEventCh(ch chan Event) RuntimeOption {
+	return runtime.WithSharedEventCh(ch)
+}
+
+// WithRuntimeID sets the runtime identifier for event routing.
+// Used in shared mode to identify the source of events.
+func WithRuntimeID(id string) RuntimeOption {
+	return runtime.WithRuntimeID(id)
+}
+
 // NewMCPManager creates an MCP manager from the default config file (~/.aura/mcp.json).
 // Returns nil if the config file does not exist or has no servers configured.
 func NewMCPManager() *MCPManager {

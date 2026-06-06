@@ -19,6 +19,29 @@ import (
 	"github.com/oneliang/aura/shared/pkg/version"
 )
 
+// runtimeRegistry is a package-level registry for temporary runtimes.
+// Used to route interaction responses to the correct runtime based on RuntimeID.
+// Key: RuntimeID (string), Value: *sdk.Runtime
+var runtimeRegistry sync.Map
+
+// RegisterRuntime registers a runtime with its RuntimeID for response routing.
+func RegisterRuntime(runtimeID string, rt *sdk.Runtime) {
+	runtimeRegistry.Store(runtimeID, rt)
+}
+
+// UnregisterRuntime removes a runtime from the registry.
+func UnregisterRuntime(runtimeID string) {
+	runtimeRegistry.Delete(runtimeID)
+}
+
+// GetRuntime returns the runtime for a given RuntimeID, or nil if not found.
+func GetRuntime(runtimeID string) *sdk.Runtime {
+	if v, ok := runtimeRegistry.Load(runtimeID); ok {
+		return v.(*sdk.Runtime)
+	}
+	return nil
+}
+
 // Model is the main Bubble Tea model.
 type Model struct {
 	state    *State
@@ -38,11 +61,19 @@ type Model struct {
 	// Runtime引用 - 黑盒，只有IN/OUT事件流接口
 	runtime *sdk.Runtime
 
+	// Temporary runtime registry - maps RuntimeID to runtime for response routing
+	// Used in multi-runtime scenarios like /init command
+	tempRuntimes map[string]*sdk.Runtime
+
 	// OUT: 发送事件通道（用户输入、交互响应等）
 	eventOutCh chan events.Event
 
 	// IN: 接收事件通道（Agent响应、交互请求等）
 	eventInCh chan events.Event
+
+	// Shared: 共享事件通道（多 runtime 场景）
+	// 所有 runtime 的事件汇集到这里，根据 RuntimeID 区分
+	sharedEventCh chan events.Event
 
 	// Internal event processing
 	ctx        context.Context
@@ -138,7 +169,8 @@ type (
 
 // NewWithRuntime creates a new TUI model with runtime reference.
 // This is the new architecture: TUI holds runtime reference and uses event stream.
-func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.SessionManager, summarizer *sdk.Summarizer, modelProvider *ModelProvider, commandProvider commands.Command, mcpManager *sdk.MCPManager) *Model {
+// sharedEventCh: externally provided shared event channel for multi-runtime scenarios.
+func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.SessionManager, summarizer *sdk.Summarizer, modelProvider *ModelProvider, commandProvider commands.Command, mcpManager *sdk.MCPManager, sharedEventCh chan sdk.Event) *Model {
 	startTime := time.Now()
 	log.Debug("[DIAG] NewWithRuntime: starting")
 
@@ -171,12 +203,14 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 		tasks:               NewTaskWidget(styles),
 		plan:                NewPlanWidget(styles),
 		runtime:             rt,  // 新架构：持有runtime引用
+		tempRuntimes:        make(map[string]*sdk.Runtime), // Temporary runtime registry for response routing
 		getSystemPromptFunc: config.GetSystemPrompt,
 		ctx:                 ctx,
 		cancelFunc:          cancel,
 		eventChan:           make(chan ChatEvent, 100),
 		eventOutCh:          make(chan events.Event, 100),  // OUT: 发送事件
 		eventInCh:           make(chan events.Event, 100),  // IN: 接收事件（备用）
+		sharedEventCh:       sharedEventCh,                  // Shared: 共享事件通道
 		config:              config,
 		sessionMgr:          sessionMgr,
 		summarizer:          summarizer,
@@ -351,11 +385,15 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 	return func() tea.Msg {
 		m.currentRunCtx, m.currentRunCancel = context.WithCancel(m.ctx)
 
-		// Create temporary runtime with custom config
+		// Generate unique RuntimeID for temp runtime
+		runtimeID := fmt.Sprintf("init_%d", time.Now().UnixNano())
+
+		// Create temporary runtime with custom config and RuntimeID
 		// AutoApprove will auto-approve all confirmations (tools + plan review)
 		tempRt, err := sdk.NewRuntime(cfg,
 			sdk.WithAutoApprove(),
 			sdk.WithLogger(GetLogger()),
+			sdk.WithRuntimeID(runtimeID),
 		)
 		if err != nil {
 			select {
@@ -369,8 +407,12 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			return nil
 		}
 
+		// Register temp runtime for response routing
+		RegisterRuntime(runtimeID, tempRt)
+
 		// Initialize temporary runtime
 		if err := tempRt.Initialize(m.ctx); err != nil {
+			UnregisterRuntime(runtimeID)
 			tempRt.Shutdown()
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
@@ -385,6 +427,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 
 		// Start temporary runtime with event stream pattern
 		if err := tempRt.Start(m.currentRunCtx); err != nil {
+			UnregisterRuntime(runtimeID)
 			tempRt.Shutdown()
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
@@ -405,12 +448,14 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 			for {
 				select {
 				case <-m.currentRunCtx.Done():
+					UnregisterRuntime(runtimeID)
 					tempRt.Stop(m.currentRunCtx)
 					tempRt.Shutdown()
 					return
 				case ev, ok := <-agentEvents:
 					if !ok {
 						// Events channel closed, send Done and cleanup
+						UnregisterRuntime(runtimeID)
 						select {
 						case m.eventChan <- ChatEvent{Type: EventTypeDone, Reason: DoneReasonShutdown}:
 						default:
@@ -428,9 +473,10 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 		}()
 
 		// Send user input event to runtime
-		requestID := fmt.Sprintf("init_%d", time.Now().UnixNano())
+		requestID := runtimeID // Use same ID for request tracking
 		userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
 		if err := tempRt.SendEvent(m.currentRunCtx, userEvent); err != nil {
+			UnregisterRuntime(runtimeID)
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
 			default:
@@ -625,6 +671,7 @@ func (m *Model) sendUserInput(input string) {
 
 // sendInteractionResponse sends an interaction response via event stream.
 // Additional fields (answer, answers, cancelled) are merged into the event extra.
+// Routes response to correct runtime based on RuntimeID.
 func (m *Model) sendInteractionResponse(approved bool, extraFields ...map[string]any) {
 	if m.confirmState.RequestID == "" {
 		return
@@ -647,10 +694,31 @@ func (m *Model) sendInteractionResponse(approved bool, extraFields ...map[string
 		m.confirmState.RequestID,
 	)
 
-	select {
-	case m.eventOutCh <- event:
-	default:
-		log.Warn("eventOutCh full, dropping interaction response event")
+	// Route response based on RuntimeID
+	runtimeID := m.confirmState.RuntimeID
+	if runtimeID == "" || runtimeID == "main" {
+		// Main runtime: send via eventOutCh (Orchestrator forwards to main runtime)
+		select {
+		case m.eventOutCh <- event:
+		default:
+			log.Warn("eventOutCh full, dropping interaction response event")
+		}
+	} else {
+		// Temp runtime: send directly to the registered runtime
+		rt := GetRuntime(runtimeID)
+		if rt != nil {
+			if err := rt.SendEvent(m.ctx, event); err != nil {
+				log.Warn("failed to send interaction response to temp runtime", "runtimeID", runtimeID, "error", err)
+			}
+		} else {
+			log.Warn("temp runtime not found in registry", "runtimeID", runtimeID)
+			// Fallback: try eventOutCh
+			select {
+			case m.eventOutCh <- event:
+			default:
+				log.Warn("eventOutCh full, dropping interaction response event")
+			}
+		}
 	}
 
 	// 重置确认状态

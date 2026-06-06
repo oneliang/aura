@@ -69,8 +69,13 @@ type AgentRuntime struct {
 
 	// ===== 新架构：统一事件流 =====
 
-	// OUT: 发送事件通道
-	eventOutCh chan Event
+	// OUT: 发送事件通道（双模式）
+	// 共享模式：使用 externalEventCh（外部传入）
+	// 独立模式：使用 localEventOutCh（内部创建）
+	externalEventCh  chan Event // 外部传入的共享通道（共享模式）
+	localEventOutCh  chan Event // 内部创建的本地通道（独立模式）
+	useSharedCh      bool       // 是否使用共享模式
+	runtimeID        string     // Runtime 标识（用于事件路由）
 
 	// IN: 交互请求-响应匹配
 	interactionMu     sync.RWMutex
@@ -205,6 +210,23 @@ func WithMCPManager(mgr *mcpmanager.Manager) RuntimeOption {
 func WithAutoApprove() RuntimeOption {
 	return func(r *AgentRuntime) {
 		r.config.AutoApprove = true
+	}
+}
+
+// WithSharedEventCh sets an externally provided shared event channel.
+// When set, runtime operates in shared mode - events are sent to this channel.
+// Multiple runtimes can share the same channel for unified event handling.
+func WithSharedEventCh(ch chan Event) RuntimeOption {
+	return func(r *AgentRuntime) {
+		r.externalEventCh = ch
+	}
+}
+
+// WithRuntimeID sets the runtime identifier for event routing.
+// Used in shared mode to identify the source of events.
+func WithRuntimeID(id string) RuntimeOption {
+	return func(r *AgentRuntime) {
+		r.runtimeID = id
 	}
 }
 
@@ -707,7 +729,17 @@ func (r *AgentRuntime) Start(ctx context.Context) error {
 		return fmt.Errorf("agent already running")
 	}
 	r.running = true
-	r.eventOutCh = make(chan Event, 100)
+
+	// 判断使用哪种模式
+	if r.externalEventCh != nil {
+		// 共享模式：使用外部传入的 channel
+		r.useSharedCh = true
+	} else {
+		// 独立模式：创建本地 channel
+		r.useSharedCh = false
+		r.localEventOutCh = make(chan Event, 100)
+	}
+
 	r.interactionPending = make(map[string]chan events.InteractionResponse)
 	r.inputQueue = make(chan inputRequest, 10)
 
@@ -721,8 +753,9 @@ func (r *AgentRuntime) Start(ctx context.Context) error {
 	r.processWg.Add(1) // Add before go to avoid race
 	go r.processInputQueue(processCtx)
 
-	// 发送启动事件
-	r.sendEvent(events.NewEvent(events.EventTypeAgentStart, "", ""))
+	// 发送启动事件（带上 RuntimeID）
+	startEvent := events.NewEventWithRuntimeID(events.EventTypeAgentStart, "", "", r.runtimeID)
+	r.sendEvent(startEvent)
 
 	return nil
 }
@@ -734,13 +767,25 @@ func (r *AgentRuntime) Stop(ctx context.Context) error {
 		r.runMu.Unlock()
 		return nil
 	}
-	eventOutCh := r.eventOutCh
-	r.eventOutCh = nil
+
+	// 根据模式处理 channel
+	var eventCh chan Event
+	if r.useSharedCh {
+		// 共享模式：不关闭外部 channel，只清理引用
+		eventCh = nil // 不发送停止事件到共享 channel
+		r.externalEventCh = nil
+	} else {
+		// 独立模式：获取本地 channel 用于发送停止事件并关闭
+		eventCh = r.localEventOutCh
+		r.localEventOutCh = nil
+	}
+
 	inputQueue := r.inputQueue
 	r.inputQueue = nil
 	processCancel := r.processCancel
 	r.processCancel = nil
 	r.running = false
+	r.useSharedCh = false
 	r.runMu.Unlock()
 
 	// Cancel processInputQueue context first (stops goroutine waiting in select)
@@ -754,14 +799,15 @@ func (r *AgentRuntime) Stop(ctx context.Context) error {
 	}
 	r.processWg.Wait()
 
-	// 发送停止事件（在unlock后，使用缓存的channel）
-	if eventOutCh != nil {
+	// 独立模式下：发送停止事件并关闭 channel
+	if eventCh != nil {
+		stopEvent := events.NewEventWithRuntimeID(events.EventTypeAgentStop, "", "", r.runtimeID)
 		select {
-		case eventOutCh <- events.NewEvent(events.EventTypeAgentStop, "", ""):
+		case eventCh <- stopEvent:
 		default:
 			// 通道满或已关闭，忽略
 		}
-		close(eventOutCh)
+		close(eventCh)
 	}
 
 	return nil
@@ -794,8 +840,13 @@ func (r *AgentRuntime) SendEvent(ctx context.Context, event Event) error {
 }
 
 // Events 获取输出事件流（OUT）
+// 共享模式下返回 nil（外部应该监听传入的共享 channel）
+// 独立模式下返回本地 channel
 func (r *AgentRuntime) Events() <-chan Event {
-	return r.eventOutCh
+	if r.useSharedCh {
+		return nil // 共享模式：外部直接监听 sharedEventCh
+	}
+	return r.localEventOutCh
 }
 
 // handleUserInput 处理用户文本输入
@@ -910,16 +961,40 @@ func (r *AgentRuntime) handleSystemCommand(ctx context.Context, event Event) err
 }
 
 // sendEvent 发送事件到OUT通道
+// 根据模式选择正确的通道，并确保事件带有 RuntimeID
 func (r *AgentRuntime) sendEvent(event Event) {
 	r.runMu.Lock()
 	defer r.runMu.Unlock()
 
-	if !r.running || r.eventOutCh == nil {
+	if !r.running {
 		return
 	}
 
+	// 确保事件带有 RuntimeID
+	var eventToSend Event
+	if event.RuntimeID() == "" && r.runtimeID != "" {
+		// 使用 WithRuntimeID 方法添加 runtimeID
+		if baseEvent, ok := event.(*events.BaseEvent); ok {
+			eventToSend = baseEvent.WithRuntimeID(r.runtimeID)
+		} else {
+			eventToSend = event
+		}
+	} else {
+		eventToSend = event
+	}
+
+	// 根据模式选择通道
+	var targetCh chan Event
+	if r.useSharedCh && r.externalEventCh != nil {
+		targetCh = r.externalEventCh
+	} else if !r.useSharedCh && r.localEventOutCh != nil {
+		targetCh = r.localEventOutCh
+	} else {
+		return // 没有可用的通道
+	}
+
 	select {
-	case r.eventOutCh <- event:
+	case targetCh <- eventToSend:
 	default:
 		// 通道满，丢弃事件（或记录警告）
 		r.logger.Warn("Event channel full, dropping event", "type", string(event.Type()))
@@ -981,15 +1056,11 @@ func (r *AgentRuntime) processInputQueue(ctx context.Context) {
 
 // requestInteraction 发送交互请求（Agent内部调用）
 // 用于工具确认、Plan审核、回滚确认等场景
+// 参考 Claude Code：不设硬性超时，等待用户主动响应或取消会话
 func (r *AgentRuntime) requestInteraction(ctx context.Context, req events.InteractionRequest) events.InteractionResponse {
 	// 生成请求ID
 	if req.ID == "" {
 		req.ID = fmt.Sprintf("interaction_%d", time.Now().UnixNano())
-	}
-
-	// 设置默认超时
-	if req.Timeout == 0 {
-		req.Timeout = 60 * time.Second
 	}
 
 	// 创建响应channel
@@ -1022,29 +1093,26 @@ func (r *AgentRuntime) requestInteraction(ctx context.Context, req events.Intera
 
 	r.sendEvent(event)
 
-	// 等待响应（带超时）
-	timeoutCtx, cancel := context.WithTimeout(ctx, req.Timeout)
-	defer cancel()
-
+	// 等待响应：不设硬性超时，等待用户响应或会话取消
+	// 参考 Claude Code 行为：确认对话框一直等待用户主动操作
 	select {
 	case resp := <-respCh:
 		r.interactionMu.Lock()
 		delete(r.interactionPending, req.ID)
 		r.interactionMu.Unlock()
 		return resp
-	case <-timeoutCtx.Done():
+	case <-ctx.Done():
+		// 会话取消（用户 Ctrl+C 或其他原因）
 		r.interactionMu.Lock()
 		delete(r.interactionPending, req.ID)
 		r.interactionMu.Unlock()
-		// 超时 → 中断（而非自动批准）
-		// 用户后续可继续对话，LLM会重触发未完成内容
-		r.logger.Warn("Interaction request timeout, interrupting", "request_id", req.ID)
+		r.logger.Warn("Interaction request cancelled by context", "request_id", req.ID, "error", ctx.Err())
 		return events.InteractionResponse{
 			RequestID: req.ID,
 			Type:      req.Type,
-			Approved:  false, // 不批准
-			Cancelled: true,  // 标记为中断
-			Error:     timeoutCtx.Err(),
+			Approved:  false,
+			Cancelled: true,
+			Error:     ctx.Err(),
 		}
 	}
 }

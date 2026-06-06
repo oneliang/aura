@@ -194,6 +194,9 @@ type Event interface {
 	Timestamp() time.Time
 	// RequestID returns the request ID for event grouping.
 	RequestID() string
+	// RuntimeID returns the source runtime ID for multi-runtime scenarios.
+	// Returns empty string for events from the main runtime.
+	RuntimeID() string
 	// InteractionType returns the interaction type for interaction events.
 	// Returns empty string for non-interaction events.
 	InteractionType() InteractionType
@@ -206,6 +209,7 @@ type BaseEvent struct {
 	extra     map[string]any
 	timestamp time.Time
 	requestID string // Unique ID for each user request (tracks event grouping)
+	runtimeID string // Source runtime ID for multi-runtime scenarios
 
 	// InteractionType for EventTypeInteractionRequest/Response
 	interactionType InteractionType
@@ -222,6 +226,17 @@ func NewEvent(typ EventType, content string, requestID string) *BaseEvent {
 	}
 }
 
+// NewEventWithRuntimeID creates a new BaseEvent with runtime ID for multi-runtime scenarios.
+func NewEventWithRuntimeID(typ EventType, content string, requestID string, runtimeID string) *BaseEvent {
+	return &BaseEvent{
+		eventType: typ,
+		content:   content,
+		requestID: requestID,
+		runtimeID: runtimeID,
+		timestamp: time.Now(),
+	}
+}
+
 // NewEventWithExtra creates a new BaseEvent with extra data and request ID.
 // RequestID is required for all events to enable full-chain tracing.
 func NewEventWithExtra(typ EventType, content string, extra map[string]any, requestID string) *BaseEvent {
@@ -234,11 +249,35 @@ func NewEventWithExtra(typ EventType, content string, extra map[string]any, requ
 	}
 }
 
+// NewEventWithExtraAndRuntimeID creates a new BaseEvent with extra data, request ID, and runtime ID.
+func NewEventWithExtraAndRuntimeID(typ EventType, content string, extra map[string]any, requestID string, runtimeID string) *BaseEvent {
+	return &BaseEvent{
+		eventType: typ,
+		content:   content,
+		extra:     extra,
+		requestID: requestID,
+		runtimeID: runtimeID,
+		timestamp: time.Now(),
+	}
+}
+
 // NewInteractionEvent creates a new BaseEvent for interaction requests/responses.
 func NewInteractionEvent(typ EventType, interactionType InteractionType, requestID string, extra map[string]any) *BaseEvent {
 	return &BaseEvent{
 		eventType:       typ,
 		requestID:       requestID,
+		extra:           extra,
+		interactionType: interactionType,
+		timestamp:       time.Now(),
+	}
+}
+
+// NewInteractionEventWithRuntimeID creates a new BaseEvent for interaction events with runtime ID.
+func NewInteractionEventWithRuntimeID(typ EventType, interactionType InteractionType, requestID string, runtimeID string, extra map[string]any) *BaseEvent {
+	return &BaseEvent{
+		eventType:       typ,
+		requestID:       requestID,
+		runtimeID:       runtimeID,
 		extra:           extra,
 		interactionType: interactionType,
 		timestamp:       time.Now(),
@@ -270,6 +309,11 @@ func (e *BaseEvent) RequestID() string {
 	return e.requestID
 }
 
+// RuntimeID implements Event interface.
+func (e *BaseEvent) RuntimeID() string {
+	return e.runtimeID
+}
+
 // InteractionType returns the interaction type for interaction events.
 func (e *BaseEvent) InteractionType() InteractionType {
 	return e.interactionType
@@ -278,6 +322,25 @@ func (e *BaseEvent) InteractionType() InteractionType {
 // SetInteractionType sets the interaction type.
 func (e *BaseEvent) SetInteractionType(typ InteractionType) {
 	e.interactionType = typ
+}
+
+// SetRuntimeID sets the runtime ID.
+func (e *BaseEvent) SetRuntimeID(id string) {
+	e.runtimeID = id
+}
+
+// WithRuntimeID returns a new event with the given runtime ID.
+// Useful for adding runtime ID to an existing event before forwarding.
+func (e *BaseEvent) WithRuntimeID(id string) *BaseEvent {
+	return &BaseEvent{
+		eventType:       e.eventType,
+		content:         e.content,
+		extra:           e.extra,
+		timestamp:       e.timestamp,
+		requestID:       e.requestID,
+		runtimeID:       id,
+		interactionType: e.interactionType,
+	}
 }
 
 // ConfirmationRequest represents a request for user confirmation.

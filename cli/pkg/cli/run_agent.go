@@ -258,6 +258,7 @@ func runSingleMessage(runCtx context.Context, rt *sdk.Runtime, args []string, ev
 
 // runTUIMode starts the TUI mode.
 // 新架构：直接传递runtime，使用事件流模式
+// sharedEventCh: 共享事件通道，用于多 runtime 场景
 func runTUIMode(
 	runCtx context.Context,
 	rt *sdk.Runtime,
@@ -267,6 +268,7 @@ func runTUIMode(
 	ctx *CommandContext,
 	profName string,
 	mcpManager *sdk.MCPManager,
+	sharedEventCh chan sdk.Event,
 ) {
 	startTime := time.Now()
 	logger.RegistryDefault().Debug("[DIAG] runTUIMode: starting")
@@ -295,13 +297,14 @@ func runTUIMode(
 
 	// 新架构：直接传递runtime，不再创建runFn adapter
 	logger.RegistryDefault().Debug("[DIAG] runTUIMode: calling RunWithConfig", "elapsed", time.Since(startTime))
-	if err := tui.RunWithConfig(runCtx, rt, cfg, sessionMgr, summarizer, modelProvider, ctx.CommandProvider, mcpManager); err != nil {
+	if err := tui.RunWithConfig(runCtx, rt, cfg, sessionMgr, summarizer, modelProvider, ctx.CommandProvider, mcpManager, sharedEventCh); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 	}
 }
 
 // createRuntime creates and initializes the agent runtime.
-func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.CommandProvider, sessionMgr *sdk.SessionManager) (*sdk.Runtime, *sdk.MCPManager) {
+// For TUI mode, creates a shared event channel for multi-runtime scenarios.
+func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.CommandProvider, sessionMgr *sdk.SessionManager) (*sdk.Runtime, *sdk.MCPManager, chan sdk.Event) {
 	runtimeConfig := sdk.FromConfig(ctx.Config)
 	if sessionID != "" {
 		runtimeConfig.SessionID = sessionID
@@ -325,6 +328,12 @@ func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.Comm
 		intentSvc = sdk.NewIntentService(cmdProvider, ctx.Config.Intent.ConfidenceThreshold)
 	}
 
+	// Create shared event channel for TUI mode (enables multi-runtime scenarios)
+	var sharedEventCh chan sdk.Event
+	if !useCLI {
+		sharedEventCh = make(chan sdk.Event, 100)
+	}
+
 	// Build runtime options
 	opts := []sdk.RuntimeOption{
 		sdk.WithAutoApprove(),
@@ -336,9 +345,13 @@ func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.Comm
 		sdk.WithDataDir(ctx.DataDir),
 	}
 
-	// TUI mode: inject unified logger
+	// TUI mode: inject unified logger and shared event channel
 	if !useCLI {
 		opts = append(opts, sdk.WithLogger(tui.GetLogger()))
+		if sharedEventCh != nil {
+			opts = append(opts, sdk.WithSharedEventCh(sharedEventCh))
+			opts = append(opts, sdk.WithRuntimeID("main"))
+		}
 	}
 
 	// Create MCP manager if config exists
@@ -350,15 +363,15 @@ func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.Comm
 	rt, err := sdk.NewRuntime(runtimeConfig, opts...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create runtime: %v\n", err)
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	if err := rt.Initialize(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize runtime: %v\n", err)
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	return rt, mcpManager
+	return rt, mcpManager, sharedEventCh
 }
 
 // createLogger creates a logger from config.

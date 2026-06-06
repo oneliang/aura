@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"time"
 
 	enginepkg "github.com/oneliang/aura/core/pkg/engine"
 	"github.com/oneliang/aura/shared/pkg/events"
@@ -13,6 +12,7 @@ import (
 // createConfirmationHandler creates a confirmation handler.
 // Uses event stream for confirmation requests.
 // Returns an error if AutoApprove is disabled and no event stream is available.
+// 参考 Claude Code：不设硬性超时，等待用户主动响应
 func (r *AgentRuntime) createConfirmationHandler() enginepkg.ToolConfirmationHandler {
 	if r.permMgr == nil {
 		return nil
@@ -27,12 +27,11 @@ func (r *AgentRuntime) createConfirmationHandler() enginepkg.ToolConfirmationHan
 			return true, nil
 		}
 
-		// Requires confirmation - use event stream
+		// Requires confirmation - use event stream (no timeout, wait for user)
 		req := events.InteractionRequest{
 			Type:       events.InteractionTypeToolConfirmation,
 			ToolName:   toolName,
 			ToolParams: params,
-			Timeout:    60 * time.Second,
 		}
 
 		resp := r.requestInteraction(ctx, req)
@@ -46,6 +45,7 @@ func (r *AgentRuntime) createConfirmationHandler() enginepkg.ToolConfirmationHan
 // checkSkillPermission checks if a skill with required confirmation should be injected.
 // Uses event stream for confirmation requests.
 // Returns true if confirmed by user, false otherwise.
+// 参考 Claude Code：不设硬性超时，等待用户主动响应
 func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill) bool {
 	r.logger.Debug("checkSkillPermission: called", "module", "runtime", "skill", sk.Name)
 
@@ -68,7 +68,7 @@ func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill
 		// PermissionMgr says ask, fall through to user confirmation below
 	}
 
-	// Use event stream for confirmation
+	// Use event stream for confirmation (no timeout, wait for user)
 	// If outer context is already cancelled, deny immediately
 	if ctx.Err() != nil {
 		r.logger.Debug("checkSkillPermission: outer context cancelled, denying", "module", "runtime", "skill", sk.Name)
@@ -79,7 +79,6 @@ func (r *AgentRuntime) checkSkillPermission(ctx context.Context, sk *skill.Skill
 		Type:       events.InteractionTypeToolConfirmation,
 		ToolName:   fmt.Sprintf("skill:%s", sk.Name),
 		ToolParams: map[string]any{"skill": sk.Name, "description": sk.Description, "permission_level": sk.PermissionLevel},
-		Timeout:    60 * time.Second,
 	}
 
 	r.logger.Debug("checkSkillPermission: sending confirmation request via event stream", "module", "runtime", "skill", sk.Name)

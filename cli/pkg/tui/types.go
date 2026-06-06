@@ -165,6 +165,7 @@ type ChatEvent struct {
 	Content   string
 	Extra     map[string]any
 	RequestID string     // Unique ID for each user request (tracks event grouping)
+	RuntimeID string     // Source Runtime ID for multi-runtime scenarios
 	Reason    DoneReason // Done 事件的完成原因（仅 EventTypeDone 使用）
 }
 
@@ -279,6 +280,7 @@ type ConfirmState struct {
 	// 新架构：事件流相关字段
 	RequestID       string         // 交互请求的唯一ID
 	InteractionType events.InteractionType  // 交互类型
+	RuntimeID       string         // 来源 Runtime ID，用于响应路由
 }
 
 // ModelProvider holds a reference to the current Model.

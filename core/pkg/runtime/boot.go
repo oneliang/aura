@@ -147,7 +147,7 @@ func (r *AgentRuntime) initClients(ctx context.Context) error {
 		// BUT preserve safety restrictions from original config
 		autoApprovePermCfg := &config.PermissionsConfig{
 			DefaultLevel:      "allow",
-			Tools:             r.config.Permissions.Tools, // Preserve per-tool settings like file_write: ask
+			Tools:             map[string]string{}, // Empty: no per-tool restrictions in auto-approve mode
 			ShellRestrictions: r.config.Permissions.ShellRestrictions,
 			SSHRestrictions:   r.config.Permissions.SSHRestrictions,
 			TrustedDirs:       r.config.Permissions.TrustedDirs,

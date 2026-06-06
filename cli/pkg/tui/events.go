@@ -782,8 +782,9 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 		}
 	}
 
-	// Extract RequestID and InteractionType for event stream response
+	// Extract RequestID, RuntimeID and InteractionType for event stream response
 	requestID := msg.RequestID
+	runtimeID := msg.RuntimeID // 来源 Runtime ID，用于响应路由
 	var interactionType events.InteractionType
 	if msg.Extra != nil {
 		if t, ok := msg.Extra["type"].(events.InteractionType); ok {
@@ -812,6 +813,7 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 		Selected:        0, // Default to Yes/First option
 		RequestID:       requestID,
 		InteractionType: interactionType,
+			RuntimeID:       runtimeID,
 		Request: &ConfirmationRequest{
 			Type:          ConfirmationType(confType),
 			ToolName:      toolName,

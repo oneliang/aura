@@ -144,7 +144,7 @@ func runAgent(cmd *cobra.Command, args []string) {
 	logger.RegistryDefault().Debug("[DIAG] runAgent: command provider created", "elapsed", time.Since(startTime))
 
 	// Create and initialize runtime
-	rt, mcpManager := createRuntime(ctx, currentSessionID, cmdProvider, sessionMgr)
+	rt, mcpManager, sharedEventCh := createRuntime(ctx, currentSessionID, cmdProvider, sessionMgr)
 	logger.RegistryDefault().Debug("[DIAG] runAgent: runtime created", "elapsed", time.Since(startTime))
 	if rt == nil {
 		os.Exit(1)
@@ -181,7 +181,7 @@ func runAgent(cmd *cobra.Command, args []string) {
 	sl := tui.LoadSessionLearner()
 	logger.RegistryDefault().Debug("[DIAG] runAgent: session learner loaded", "elapsed", time.Since(startTime))
 	if !useCLI {
-		runTUIMode(runCtx, rt, sl, sessionMgr, currentSessionID, ctx, prof.BasicInfo.Name, mcpManager)
+		runTUIMode(runCtx, rt, sl, sessionMgr, currentSessionID, ctx, prof.BasicInfo.Name, mcpManager, sharedEventCh)
 		return
 	}
 

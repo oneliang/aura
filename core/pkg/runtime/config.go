@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"github.com/oneliang/aura/shared/pkg/config"
+	"github.com/oneliang/aura/shared/pkg/events"
 )
 
 // RuntimeConfig holds configuration for the Aura runtime.
@@ -40,6 +41,18 @@ type RuntimeConfig struct {
 	PermissionMode string
 	// PermissionLevel: target control level for downgrade mode
 	PermissionLevel string
+
+	// ===== 共享事件通道（多 runtime 场景）=====
+
+	// SharedEventCh is an externally provided event channel for multi-runtime scenarios.
+	// When provided, events are sent to this shared channel (shared mode).
+	// When nil, runtime creates its own local channel (independent mode).
+	SharedEventCh chan events.Event
+
+	// RuntimeID identifies the source runtime for events.
+	// Used in shared mode to route events and responses.
+	// Default: "main" for primary runtime, custom for temp/sub-agent runtimes.
+	RuntimeID string
 }
 
 // DefaultRuntimeConfig returns a default runtime configuration.
