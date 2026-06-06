@@ -182,7 +182,7 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 		m.state.SetWaiting(true)
 		m.state.SetStartTime(time.Now())
 		m.state.SetDisplayState(DisplayWaiting)
-		_, waitingCmd := m.waiting.StartAndRender("Waiting for response...")
+		_, waitingCmd := m.waiting.StartAndRender(i18n.T("tui.waiting.response"))
 		m.autoScroll = true
 
 		// Use tea.Batch for concurrent execution (same as handleSubmit)
@@ -694,7 +694,7 @@ func (m Model) handleEventToolEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 			// All tools complete — start WaitingWidget for "Analyzing tool result..."
 			// ThinkingWidget will start when next ThinkingStart event arrives
 			if m.waiting != nil {
-				_, waitingCmd := m.waiting.Start("Analyzing tool result...")
+				_, waitingCmd := m.waiting.Start(i18n.T("tui.waiting.analyzing"))
 				m.state.SetDisplayState(DisplayWaiting)
 				return m, tea.Sequence(
 					m.scrollToBottom(),

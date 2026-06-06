@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oneliang/aura/shared/pkg/i18n"
 )
 
 // Update implements tea.Model.
@@ -602,7 +603,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 
 	// Start waiting widget immediately — shows "Waiting for response..."
 	// ThinkingWidget will start when ThinkingStart event arrives
-	_, waitingCmd := m.waiting.StartAndRender("Waiting for response...")
+	_, waitingCmd := m.waiting.StartAndRender(i18n.T("tui.waiting.response"))
 	m.autoScroll = true
 	m.manualScroll = false
 	m.manualScrollOffset = 0
