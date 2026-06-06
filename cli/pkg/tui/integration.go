@@ -60,7 +60,9 @@ func Run(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.Se
 	orchestrator := NewOrchestrator(rt, m, sharedEventCh)
 
 	// Start event stream forwarding in background
-	go orchestrator.Run(ctx)
+	// Use m.ctx instead of ctx so that m.Cancel() can cancel this goroutine
+	// This fixes the /exit deadlock: m.Cancel() cancels m.ctx, goroutine receives ctx.Done()
+	go orchestrator.Run(m.ctx)
 
 	// Wait for orchestrator to be ready before starting UI
 	// This prevents race condition where user input arrives before goroutines are listening
@@ -70,19 +72,32 @@ func Run(ctx context.Context, rt *sdk.Runtime, config Config, sessionMgr *sdk.Se
 	// Run Bubble Tea program
 	p := tea.NewProgram(m)
 	_, err := p.Run()
+	log.Debug("[TUI_EXIT] Bubble Tea exited, starting shutdown sequence")
 
-	// Close TUI output channel first to unblock TUI→Runtime goroutine
-	// This must happen BEFORE orchestrator.Stop() which waits for goroutines
+	// Shutdown sequence (order matters to prevent deadlock):
+	// 1. Close TUI output channel to unblock TUI→Runtime goroutine
 	m.closeEventOutCh()
+	log.Debug("[TUI_EXIT] Step 1: closeEventOutCh done")
 
-	// Stop runtime to close agentEvents channel, unblocking Runtime→TUI goroutine
+	// 2. Cancel context FIRST to unblock Orchestrator goroutines
+	// Goroutines wait on ctx.Done() in their select loops.
+	// Without this, orchestrator.Stop() would deadlock waiting for goroutines.
+	m.Cancel()
+	log.Debug("[TUI_EXIT] Step 2: Cancel done")
+
+	// 3. Stop runtime to close agentEvents channel
+	log.Debug("[TUI_EXIT] Step 3: rt.Stop starting")
 	rt.Stop(ctx)
+	log.Debug("[TUI_EXIT] Step 3: rt.Stop done")
 
-	// Now wait for goroutines to complete (they exit via closed channels)
+	// 4. Now goroutines can complete (unblocked by ctx.Done() and closed channels)
+	log.Debug("[TUI_EXIT] Step 4: orchestrator.Stop starting")
 	orchestrator.Stop()
+	log.Debug("[TUI_EXIT] Step 4: orchestrator.Stop done")
 
-	// Close remaining channels
+	// 5. Close remaining channels (cancelFunc already called)
 	m.Close()
+	log.Debug("[TUI_EXIT] Step 5: m.Close done, shutdown complete")
 
 	return err
 }
@@ -114,6 +129,7 @@ func NewOrchestrator(rt *sdk.Runtime, m *Model, sharedEventCh chan sdk.Event) *O
 // Run starts event stream forwarding between Runtime and TUI.
 // Signals readiness via ready channel before entering main loop.
 func (o *Orchestrator) Run(ctx context.Context) {
+	log.Debug("[ORCHESTRATOR] Run starting", "sharedEventCh_nil", o.sharedEventCh == nil)
 	// 新架构：使用共享通道监听 runtime 事件
 	// 共享模式下，runtime.Events() 返回 nil，所以从 sharedEventCh 监听
 	if o.sharedEventCh != nil {
@@ -121,21 +137,28 @@ func (o *Orchestrator) Run(ctx context.Context) {
 		o.wg.Add(1)
 		go func() {
 			defer o.wg.Done()
+			log.Debug("[ORCHESTRATOR] Goroutine 1 (sharedEventCh→TUI) started")
 			adapter := NewAdapter()
+			eventCount := 0
 			for {
 				select {
 				case <-ctx.Done():
+					log.Debug("[ORCHESTRATOR] Goroutine 1: ctx.Done received, exiting", "events_processed", eventCount)
 					return
 				case event, ok := <-o.sharedEventCh:
 					if !ok {
+						log.Debug("[ORCHESTRATOR] Goroutine 1: sharedEventCh closed, exiting", "events_processed", eventCount)
 						return
 					}
+					eventCount++
+					log.Debug("[ORCHESTRATOR] Goroutine 1: forwarding event", "count", eventCount, "type", event.Type())
 					// Convert to ChatEvent and send to TUI event channel
 					chatEvent := adapter.ConvertSDKEvent(event)
 					select {
 					case o.model.eventChan <- chatEvent:
 					default:
 						// Channel full, skip event
+						log.Warn("[ORCHESTRATOR] Goroutine 1: TUI eventChan full, dropping event")
 					}
 				}
 			}
@@ -143,18 +166,25 @@ func (o *Orchestrator) Run(ctx context.Context) {
 	} else {
 		// 旧架构：独立模式，从 runtime.Events() 监听
 		agentEvents := o.runtime.Events()
+		log.Debug("[ORCHESTRATOR] Using legacy mode (agentEvents)", "agentEvents_nil", agentEvents == nil)
 		if agentEvents != nil {
 			o.wg.Add(1)
 			go func() {
 				defer o.wg.Done()
+				log.Debug("[ORCHESTRATOR] Goroutine 1-legacy (agentEvents→TUI) started")
+				eventCount := 0
 				for {
 					select {
 					case <-ctx.Done():
+						log.Debug("[ORCHESTRATOR] Goroutine 1-legacy: ctx.Done received, exiting", "events_processed", eventCount)
 						return
 					case event, ok := <-agentEvents:
 						if !ok {
+							log.Debug("[ORCHESTRATOR] Goroutine 1-legacy: agentEvents closed, exiting", "events_processed", eventCount)
 							return
 						}
+						eventCount++
+						log.Debug("[ORCHESTRATOR] Goroutine 1-legacy: forwarding event", "count", eventCount, "type", event.Type())
 						o.model.ReceiveEvent(event)
 					}
 				}
@@ -169,15 +199,22 @@ func (o *Orchestrator) Run(ctx context.Context) {
 		uiEvents := o.model.Events()
 		// Signal that we're ready to receive events
 		close(o.ready)
+		log.Debug("[ORCHESTRATOR] Goroutine 2 (TUI→Runtime) started, ready signal sent")
+		eventCount := 0
 		for {
 			select {
 			case <-ctx.Done():
+				log.Debug("[ORCHESTRATOR] Goroutine 2: ctx.Done received, exiting", "events_processed", eventCount)
 				return
 			case event, ok := <-uiEvents:
 				if !ok {
+					log.Debug("[ORCHESTRATOR] Goroutine 2: uiEvents closed, exiting", "events_processed", eventCount)
 					return
 				}
+				eventCount++
+				log.Debug("[ORCHESTRATOR] Goroutine 2: sending event to runtime", "count", eventCount, "type", event.Type())
 				if err := o.runtime.SendEvent(ctx, event); err != nil {
+					log.Warn("[ORCHESTRATOR] Goroutine 2: SendEvent error", "error", err)
 				}
 			}
 		}

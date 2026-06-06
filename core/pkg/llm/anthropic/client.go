@@ -1,11 +1,9 @@
 package anthropic
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/oneliang/aura/core/pkg/llm"
@@ -235,29 +233,21 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 	ch := make(chan llm.Chunk, 100)
 	go func() {
 		defer close(ch)
-		defer resp.Body.Close()
 
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				ch <- llm.Chunk{Done: true}
-				return
+		// Use StreamSSEWithContext for context-aware streaming
+		// This prevents blocking on scanner.Scan() when waiting for network data
+		err := internal.StreamSSEWithContext(ctx, resp, func(data []byte) error {
+			if string(data) == "[DONE]" {
+				select {
+				case ch <- llm.Chunk{Done: true}:
+				default:
+				}
+				return nil
 			}
 
 			var evt streamEvent
-			if err := internal.UnmarshalJSON([]byte(data), &evt); err != nil {
-				continue
+			if err := internal.UnmarshalJSON(data, &evt); err != nil {
+				return nil // Skip malformed chunks
 			}
 
 			switch evt.Type {
@@ -266,7 +256,7 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 					select {
 					case ch <- llm.Chunk{Content: evt.Delta.Text}:
 					case <-ctx.Done():
-						return
+						return ctx.Err()
 					}
 				}
 			case "message_delta":
@@ -274,15 +264,21 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 					select {
 					case ch <- llm.Chunk{Content: evt.Delta.Text}:
 					case <-ctx.Done():
-						return
+						return ctx.Err()
 					}
 				}
 			}
-		}
+			return nil
+		})
 
+		// Always send Done signal at the end (if not already sent)
 		select {
 		case ch <- llm.Chunk{Done: true}:
 		case <-ctx.Done():
+		}
+
+		if err != nil && err != ctx.Err() {
+			// Error already signaled via Done, just log
 		}
 	}()
 

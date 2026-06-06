@@ -78,6 +78,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toggleSubscriptionMsg:
 		return m.handleToggleSubscription(msg)
 
+	case waitingTickMsg:
+		if m.waiting != nil && m.waiting.IsActive() {
+			_, nextCmd := m.waiting.Update(msg)
+			if nextCmd != nil {
+				return m, nextCmd
+			}
+		}
+		return m, nil
+
 	case thinkingTickMsg:
 		if m.thinking != nil && m.thinking.IsActive() {
 			_, nextCmd := m.thinking.Update(msg)
@@ -573,9 +582,12 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	// Set UI state
 	m.state.SetWaiting(true)
 	m.state.SetStartTime(time.Now())
-	m.state.SetDisplayState(DisplayThinking) // State machine: enter Thinking
+	m.state.SetDisplayState(DisplayWaiting) // State machine: enter Waiting
 
-	// Reset thinking widget (will be started by EventTypeThinking event from Engine)
+	// Reset waiting widget
+	m.waiting.Reset()
+
+	// Reset thinking widget (will be started by ThinkingStart event)
 	m.thinking.Reset()
 
 	// Reset processing widget
@@ -584,12 +596,13 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	// Reset plan widget for new interaction
 	m.plan.Reset()
 
-	// Create thinking message along with widget lifecycle
+	// Create thinking message placeholder (will be populated when ThinkingStart arrives)
 	// This ensures the first ThinkingChunk event appends content correctly
 	m.messages.AddEmpty(MessageTypeThinking)
 
-	// Start thinking immediately — don't wait for engine event
-	_, thinkingCmd := m.thinking.StartAndRender()
+	// Start waiting widget immediately — shows "Waiting for response..."
+	// ThinkingWidget will start when ThinkingStart event arrives
+	_, waitingCmd := m.waiting.StartAndRender("Waiting for response...")
 	m.autoScroll = true
 	m.manualScroll = false
 	m.manualScrollOffset = 0
@@ -598,7 +611,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	// Start processing — user message already in store, no need to print again
 	return m, tea.Batch(
 		m.sendMessage(input),
-		thinkingCmd,
+		waitingCmd,
 		m.scrollToBottom(),
 		m.eventLoop(),
 	)

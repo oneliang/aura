@@ -47,6 +47,8 @@ func setupSignalHandler(ctx context.Context, cancel context.CancelFunc) {
 			// Normal exit (context cancelled by defer or /exit)
 			signal.Stop(sigChan)
 		case <-sigChan:
+			// Immediately stop listening to prevent duplicate signal handling
+			signal.Stop(sigChan)
 			fmt.Println("\n\nGoodbye!")
 			cancel()
 		}

@@ -291,6 +291,9 @@ type Engine struct {
 
 	// Shutdown guard
 	shutdownOnce sync.Once
+
+	// Goroutine lifecycle management
+	processWg sync.WaitGroup
 }
 
 // Option is an agent configuration option.
@@ -475,8 +478,9 @@ func New(opts ...Option) (*Engine, error) {
 		return nil, fmt.Errorf("memory is required")
 	}
 	// Initialize default logger if not set
+	// CLI mode: fallback logger outputs to file to avoid cluttering user interface
 	if e.logger == nil {
-		e.logger = logger.NewNamed(logger.Config{Level: "info", Module: "engine"})
+		e.logger = logger.NewNamed(logger.Config{Level: "info", Format: "text", Output: "file", Module: "engine"})
 	}
 
 	// Initialize planner if planner client is provided
@@ -490,6 +494,7 @@ func New(opts ...Option) (*Engine, error) {
 
 	// Start input processing loop
 	e.ctx, e.cancel = context.WithCancel(context.Background())
+	e.processWg.Add(1)
 	go e.processInputQueue()
 
 	return e, nil
@@ -574,6 +579,7 @@ func (e *Engine) Run(ctx context.Context, input string) (<-chan events.Event, er
 // This ensures only one ReAct loop runs at a time per Engine instance.
 // Events are sent directly to the per-request event channel.
 func (e *Engine) processInputQueue() {
+	defer e.processWg.Done()
 	for request := range e.inputQueue {
 		e.processingMu.Lock()
 
@@ -688,6 +694,7 @@ func (e *Engine) Shutdown() {
 	e.shutdownOnce.Do(func() {
 		e.cancel()
 		close(e.inputQueue)
+		e.processWg.Wait() // Wait for processInputQueue goroutine to complete
 	})
 }
 

@@ -168,28 +168,27 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 		// Add user message to store for the pending messages
 		m.messages.Add(MessageTypeUser, combined, nil, renderMessage, m.renderer, m.styles)
 
-		// IMMEDIATE thinking transition - skip old "思考了X秒" display
-		// Reset and start new thinking right away (same as handleSubmit)
+		// Reset widgets for new interaction
+		m.waiting.Reset()
 		m.thinking.Reset()
 		m.processing.Reset()
 		m.tasks.Reset()
 		m.plan.Reset()
 
-		// Create thinking message along with widget lifecycle
-		// This ensures the first ThinkingChunk event appends content correctly
+		// Create thinking message placeholder (will be populated when ThinkingStart arrives)
 		m.messages.AddEmpty(MessageTypeThinking)
 
-		// Set UI state and start thinking IMMEDIATELY
+		// Set UI state and start waiting IMMEDIATELY
 		m.state.SetWaiting(true)
 		m.state.SetStartTime(time.Now())
-		m.state.SetDisplayState(DisplayThinking)
-		_, thinkingCmd := m.thinking.StartAndRender()
+		m.state.SetDisplayState(DisplayWaiting)
+		_, waitingCmd := m.waiting.StartAndRender("Waiting for response...")
 		m.autoScroll = true
 
 		// Use tea.Batch for concurrent execution (same as handleSubmit)
 		return m, tea.Batch(
 			m.sendMessage(combined),
-			thinkingCmd,
+			waitingCmd,
 			m.scrollToBottom(),
 			nil,
 		)
@@ -249,6 +248,9 @@ func (m Model) handleInitComplete() (tea.Model, tea.Cmd) {
 
 // stopWidgets stops the thinking and processing widgets.
 func (m *Model) stopWidgets() {
+	if m.waiting != nil {
+		m.waiting.Stop()
+	}
 	if m.thinking != nil {
 		m.thinking.Complete()
 	}
@@ -258,15 +260,21 @@ func (m *Model) stopWidgets() {
 }
 
 // handleEventThinkingStart handles the thinking start event.
-// Thinking message is already created in handleSubmit, so this only ensures
-// the widget animation is running (edge case: if widget wasn't started yet).
+// Stops WaitingWidget and starts ThinkingWidget for LLM reasoning display.
 func (m Model) handleEventThinkingStart(msg ChatEvent) (tea.Model, tea.Cmd) {
+	// Stop WaitingWidget if active (transition from Waiting to Thinking)
+	if m.waiting != nil && m.waiting.IsActive() {
+		m.waiting.Stop()
+	}
+
 	if m.thinking == nil {
 		return m, nil
 	}
-	// Widget should already be active from handleSubmit, but ensure it's running
+
+	// Start ThinkingWidget (LLM is now streaming reasoning content)
 	if !m.thinking.IsActive() {
 		_, tickCmd := m.thinking.StartAndRender()
+		m.state.SetDisplayState(DisplayThinking)
 		return m, tea.Sequence(tickCmd, nil)
 	}
 	// Message already created, widget already active — nothing to do
@@ -575,6 +583,16 @@ func (m Model) handleEventPlanModeExit(msg ChatEvent) (tea.Model, tea.Cmd) {
 // Adds a ToolStart message with executionID for precise matching when tool ends.
 // Note: "task" tool events are handled by handleEventTaskCreate/Update — skip to avoid duplicate output.
 func (m Model) handleEventToolStart(msg ChatEvent) (tea.Model, tea.Cmd) {
+	// Stop WaitingWidget if active (transition from Waiting to Processing)
+	if m.waiting != nil && m.waiting.IsActive() {
+		m.waiting.Stop()
+	}
+
+	// Stop ThinkingWidget if active (transition from Thinking to Processing)
+	if m.thinking != nil && m.thinking.IsActive() {
+		m.thinking.Complete()
+	}
+
 	// Get params from Extra
 	params := ""
 	if msg.Extra != nil {
@@ -673,6 +691,17 @@ func (m Model) handleEventToolEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 		m.processing.RemoveTool(toolName)
 		if !m.processing.IsActive() {
 			m.processing.Stop()
+			// All tools complete — start WaitingWidget for "Analyzing tool result..."
+			// ThinkingWidget will start when next ThinkingStart event arrives
+			if m.waiting != nil {
+				_, waitingCmd := m.waiting.Start("Analyzing tool result...")
+				m.state.SetDisplayState(DisplayWaiting)
+				return m, tea.Sequence(
+					m.scrollToBottom(),
+					waitingCmd,
+					nil,
+				)
+			}
 		}
 	}
 

@@ -111,6 +111,7 @@ func CheckStatusWithAPIError(resp *http.Response, url string, parseError func([]
 }
 
 // StreamSSE reads SSE stream from response and calls handler for each chunk.
+// Deprecated: Use StreamSSEWithContext for context-aware streaming.
 func StreamSSE(resp *http.Response, handler func(data []byte) error) error {
 	defer resp.Body.Close()
 
@@ -142,6 +143,71 @@ func StreamSSE(resp *http.Response, handler func(data []byte) error) error {
 	}
 
 	return scanner.Err()
+}
+
+// StreamSSEWithContext reads SSE stream from response and calls handler for each chunk.
+// Context-aware: returns ctx.Err() immediately when context is cancelled.
+// This prevents blocking on scanner.Scan() when waiting for network data.
+func StreamSSEWithContext(ctx context.Context, resp *http.Response, handler func(data []byte) error) error {
+	defer resp.Body.Close()
+
+	// Create a channel to receive scanner lines
+	lineCh := make(chan string, 100)
+	errCh := make(chan error, 1)
+
+	// Start scanner goroutine
+	go func() {
+		defer close(lineCh)
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			select {
+			case lineCh <- scanner.Text():
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			}
+		}
+		if scanner.Err() != nil {
+			select {
+			case errCh <- scanner.Err():
+			default:
+			}
+		}
+	}()
+
+	// Process lines with context check
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err, ok := <-errCh:
+			if ok && err != nil {
+				return err
+			}
+			return nil // scanner finished normally
+		case line, ok := <-lineCh:
+			if !ok {
+				return nil // channel closed, scanner done
+			}
+			// Skip empty lines
+			if line == "" {
+				continue
+			}
+			// Skip non-data lines
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			data := strings.TrimPrefix(line, "data: ")
+			data = strings.TrimSpace(data)
+			// Check for stream end marker
+			if data == "[DONE]" {
+				return nil
+			}
+			if err := handler([]byte(data)); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // MarshalJSON marshals a value to JSON.

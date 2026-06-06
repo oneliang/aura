@@ -242,8 +242,9 @@ func New(cfg *RuntimeConfig, opts ...RuntimeOption) (*AgentRuntime, error) {
 	}
 
 	// Use fallback logger if not injected (TUI mode should inject via WithLogger)
+	// CLI mode: fallback logger outputs to file (aura.log) to avoid cluttering user interface
 	if r.logger == nil {
-		r.logger = logger.NewNamed(logger.Config{Level: "info", Format: "text", Output: "stdout", Module: "runtime"})
+		r.logger = logger.NewNamed(logger.Config{Level: "info", Format: "text", Output: "file", Module: "runtime"})
 	}
 
 	return r, nil
@@ -388,6 +389,21 @@ func (r *AgentRuntime) Shutdown() {
 		r.agent.Shutdown()
 	}
 
+	// Clean up pending interaction requests
+	// Close channels to unblock any goroutines waiting for responses
+	r.interactionMu.Lock()
+	for id, ch := range r.interactionPending {
+		// Send cancel response to unblock waiting goroutine
+		select {
+		case ch <- events.InteractionResponse{Cancelled: true}:
+		default:
+			// Channel full, proceed to close
+		}
+		close(ch) // Always close the channel to release resources
+		delete(r.interactionPending, id)
+	}
+	r.interactionMu.Unlock()
+
 	// Wait for all pending memory persistence operations to complete
 	if r.memory != nil {
 		r.memory.Shutdown()
@@ -404,7 +420,11 @@ func (r *AgentRuntime) Shutdown() {
 
 	// Only stop MCP servers if this is the parent runtime (owns them)
 	// MCPSystem.StopAll checks started flag internally
-	r.mcp.StopAll(context.Background())
+	mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer mcpCancel()
+		if err := r.mcp.StopAll(mcpCtx); err != nil {
+			r.logger.Warn("MCP shutdown error", "error", err)
+		}
 
 	// Shut down hooks engine (closes file watchers if any)
 	// Only parent should shutdown hooks (sub-agent shares pointer but shouldn't close)
@@ -851,7 +871,9 @@ func (r *AgentRuntime) Events() <-chan Event {
 
 // handleUserInput 处理用户文本输入
 func (r *AgentRuntime) handleUserInput(ctx context.Context, event Event) error {
+	r.logger.Debug("[RUNTIME_EVENT] handleUserInput called", "initialized", r.initialized, "input_len", len(event.Content()), "requestID", event.RequestID())
 	if !r.initialized {
+		r.logger.Warn("[RUNTIME_EVENT] handleUserInput failed: runtime not initialized")
 		return fmt.Errorf("runtime not initialized")
 	}
 
@@ -865,8 +887,10 @@ func (r *AgentRuntime) handleUserInput(ctx context.Context, event Event) error {
 
 	select {
 	case r.inputQueue <- req:
+		r.logger.Debug("[RUNTIME_EVENT] inputQueue push success", "requestID", requestID, "queue_len", len(r.inputQueue))
 		return nil
 	default:
+		r.logger.Warn("[RUNTIME_EVENT] inputQueue full, rejecting request", "requestID", requestID)
 		return fmt.Errorf("input queue full")
 	}
 }
@@ -967,6 +991,7 @@ func (r *AgentRuntime) sendEvent(event Event) {
 	defer r.runMu.Unlock()
 
 	if !r.running {
+		r.logger.Debug("[RUNTIME_EVENT] sendEvent: runtime not running, skipping", "type", event.Type())
 		return
 	}
 
@@ -987,17 +1012,21 @@ func (r *AgentRuntime) sendEvent(event Event) {
 	var targetCh chan Event
 	if r.useSharedCh && r.externalEventCh != nil {
 		targetCh = r.externalEventCh
+		r.logger.Debug("[RUNTIME_EVENT] sendEvent: using externalEventCh (shared)", "type", event.Type(), "runtimeID", r.runtimeID)
 	} else if !r.useSharedCh && r.localEventOutCh != nil {
 		targetCh = r.localEventOutCh
+		r.logger.Debug("[RUNTIME_EVENT] sendEvent: using localEventOutCh", "type", event.Type(), "useSharedCh", r.useSharedCh, "localEventOutCh_nil", r.localEventOutCh == nil)
 	} else {
+		r.logger.Warn("[RUNTIME_EVENT] sendEvent: no available channel", "type", event.Type(), "useSharedCh", r.useSharedCh, "externalEventCh_nil", r.externalEventCh == nil, "localEventOutCh_nil", r.localEventOutCh == nil)
 		return // 没有可用的通道
 	}
 
 	select {
 	case targetCh <- eventToSend:
+		r.logger.Debug("[RUNTIME_EVENT] sendEvent: event sent successfully", "type", event.Type())
 	default:
 		// 通道满，丢弃事件（或记录警告）
-		r.logger.Warn("Event channel full, dropping event", "type", string(event.Type()))
+		r.logger.Warn("[RUNTIME_EVENT] sendEvent: channel full, dropping event", "type", event.Type(), "content_len", len(event.Content()))
 	}
 }
 
@@ -1005,40 +1034,54 @@ func (r *AgentRuntime) sendEvent(event Event) {
 // 这避免了嵌套事件循环问题，确保一个请求完成后再处理下一个
 func (r *AgentRuntime) processInputQueue(ctx context.Context) {
 	defer r.processWg.Done()
+	r.logger.Debug("[RUNTIME_EVENT] processInputQueue goroutine started")
 
 	for {
 		select {
 		case <-ctx.Done():
+			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: ctx.Done received, exiting")
 			return
 		case req, ok := <-r.inputQueue:
 			if !ok {
+				r.logger.Debug("[RUNTIME_EVENT] processInputQueue: inputQueue closed, exiting")
 				return
 			}
+			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: received request", "requestID", req.RequestID, "input_len", len(req.Input))
+
 			// 处理单个请求
 			r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", req.RequestID))
 
 			// Add user message to memory before processing
 			// This is essential for buildReActMessages to include user input
 			r.memory.AddWithType(sharedmemory.RoleUser, req.Input, sharedmemory.MessageTypeUser)
+			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: user message added to memory")
 
 			// 直接调用Engine.Run而非Process包装器
+			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: calling agent.Run", "requestID", req.RequestID)
 			eventsCh, err := r.agent.Run(ctx, req.Input)
 			if err != nil {
+				r.logger.Warn("[RUNTIME_EVENT] processInputQueue: agent.Run failed", "error", err, "requestID", req.RequestID)
 				r.sendEvent(events.NewEvent(events.EventTypeError, err.Error(), req.RequestID))
 				r.sendEvent(events.NewEvent(events.EventTypeDone, "", req.RequestID))
 				continue
 			}
+			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: agent.Run succeeded, starting event forwarding", "requestID", req.RequestID)
 
 			// 转发事件到OUT通道，同时响应context取消
+			eventCount := 0
 			eventLoop:
 			for {
 				select {
 				case <-ctx.Done():
+					r.logger.Debug("[RUNTIME_EVENT] processInputQueue eventLoop: ctx.Done received, exiting")
 					return
 				case ev, ok := <-eventsCh:
 					if !ok {
+						r.logger.Debug("[RUNTIME_EVENT] processInputQueue eventLoop: eventsCh closed, total_events", eventCount)
 						break eventLoop
 					}
+					eventCount++
+					r.logger.Debug("[RUNTIME_EVENT] processInputQueue eventLoop: forwarding event", "count", eventCount, "type", ev.Type(), "content_len", len(ev.Content()))
 					// 设置RequestID以确保事件流匹配
 					if ev.RequestID() == "" {
 						ev = events.NewEvent(ev.Type(), ev.Content(), req.RequestID)

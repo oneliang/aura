@@ -144,13 +144,24 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 }
 
 // Close gracefully shuts down the MCP client and server process.
+// Uses timeout to prevent blocking if MCP process is unresponsive.
 func (c *Client) Close() error {
 	if c.mcp == nil {
 		return nil
 	}
-	err := c.mcp.Close()
-	c.mcp = nil
-	return err
+	// Use channel to wait for Close completion with timeout
+	done := make(chan error, 1)
+	go func() {
+		done <- c.mcp.Close()
+	}()
+	select {
+	case err := <-done:
+		c.mcp = nil
+		return err
+	case <-time.After(3 * time.Second):
+		c.mcp = nil
+		return fmt.Errorf("MCP close timeout")
+	}
 }
 
 // CallToolWithTimeout calls a tool with a timeout context.

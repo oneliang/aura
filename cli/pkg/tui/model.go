@@ -51,10 +51,11 @@ type Model struct {
 	renderer *MarkdownRenderer
 
 	// Widgets - independent UI components
-	thinking   *ThinkingWidget
-	processing *ProcessingWidget
-	tasks      *TaskWidget
-	plan       *PlanWidget
+	waiting     *WaitingWidget
+	thinking    *ThinkingWidget
+	processing  *ProcessingWidget
+	tasks       *TaskWidget
+	plan        *PlanWidget
 
 	// ===== 新架构：统一事件流 =====
 
@@ -83,6 +84,9 @@ type Model struct {
 	// Channel lifecycle protection
 	closed  bool
 	closeMu sync.Mutex
+
+	// Goroutine lifecycle management for tempRuntimes
+	tempRuntimeWg sync.WaitGroup
 
 	getSystemPromptFunc GetSystemPromptFunc // Optional: function to get system prompt
 
@@ -198,6 +202,7 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 		input:               input,
 		styles:              styles,
 		renderer:            renderer,
+		waiting:             NewWaitingWidget(),
 		thinking:            NewThinkingWidget(),
 		processing:          NewProcessingWidget(),
 		tasks:               NewTaskWidget(styles),
@@ -441,7 +446,9 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 		}
 
 		// Run event stream forwarding in background goroutine
+		m.tempRuntimeWg.Add(1)
 		go func() {
+			defer m.tempRuntimeWg.Done()
 			adapter := NewAdapter()
 			agentEvents := tempRt.Events()
 
@@ -476,6 +483,7 @@ func (m Model) sendMessageWithConfig(input string, cfg *sdk.RuntimeConfig) tea.C
 		requestID := runtimeID // Use same ID for request tracking
 		userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
 		if err := tempRt.SendEvent(m.currentRunCtx, userEvent); err != nil {
+			m.currentRunCancel() // Cancel goroutine context before cleanup
 			UnregisterRuntime(runtimeID)
 			select {
 			case m.eventChan <- ChatEvent{Type: EventTypeError, Content: err.Error()}:
@@ -726,6 +734,19 @@ func (m *Model) sendInteractionResponse(approved bool, extraFields ...map[string
 	m.state.SetDisplayState(DisplayProcessing)
 }
 
+// Cancel cancels the context to unblock goroutines waiting on ctx.Done().
+// Must be called BEFORE orchestrator.Stop() to prevent deadlock.
+func (m *Model) Cancel() {
+	// Cancel main context
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
+	// Cancel current run context (for tempRuntime goroutines)
+	if m.currentRunCancel != nil {
+		m.currentRunCancel()
+	}
+}
+
 // Close 关闭Model的所有channel，释放资源
 // 应在TUI退出后调用，确保Orchestrator goroutine能正确退出
 func (m *Model) Close() {
@@ -738,6 +759,9 @@ func (m *Model) Close() {
 	m.closeMu.Unlock()
 
 	m.cancelFunc()
+
+	// Wait for tempRuntime goroutines to complete (unblocked by ctx.Done())
+	m.tempRuntimeWg.Wait()
 
 	// 关闭所有channel，确保接收方能正确退出
 	// eventOutCh may already be closed by closeEventOutCh, use recover to handle panic

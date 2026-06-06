@@ -10,7 +10,8 @@ type DisplayState int
 
 const (
 	DisplayIdle       DisplayState = iota // Idle, waiting for input
-	DisplayThinking                       // Showing "Thinking..."
+	DisplayWaiting                        // Waiting for LLM response to start
+	DisplayThinking                       // LLM is streaming reasoning content
 	DisplayProcessing                     // Tool execution
 	DisplayConfirm                        // Waiting for user confirmation
 )
@@ -20,6 +21,8 @@ func (d DisplayState) String() string {
 	switch d {
 	case DisplayIdle:
 		return "idle"
+	case DisplayWaiting:
+		return "waiting"
 	case DisplayThinking:
 		return "thinking"
 	case DisplayProcessing:

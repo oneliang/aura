@@ -550,15 +550,10 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 	ch := make(chan llm.Chunk, 100)
 	go func() {
 		defer close(ch)
-		defer resp.Body.Close()
 
-		err := internal.StreamSSE(resp, func(data []byte) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-
+		// Use StreamSSEWithContext for context-aware streaming
+		// This prevents blocking on scanner.Scan() when waiting for network data
+		err := internal.StreamSSEWithContext(ctx, resp, func(data []byte) error {
 			var openaiResp openaiResponse
 			if err := internal.UnmarshalJSON(data, &openaiResp); err != nil {
 				return nil // Skip malformed chunks

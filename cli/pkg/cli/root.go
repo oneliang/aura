@@ -143,6 +143,11 @@ func runAgent(cmd *cobra.Command, args []string) {
 	cmdProvider := createCommandProvider(ctx, prof, sessionMgr)
 	logger.RegistryDefault().Debug("[DIAG] runAgent: command provider created", "elapsed", time.Since(startTime))
 
+	// Determine mode BEFORE createRuntime (so correct channel mode is used)
+	if len(args) > 0 && !cmd.Flags().Changed("tui") {
+		useCLI = true
+	}
+
 	// Create and initialize runtime
 	rt, mcpManager, sharedEventCh := createRuntime(ctx, currentSessionID, cmdProvider, sessionMgr)
 	logger.RegistryDefault().Debug("[DIAG] runAgent: runtime created", "elapsed", time.Since(startTime))
@@ -156,6 +161,10 @@ func runAgent(cmd *cobra.Command, args []string) {
 	// execution order: cancel() → rt.Shutdown()
 	defer rt.Shutdown()
 	defer cancel()
+	// Close sharedEventCh after runtime shutdown (LIFO: registered first, executes last)
+	if sharedEventCh != nil {
+		defer func() { close(sharedEventCh) }()
+	}
 
 	// Inject MCP list function into command provider
 	if mcpManager != nil {
@@ -167,11 +176,7 @@ func runAgent(cmd *cobra.Command, args []string) {
 	ctx.CommandProvider = cmdProvider
 	logger.RegistryDefault().Debug("[DIAG] runAgent: command handlers setup done", "elapsed", time.Since(startTime))
 
-	// Determine mode and run
-	if len(args) > 0 && !cmd.Flags().Changed("tui") {
-		useCLI = true
-	}
-
+	// Run appropriate mode
 	if len(args) > 0 {
 		runSingleMessage(runCtx, rt, args, createCLIEventHandler())
 		return
@@ -416,50 +421,70 @@ func runInteractiveWithRuntime(ctx context.Context, rt *sdk.Runtime, sl *tui.Ses
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return
 		}
+		logger.RegistryDefault().Debug("[CLI_EVENT] rt.Start completed", "error", err)
 
 		// Send user input event
 		requestID := fmt.Sprintf("cli_%d", time.Now().UnixNano())
 		userEvent := events.NewEvent(events.EventTypeUserInput, input, requestID)
+		logger.RegistryDefault().Debug("[CLI_EVENT] sending EventTypeUserInput", "requestID", requestID, "input", input)
 		if err := rt.SendEvent(ctx, userEvent); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			rt.Stop(ctx)
 			return
 		}
+		logger.RegistryDefault().Debug("[CLI_EVENT] SendEvent completed", "error", err)
 
 		// Process events from stream
-		for ev := range rt.Events() {
-			switch ev.Type() {
-			case sdk.EventTypeThinkingStart:
-				fmt.Printf("\033[90m%s\033[0m\n", ev.Content())
-			case sdk.EventTypeThinkingChunk:
-				// Accumulate thinking content (display in gray, no newline for streaming)
-				fmt.Printf("\033[90m%s\033[0m", ev.Content())
-			case sdk.EventTypeThinkingEnd:
-				// Complete thinking - print newline if any content was displayed
-				fmt.Println()
-			case sdk.EventTypeResponseChunk:
-				// Ignore chunks in CLI mode - wait for complete response
-			case sdk.EventTypeResponse:
-				fmt.Printf("Aura: %s\n\n", ev.Content())
-			case sdk.EventTypeAction:
-				fmt.Printf("\033[33m%s\033[0m\n", ev.Content())
-			case sdk.EventTypeResult:
-				fmt.Printf("\033[36m%s\033[0m\n", ev.Content())
-			case sdk.EventTypeTaskCreate, sdk.EventTypeTaskUpdate, sdk.EventTypeTaskList:
-				fmt.Print(formatTaskEvent(ev))
-			case sdk.EventTypeStep:
-				fmt.Printf("\033[90m[%s] %s\033[0m\n", i18n.T("cli.step_label"), ev.Content())
-			case sdk.EventTypePlanCreated:
-				fmt.Printf("\033[36m[%s] %s (%d steps)\033[0m\n", i18n.T("cli.plan_label"), ev.Extra()["goal"], ev.Extra()["total_steps"])
-			case sdk.EventTypePlanStep:
-				fmt.Printf("\033[36m[%s %d/%d] %s\033[0m\n", i18n.T("cli.plan_step_label"), ev.Extra()["step_num"], ev.Extra()["total_steps"], ev.Extra()["step_desc"])
-			case sdk.EventTypePlanComplete:
-				fmt.Printf("\033[32m[%s] %s\033[0m\n", i18n.T("cli.plan_complete_label"), ev.Content())
-			case sdk.EventTypeError:
-				fmt.Fprintf(os.Stderr, "\033[31mError: %s\033[0m\n", ev.Content())
-			case sdk.EventTypeDone:
-				// Done event signals completion
-				break
+		logger.RegistryDefault().Debug("[CLI_EVENT] starting event loop, waiting for rt.Events()")
+		eventCount := 0
+		eventsLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				// Context cancelled (Ctrl+C or /exit)
+				logger.RegistryDefault().Debug("[CLI_EVENT] ctx.Done received, breaking loop")
+				break eventsLoop
+			case ev, ok := <-rt.Events():
+				if !ok {
+					// Channel closed
+					logger.RegistryDefault().Debug("[CLI_EVENT] rt.Events channel closed, breaking loop")
+					break eventsLoop
+				}
+				eventCount++
+				logger.RegistryDefault().Debug("[CLI_EVENT] received event", "count", eventCount, "type", ev.Type(), "content_len", len(ev.Content()))
+				switch ev.Type() {
+				case sdk.EventTypeThinkingStart:
+					fmt.Printf("\033[90m%s\033[0m\n", ev.Content())
+				case sdk.EventTypeThinkingChunk:
+					// Accumulate thinking content (display in gray, no newline for streaming)
+					fmt.Printf("\033[90m%s\033[0m", ev.Content())
+				case sdk.EventTypeThinkingEnd:
+					// Complete thinking - print newline if any content was displayed
+					fmt.Println()
+				case sdk.EventTypeResponseChunk:
+					// Ignore chunks in CLI mode - wait for complete response
+				case sdk.EventTypeResponse:
+					fmt.Printf("Aura: %s\n\n", ev.Content())
+				case sdk.EventTypeAction:
+					fmt.Printf("\033[33m%s\033[0m\n", ev.Content())
+				case sdk.EventTypeResult:
+					fmt.Printf("\033[36m%s\033[0m\n", ev.Content())
+				case sdk.EventTypeTaskCreate, sdk.EventTypeTaskUpdate, sdk.EventTypeTaskList:
+					fmt.Print(formatTaskEvent(ev))
+				case sdk.EventTypeStep:
+					fmt.Printf("\033[90m[%s] %s\033[0m\n", i18n.T("cli.step_label"), ev.Content())
+				case sdk.EventTypePlanCreated:
+					fmt.Printf("\033[36m[%s] %s (%d steps)\033[0m\n", i18n.T("cli.plan_label"), ev.Extra()["goal"], ev.Extra()["total_steps"])
+				case sdk.EventTypePlanStep:
+					fmt.Printf("\033[36m[%s %d/%d] %s\033[0m\n", i18n.T("cli.plan_step_label"), ev.Extra()["step_num"], ev.Extra()["total_steps"], ev.Extra()["step_desc"])
+				case sdk.EventTypePlanComplete:
+					fmt.Printf("\033[32m[%s] %s\033[0m\n", i18n.T("cli.plan_complete_label"), ev.Content())
+				case sdk.EventTypeError:
+					fmt.Fprintf(os.Stderr, "\033[31mError: %s\033[0m\n", ev.Content())
+				case sdk.EventTypeDone:
+					// Done event signals completion
+					break eventsLoop
+				}
 			}
 		}
 		rt.Stop(ctx)
