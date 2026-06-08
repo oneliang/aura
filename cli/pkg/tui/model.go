@@ -51,11 +51,11 @@ type Model struct {
 	renderer *MarkdownRenderer
 
 	// Widgets - independent UI components
-	waiting     *WaitingWidget
-	thinking    *ThinkingWidget
-	processing  *ProcessingWidget
-	tasks       *TaskWidget
-	plan        *PlanWidget
+	waiting    *WaitingWidget
+	thinking   *ThinkingWidget
+	processing *ProcessingWidget
+	tasks      *TaskWidget
+	plan       *PlanWidget
 
 	// ===== 新架构：统一事件流 =====
 
@@ -207,15 +207,15 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 		processing:          NewProcessingWidget(),
 		tasks:               NewTaskWidget(styles),
 		plan:                NewPlanWidget(styles),
-		runtime:             rt,  // 新架构：持有runtime引用
+		runtime:             rt,                            // 新架构：持有runtime引用
 		tempRuntimes:        make(map[string]*sdk.Runtime), // Temporary runtime registry for response routing
 		getSystemPromptFunc: config.GetSystemPrompt,
 		ctx:                 ctx,
 		cancelFunc:          cancel,
 		eventChan:           make(chan ChatEvent, 100),
-		eventOutCh:          make(chan events.Event, 100),  // OUT: 发送事件
-		eventInCh:           make(chan events.Event, 100),  // IN: 接收事件（备用）
-		sharedEventCh:       sharedEventCh,                  // Shared: 共享事件通道
+		eventOutCh:          make(chan events.Event, 100), // OUT: 发送事件
+		eventInCh:           make(chan events.Event, 100), // IN: 接收事件（备用）
+		sharedEventCh:       sharedEventCh,                // Shared: 共享事件通道
 		config:              config,
 		sessionMgr:          sessionMgr,
 		summarizer:          summarizer,
@@ -226,8 +226,8 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 		userID:              user.GetDefaultUserID(), // Load current user ID from users.yaml
 		mcpManager:          mcpManager,
 		viewport:            viewport.New(viewport.WithWidth(0), viewport.WithHeight(0)),
-		autoScroll:        AutoScrollDefault,
-		viewportReady:     false,
+		autoScroll:          AutoScrollDefault,
+		viewportReady:       false,
 	}
 	log.Debug("[DIAG] NewWithRuntime: Model struct created", "elapsed", time.Since(startTime))
 

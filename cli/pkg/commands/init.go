@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	initpkg "github.com/oneliang/aura/commands/pkg/init"
@@ -102,7 +101,6 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	fmt.Println("Exploring workspace...")
 
-	// Process and collect events
 	// Start runtime event stream
 	if err := rt.Start(ctx); err != nil {
 		rt.Shutdown()
@@ -120,15 +118,10 @@ func runInit(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Collect response content
-	var contentBuilder strings.Builder
+	// Wait for completion (file_write saves the file)
 eventLoop:
 	for event := range rt.Events() {
 		switch event.Type() {
-		case events.EventTypeResponse, events.EventTypeResponseChunk:
-			if event.Content() != "" {
-				contentBuilder.WriteString(event.Content())
-			}
 		case events.EventTypeError:
 			fmt.Fprintf(os.Stderr, "Error: %s\n", event.Content())
 		case events.EventTypeDone:
@@ -140,19 +133,20 @@ eventLoop:
 	// Shutdown runtime
 	rt.Shutdown()
 
-	content := contentBuilder.String()
-	if content == "" {
-		fmt.Fprintf(os.Stderr, "Error: No content generated\n")
+	// Check if AURA.md was saved by file_write
+	if _, err := os.Stat(auraMdPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: AURA.md was not generated\n")
 		os.Exit(1)
 	}
 
-	// Write AURA.md
-	if err := os.WriteFile(auraMdPath, []byte(content), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing AURA.md: %v\n", err)
+	// Read generated file for preview
+	content, err := os.ReadFile(auraMdPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading AURA.md: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Generated AURA.md at: %s\n\nPreview:\n%s\n", auraMdPath, truncatePreview(content, 500))
+	fmt.Printf("Generated AURA.md at: %s\n\nPreview:\n%s\n", auraMdPath, truncatePreview(string(content), 500))
 }
 
 func truncatePreview(content string, maxLen int) string {
