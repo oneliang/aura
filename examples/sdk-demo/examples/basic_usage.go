@@ -70,3 +70,67 @@ func BasicUsage() error {
 
 	return nil
 }
+
+// CustomSystemPromptUsage demonstrates custom system prompt configuration.
+// This shows how to set a custom system prompt when creating a runtime,
+// useful for specialized agent behaviors (e.g., code review, documentation).
+func CustomSystemPromptUsage() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// 1. Create runtime configuration with custom system prompt
+	cfg := sdk.DefaultRuntimeConfig()
+	cfg.SystemPrompt = "You are a specialized code review assistant. Focus on code quality, security vulnerabilities, and best practices. Provide concise, actionable feedback."
+
+	// 2. Create runtime with custom configuration
+	runtime, err := sdk.NewRuntime(cfg)
+	if err != nil {
+		return fmt.Errorf("create runtime: %w", err)
+	}
+
+	// 3. Initialize runtime
+	if err := runtime.Initialize(ctx); err != nil {
+		return fmt.Errorf("initialize: %w", err)
+	}
+	defer runtime.Shutdown()
+
+	// 4. Start event stream
+	if err := runtime.Start(ctx); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	defer runtime.Stop(ctx)
+
+	// 5. Get output event stream
+	events := runtime.Events()
+
+	// 6. Generate request ID
+	requestID := uuid.New().String()
+
+	// 7. Send user input event
+	err = runtime.SendEvent(ctx, sdk.NewEvent(sdk.EventTypeUserInput, "Review this code: func getUser(id int) *User { return db.Find(id) }", requestID))
+	if err != nil {
+		return fmt.Errorf("send event: %w", err)
+	}
+
+	// 8. Consume event stream
+	var response strings.Builder
+	for ev := range events {
+		switch ev.Type() {
+		case sdk.EventTypeResponse:
+			response.WriteString(ev.Content())
+		case sdk.EventTypeResponseChunk:
+			response.WriteString(ev.Content())
+		case sdk.EventTypeError:
+			fmt.Printf("Error: %s\n", ev.Content())
+		case sdk.EventTypeDone:
+			fmt.Println("\nProcessing complete")
+			return nil
+		}
+	}
+
+	if response.Len() > 0 {
+		fmt.Printf("\nResponse: %s\n", response.String())
+	}
+
+	return nil
+}
