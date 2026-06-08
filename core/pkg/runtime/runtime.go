@@ -1048,9 +1048,6 @@ func (r *AgentRuntime) processInputQueue(ctx context.Context) {
 			}
 			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: received request", "requestID", req.RequestID, "input_len", len(req.Input))
 
-			// 处理单个请求
-			r.sendEvent(events.NewEvent(events.EventTypeThinkingStart, "Processing user input...", req.RequestID))
-
 			// Add user message to memory before processing
 			// This is essential for buildReActMessages to include user input
 			r.memory.AddWithType(sharedmemory.RoleUser, req.Input, sharedmemory.MessageTypeUser)

@@ -679,7 +679,10 @@ func (e *Engine) getCompleteResponse(ctx context.Context, messages []llm.Message
 	}
 	content, thinking := (&thinkingFilter{}).stripThinking(content)
 	if thinking != "" && eventsCh != nil {
+		// Send complete thinking event sequence: Start → Content → End
+		eventsCh <- events.NewEvent(events.EventTypeThinkingStart, "", requestID)
 		eventsCh <- events.NewEvent(events.EventTypeThinkingContent, thinking, requestID)
+		eventsCh <- events.NewEvent(events.EventTypeThinkingEnd, "", requestID)
 	}
 	return content, resp.ToolCalls, nil
 }

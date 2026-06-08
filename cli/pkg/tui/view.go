@@ -402,6 +402,10 @@ func (m Model) buildChatContent() string {
 	}
 
 	// Inline widgets when active (current activity, at bottom)
+	if m.waiting != nil && m.waiting.IsActive() {
+		b.WriteString(m.waiting.Rendered())
+		b.WriteByte('\n')
+	}
 	if m.thinking != nil && m.thinking.IsActive() {
 		b.WriteString(m.thinking.Rendered())
 		b.WriteByte('\n')

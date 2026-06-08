@@ -580,10 +580,11 @@ func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	// Set UI state (same as handleSubmit)
 	m.state.SetWaiting(true)
 	m.state.SetStartTime(time.Now())
-	m.state.SetDisplayState(DisplayThinking)
+	m.state.SetDisplayState(DisplayWaiting)
 	m.input.SetDisabled(true)
 
 	// Reset widgets for clean state
+	m.waiting.Reset()
 	m.thinking.Reset()
 	m.processing.Reset()
 	m.plan.Reset()
@@ -593,13 +594,14 @@ func cmdInit(ctx context.Context, m Model, input string) (tea.Model, tea.Cmd) {
 	m.manualScroll = false
 	m.manualScrollOffset = 0
 
-	// Start thinking indicator
-	_, thinkingCmd := m.thinking.StartAndRender()
+	// Start waiting widget — shows "Waiting for response..."
+	// ThinkingWidget will start when ThinkingStart event arrives
+	_, waitingCmd := m.waiting.StartAndRender(i18n.T("tui.waiting.response"))
 
 	// Use sendMessageWithConfig to send through event system
 	return m, tea.Batch(
 		m.sendMessageWithConfig(prompt, initCfg),
-		thinkingCmd,
+		waitingCmd,
 		m.scrollToBottom(),
 		m.eventLoop(),
 	)

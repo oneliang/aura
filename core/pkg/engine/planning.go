@@ -73,8 +73,6 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 		e.hookEngine.Fire(ctx, hooks.EventEnterPlanMode, map[string]any{"request_id": requestID})
 	}
 
-	eventsCh <- events.NewEvent(events.EventTypeThinkingStart, i18n.T("tui.thinking"), requestID)
-
 	// Phase 1: Exploration — forced read-only codebase discovery
 	e.transitionPlanModeState(PlanModeStateExplore)
 	eventsCh <- events.NewEvent(events.EventTypeStep, i18n.T("engine.exploration_phase"), requestID)
@@ -442,9 +440,7 @@ func (e *Engine) runExplicitPlanningLoop(ctx context.Context, eventsCh chan<- ev
 		}
 	}
 
-	eventsCh <- events.NewEvent(events.EventTypeThinkingStart, i18n.T("tui.thinking"), requestID)
 	summary := e.generatePlanSummary(ctx, input, requestID)
-	eventsCh <- events.NewEvent(events.EventTypeThinkingEnd, "", requestID)
 	eventsCh <- events.NewEvent(events.EventTypeResponse, summary, requestID)
 }
 
@@ -481,7 +477,6 @@ After exploring, summarize what you found.`, input)
 		}
 
 		messages := e.buildReActMessages(ctx)
-		eventsCh <- events.NewEvent(events.EventTypeThinkingStart, i18n.T("engine.exploring"), requestID)
 		response, toolCalls, _, err := e.streamAndBufferResponse(ctx, eventsCh, messages, requestID, "")
 		// thinking_end is now sent inside streamAndBufferResponse
 		if err != nil {
@@ -523,10 +518,8 @@ After exploring, summarize what you found.`, input)
 	if lastResponse != "" {
 		e.memory.AddWithType(sharedmemory.RoleUser, i18n.T("engine.summarize_discovery"), memory.MessageTypeSystem)
 		messages := e.buildReActMessages(ctx)
-		eventsCh <- events.NewEvent(events.EventTypeThinkingStart, i18n.T("engine.summarizing_exploration"), requestID)
 		req := e.buildRequest(messages)
 		resp, err := e.client.Complete(ctx, req)
-		eventsCh <- events.NewEvent(events.EventTypeThinkingEnd, "", requestID)
 		if err == nil {
 			// Extract text from ContentBlocks
 			for _, block := range resp.Message.GetContentBlocks() {
@@ -548,7 +541,6 @@ func (e *Engine) executePlanStep(ctx context.Context, eventsCh chan<- events.Eve
 	// Use ReAct-style loop for this step
 	messages := e.buildReActMessages(ctx)
 
-	eventsCh <- events.NewEvent(events.EventTypeThinkingStart, i18n.T("tui.thinking"), requestID)
 
 	response, toolCalls, err := e.getCompleteResponse(ctx, messages, eventsCh, requestID)
 	if err != nil {
@@ -556,7 +548,6 @@ func (e *Engine) executePlanStep(ctx context.Context, eventsCh chan<- events.Eve
 	}
 
 	// Send ThinkingEnd event after LLM response is complete
-	eventsCh <- events.NewEvent(events.EventTypeThinkingEnd, "", requestID)
 
 	// Extract actions: prefer structured tool calls, fall back to text parsing
 	actions := e.extractActions(response, toolCalls)
@@ -598,12 +589,10 @@ func (e *Engine) executePlanStep(ctx context.Context, eventsCh chan<- events.Eve
 
 		// Get next action
 		messages = e.buildReActMessages(ctx)
-		eventsCh <- events.NewEvent(events.EventTypeThinkingStart, i18n.T("tui.thinking"), requestID)
 		response, toolCalls, err = e.getCompleteResponse(ctx, messages, eventsCh, requestID)
 		if err != nil {
 			return stepResult{failed: true, reason: err.Error()}
 		}
-		eventsCh <- events.NewEvent(events.EventTypeThinkingEnd, "", requestID)
 
 		actions = e.extractActions(response, toolCalls)
 	}
