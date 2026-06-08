@@ -209,25 +209,20 @@ func (m Model) handleEventDone(msg ChatEvent) (tea.Model, tea.Cmd) {
 }
 
 // handleInitComplete handles the completion of /init command.
-// Saves accumulated content to AURA.md and shows result message.
+// Shows result message (file_write already saved the file).
 func (m Model) handleInitComplete() (tea.Model, tea.Cmd) {
 	// Reset init state
 	m.initPending = false
 	auraMdPath := m.initAuraMdPath
-	content := m.initContent
 	m.initAuraMdPath = ""
 	m.initContent = ""
 
-	// Save AURA.md
+	// Check if AURA.md was saved by file_write
 	var resultMsg string
-	if content != "" {
-		if err := os.WriteFile(auraMdPath, []byte(content), 0644); err != nil {
-			resultMsg = m.styles.Error.Render(fmt.Sprintf("  Error saving AURA.md: %v", err))
-		} else {
-			resultMsg = m.styles.Help.Render(fmt.Sprintf("  Generated AURA.md at: %s", auraMdPath))
-		}
+	if _, err := os.Stat(auraMdPath); err == nil {
+		resultMsg = m.styles.Help.Render(fmt.Sprintf("  Generated AURA.md at: %s", auraMdPath))
 	} else {
-		resultMsg = m.styles.Error.Render("  Error: No content generated for AURA.md")
+		resultMsg = m.styles.Error.Render("  Error: AURA.md was not generated")
 	}
 
 	// Add result message to chat
@@ -340,16 +335,10 @@ func (m Model) handleEventResponseEnd(msg ChatEvent) (tea.Model, tea.Cmd) {
 // For non-streaming responses: glamour render and add to viewport.
 // For streaming responses: the response content already matches accumulated chunks,
 // so skip if we already have content (prevents duplicate).
-// For init mode: accumulate content for AURA.md generation.
 func (m Model) handleEventResponse(msg ChatEvent) (tea.Model, tea.Cmd) {
 	// Skip empty responses
 	if strings.TrimSpace(msg.Content) == "" {
 		return m, nil
-	}
-
-	// Capture init content for AURA.md generation
-	if m.initPending {
-		m.initContent += msg.Content
 	}
 
 	// If we already have an assistant message (from accumulated streaming chunks),

@@ -122,6 +122,7 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	// Collect response content
 	var contentBuilder strings.Builder
+eventLoop:
 	for event := range rt.Events() {
 		switch event.Type() {
 		case events.EventTypeResponse, events.EventTypeResponseChunk:
@@ -131,7 +132,7 @@ func runInit(cmd *cobra.Command, args []string) {
 		case events.EventTypeError:
 			fmt.Fprintf(os.Stderr, "Error: %s\n", event.Content())
 		case events.EventTypeDone:
-			break
+			break eventLoop
 		}
 	}
 	rt.Stop(ctx)
