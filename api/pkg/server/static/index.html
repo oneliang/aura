@@ -508,6 +508,28 @@
       color: var(--text-secondary);
     }
 
+    /* Plan mode block */
+    .plan-block {
+      padding: 8px 12px;
+      margin: 8px 0;
+      background: rgba(155, 89, 182, 0.08);
+      border-left: 3px solid #9b59b6;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Warning/error block */
+    .error-block {
+      padding: 8px 12px;
+      margin: 8px 0;
+      background: rgba(243, 156, 18, 0.08);
+      border-left: 3px solid #f39c12;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
     /* Streaming cursor animation */
     .streaming::after {
       content: '▊';
@@ -1085,15 +1107,50 @@
         return;
       }
 
-      const messagesHTML = messages.map(msg => `
-        <div class="message ${msg.role}">
-          <div class="message-avatar">${msg.role === 'user' ? 'U' : 'A'}</div>
-          <div class="message-content">${formatMessage(msg.content)}</div>
-        </div>
-      `).join('');
+      const messagesHTML = messages.map(msg => {
+        let contentHtml = '';
+        if (msg.content_blocks && Array.isArray(msg.content_blocks)) {
+          contentHtml = msg.content_blocks.map(block => renderContentBlock(block)).join('');
+        }
+        return `
+          <div class="message ${msg.role}">
+            <div class="message-avatar">${msg.role === 'user' ? 'U' : 'A'}</div>
+            <div class="message-content">${contentHtml}</div>
+          </div>
+        `;
+      }).join('');
 
       container.innerHTML = messagesHTML;
       scrollToBottom();
+    }
+
+    // Render a single content block
+    function renderContentBlock(block) {
+      switch (block.type) {
+        case 'text':
+          return formatMessage(block.text || '');
+        case 'thinking':
+          return `<div class="thinking complete">${escapeHtml(block.thinking || '')}</div>`;
+        case 'tool_use':
+          return `<div class="action-block">⚡ <strong>${escapeHtml(block.name || 'Tool')}</strong></div>`;
+        case 'tool_result':
+          // Extract text from nested content blocks or use string content
+          let resultText = '';
+          if (Array.isArray(block.content)) {
+            resultText = block.content
+              .filter(b => b.type === 'text')
+              .map(b => b.text)
+              .join('');
+          } else {
+            resultText = block.content || '';
+          }
+          const displayText = resultText.length > 200
+            ? resultText.substring(0, 200) + '...'
+            : resultText;
+          return `<div class="result-block">📋 ${escapeHtml(displayText)}</div>`;
+        default:
+          return '';
+      }
     }
 
     // Initialize markdown-it
@@ -1394,7 +1451,7 @@
           contentEl.innerHTML += `<div class="result-block" style="border-left-color: #4ecca3;">✓ ${escapeHtml(parsed.content || '')}</div>`;
           break;
         case 'confirmation_request':
-          contentEl.innerHTML += `<div class="confirm-block">🔒 自动审批: ${escapeHtml(parsed.toolName || 'tool')}</div>`;
+          contentEl.innerHTML += `<div class="confirm-block">🔒 自动审批: ${escapeHtml(parsed.tool_name || 'tool')}</div>`;
           break;
         case 'task_create':
           addTask(parsed.task_id, parsed.content || '');
@@ -1424,6 +1481,50 @@
             accumulatedContent = '';
             isStreaming = false;
           }
+          break;
+        case 'interaction_request':
+          contentEl.innerHTML += `<div class="confirm-block">❓ 请求交互: ${escapeHtml(parsed.content || '')}</div>`;
+          break;
+        case 'enter_plan_mode':
+          contentEl.innerHTML += `<div class="plan-block">🔍 进入计划模式，开始探索...</div>`;
+          break;
+        case 'plan_created':
+          const planGoal = parsed.goal || '';
+          const planSteps = parsed.steps || [];
+          let planHtml = `<div class="plan-block"><strong>📝 计划: ${escapeHtml(planGoal)}</strong><br>进度: 0/${parsed.total_steps || planSteps.length}`;
+          planSteps.forEach((s, i) => { planHtml += `<br>&nbsp;&nbsp;[ ] ${i+1}. ${escapeHtml(s)}`; });
+          planHtml += '</div>';
+          contentEl.innerHTML += planHtml;
+          break;
+        case 'plan_step':
+          contentEl.innerHTML += `<div class="plan-block">⚡ 步骤 ${parsed.step_num}/${parsed.total_steps}: ${escapeHtml(parsed.step_desc || parsed.content || '')}</div>`;
+          break;
+        case 'plan_complete':
+          contentEl.innerHTML += `<div class="plan-block">✓ 计划执行完成！</div>`;
+          break;
+        case 'plan_mode_exit':
+          contentEl.innerHTML += `<div class="plan-block">⚡ 退出计划模式，开始执行...</div>`;
+          break;
+        case 'plan_verify_start':
+          contentEl.innerHTML += `<div class="plan-block">✓ 开始验证...</div>`;
+          break;
+        case 'plan_verify_result':
+          contentEl.innerHTML += `<div class="plan-block">${escapeHtml(parsed.content || '')}</div>`;
+          break;
+        case 'plan_verify_end':
+          contentEl.innerHTML += `<div class="plan-block">${escapeHtml(parsed.content || '')}</div>`;
+          break;
+        case 'step':
+          contentEl.innerHTML += `<div class="action-block">📌 ${escapeHtml(parsed.content || '')}</div>`;
+          break;
+        case 'max_steps_exceeded':
+          contentEl.innerHTML += `<div class="error-block">⚠ 超出最大步数(${parsed.max_steps || '?'})，基于已有上下文生成回答</div>`;
+          break;
+        case 'snapshot_created':
+          contentEl.innerHTML += `<div class="result-block">📸 快照已创建: ${escapeHtml(parsed.snapshot_id || '')}</div>`;
+          break;
+        case 'rollback_complete':
+          contentEl.innerHTML += `<div class="result-block">↩️ 回滚完成: ${escapeHtml(parsed.content || '')}</div>`;
           break;
         default:
           console.log('Unknown SSE event:', eventType, data);

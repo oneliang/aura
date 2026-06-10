@@ -93,6 +93,10 @@ type Server struct {
 	runtimeMu  sync.RWMutex
 	mcpManager *sdk.MCPManager
 
+	// Orchestrator management (bridges HTTP and Runtime)
+	orchestrators   map[string]*SessionOrchestrator
+	orchestratorsMu sync.RWMutex
+
 	// HTTP handlers
 	sessionHandler      *handlers.SessionHandler
 	notificationHandler *handlers.NotificationHandler
@@ -185,6 +189,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		sessionsDir:   cfg.SessionsDir,
 		userManager:   userManager,
 		runtimes:      make(map[string]*sessionRuntime),
+		orchestrators: make(map[string]*SessionOrchestrator),
 		sseProcessing: make(map[string]bool),
 
 		// Subscription support
@@ -529,11 +534,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// shutdownAllRuntimes shuts down all running runtimes.
+// shutdownAllRuntimes shuts down all running runtimes and orchestrators.
 func (s *Server) shutdownAllRuntimes() {
 	s.runtimeMu.Lock()
 	defer s.runtimeMu.Unlock()
 
+	// Shutdown all orchestrators first
+	s.orchestratorsMu.Lock()
+	for id, orch := range s.orchestrators {
+		orch.Stop()
+		delete(s.orchestrators, id)
+	}
+	s.orchestratorsMu.Unlock()
+
+	// Then shutdown all runtimes
 	for id, sr := range s.runtimes {
 		sr.runtime.Shutdown()
 		delete(s.runtimes, id)
@@ -563,6 +577,15 @@ func (s *Server) evictExpiredRuntimes() {
 	now := time.Now()
 	for id, sr := range s.runtimes {
 		if now.Sub(sr.createdAt) > runtimeTTL {
+			// Stop orchestrator first
+			s.orchestratorsMu.Lock()
+			if orch, ok := s.orchestrators[id]; ok {
+				orch.Stop()
+				delete(s.orchestrators, id)
+			}
+			s.orchestratorsMu.Unlock()
+
+			// Then shutdown runtime
 			sr.runtime.Shutdown()
 			delete(s.runtimes, id)
 		}
@@ -899,82 +922,43 @@ func (s *Server) handleSendMessageSSE(w http.ResponseWriter, r *http.Request, se
 		return
 	}
 
-	// Send user message event
-	s.sendSSEEvent(w, flusher, sseEventMessage, map[string]interface{}{
+	// Send user message echo
+	s.sendSSEEvent(w, flusher, "user_message", map[string]interface{}{
 		"role":    "user",
 		"content": req.Content,
 	})
 
-	// Get or create runtime
-	rt, err := s.getOrCreateRuntime(r.Context(), sessionID)
+	// Get or create orchestrator
+	orch, err := s.getOrCreateOrchestrator(r.Context(), sessionID)
 	if err != nil {
-		s.sendSSEError(w, flusher, "Failed to get runtime")
+		s.sendSSEError(w, flusher, "Failed to get orchestrator")
 		return
 	}
 
-	// Process message
-	s.logger.Debug("Starting runtime event stream", "module", "server", "session_id", sessionID)
-	// Start runtime event stream
-	if err := rt.Start(r.Context()); err != nil {
-		s.logger.Error("Failed to start runtime", "module", "server", "session_id", sessionID, "error", err.Error())
-		s.sendSSEError(w, flusher, "Failed to start runtime")
-		return
-	}
+	// Attach SSE writer to orchestrator
+	writerID := fmt.Sprintf("sse_%d", time.Now().UnixNano())
+	writer := orch.AttachSSEWriter(writerID, w, flusher)
+	defer orch.DetachSSEWriter(writerID)
 
-	// Send user input event
+	// Send user input to runtime via orchestrator
 	requestID := fmt.Sprintf("sse_%d", time.Now().UnixNano())
-	userEvent := events.NewEvent(events.EventTypeUserInput, req.Content, requestID)
-	if err := rt.SendEvent(r.Context(), userEvent); err != nil {
-		s.logger.Error("Failed to send event", "module", "server", "session_id", sessionID, "error", err.Error())
-		rt.Stop(r.Context())
-		s.sendSSEError(w, flusher, "Failed to send event")
+	if err := orch.SendUserInput(req.Content, requestID); err != nil {
+		s.logger.Error("Failed to send user input", "module", "server", "session_id", sessionID, "error", err.Error())
+		s.sendSSEError(w, flusher, "Failed to send user input")
 		return
 	}
 
-	// Stream events directly from event stream
-	var responseContent strings.Builder
-	for ev := range rt.Events() {
-		s.logger.Debug("Consumed event", "module", "server", "session_id", sessionID, "event_type", string(ev.Type()))
+	s.logger.Debug("Starting event streaming via orchestrator", "module", "server", "session_id", sessionID)
 
-		// Send SSE events based on event type
-		switch ev.Type() {
-		case sdk.EventTypeResponse, sdk.EventTypeResponseChunk:
-			responseContent.WriteString(ev.Content())
-			s.sendSSEEvent(w, flusher, sseEventMessage, map[string]interface{}{
-				"role":    "assistant",
-				"content": ev.Content(),
-			})
-		case sdk.EventTypeThinkingStart, sdk.EventTypeThinkingChunk, sdk.EventTypeThinkingEnd:
-			s.sendSSEEvent(w, flusher, sseEventThinking, map[string]interface{}{
-				"content": ev.Content(),
-			})
-		case sdk.EventTypeToolStart:
-			extra := ev.Extra()
-			if toolName, ok := extra["tool"].(string); ok {
-				s.sendSSEEvent(w, flusher, sseEventTool, map[string]interface{}{
-					"name":  toolName,
-					"status": "running",
-				})
-			}
-		case sdk.EventTypeToolEnd:
-			s.sendSSEEvent(w, flusher, sseEventTool, map[string]interface{}{
-				"status": "complete",
-			})
-		case sdk.EventTypeError:
-			s.sendSSEEvent(w, flusher, sseEventError, map[string]interface{}{
-				"message": ev.Content(),
-			})
-		case sdk.EventTypeDone:
-			break
-		}
+	// Wait for the writer to be closed (by done event or client disconnect)
+	select {
+	case <-writer.Done():
+		s.logger.Debug("SSE writer closed", "module", "server", "session_id", sessionID)
+	case <-r.Context().Done():
+		s.logger.Debug("Client disconnected", "module", "server", "session_id", sessionID)
 	}
-	rt.Stop(r.Context())
 
-	// Send completion event
-	s.logger.Debug("Sending SSE done event", "module", "server", "session_id", sessionID)
-	s.sendSSEEvent(w, flusher, sseEventDone, map[string]interface{}{
-		"status": "complete",
-	})
+	s.logger.Debug("Event streaming completed", "module", "server", "session_id", sessionID)
 }
 
 // sendSSEEvent sends an SSE event to the client.
@@ -1000,6 +984,48 @@ func (s *Server) sendSSEError(w http.ResponseWriter, flusher http.Flusher, messa
 	s.sendSSEEvent(w, flusher, string(sdk.EventTypeError), map[string]interface{}{
 		"message": message,
 	})
+}
+
+// getOrCreateOrchestrator gets or creates a SessionOrchestrator for the given session.
+func (s *Server) getOrCreateOrchestrator(ctx context.Context, sessionID string) (*SessionOrchestrator, error) {
+	// Try to get existing orchestrator
+	s.orchestratorsMu.RLock()
+	if orch, ok := s.orchestrators[sessionID]; ok {
+		s.orchestratorsMu.RUnlock()
+		return orch, nil
+	}
+	s.orchestratorsMu.RUnlock()
+
+	// Create new orchestrator
+	s.orchestratorsMu.Lock()
+	defer s.orchestratorsMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if orch, ok := s.orchestrators[sessionID]; ok {
+		return orch, nil
+	}
+
+	// Get or create runtime
+	rt, err := s.getOrCreateRuntime(context.Background(), sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get runtime: %w", err)
+	}
+
+	// Start runtime if not already started
+	// Use background context to match orchestrator's lifecycle
+	if err := rt.Start(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to start runtime: %w", err)
+	}
+
+	// Create orchestrator
+	orch := NewSessionOrchestrator(rt, s.logger)
+	orch.Run()
+	orch.WaitReady() // Wait for goroutines to be ready
+
+	s.orchestrators[sessionID] = orch
+	s.logger.Debug("SessionOrchestrator created", "module", "server", "session_id", sessionID)
+
+	return orch, nil
 }
 
 // AddSubscription implements handlers.SessionService interface.

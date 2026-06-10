@@ -472,7 +472,11 @@ func runInteractiveWithRuntime(ctx context.Context, rt *sdk.Runtime, sl *tui.Ses
 				case sdk.EventTypeTaskCreate, sdk.EventTypeTaskUpdate, sdk.EventTypeTaskList:
 					fmt.Print(formatTaskEvent(ev))
 				case sdk.EventTypeStep:
-					fmt.Printf("\033[90m[%s] %s\033[0m\n", i18n.T("cli.step_label"), ev.Content())
+					stepNum := ""
+					if s, ok := ev.Extra()["step"]; ok {
+						stepNum = fmt.Sprintf(" %v", s)
+					}
+					fmt.Printf("\033[90m[%s%s]\033[0m\n", i18n.T("cli.step_label"), stepNum)
 				case sdk.EventTypePlanCreated:
 					fmt.Printf("\033[36m[%s] %s (%d steps)\033[0m\n", i18n.T("cli.plan_label"), ev.Extra()["goal"], ev.Extra()["total_steps"])
 				case sdk.EventTypePlanStep:

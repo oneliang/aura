@@ -649,25 +649,16 @@ func TestProcessSSEEvent_PlanEvents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server, cleanup := setupTestServer(t)
-			defer cleanup()
+			adapter := NewSSEAdapter()
 
-			w := httptest.NewRecorder()
-			w.Body.Reset()
-			flusher := &mockFlusher{}
+			result := adapter.ConvertToSSE(tt.event)
 
-			result := server.processSSEEvent(w, flusher, tt.event, &strings.Builder{}, make(chan struct{}))
-
-			if !result {
-				t.Error("processSSEEvent() returned false, want true")
+			if result == nil {
+				t.Error("ConvertToSSE() returned nil, want event")
 			}
 
-			body := w.Body.String()
-			if !strings.Contains(body, "event: "+tt.wantType) {
-				t.Errorf("Expected SSE event type %q in body, got:\n%s", tt.wantType, body)
-			}
-			if !strings.Contains(body, "data:") {
-				t.Errorf("Expected SSE data field in body, got:\n%s", body)
+			if result.Name != tt.wantType {
+				t.Errorf("Expected SSE event type %q, got %q", tt.wantType, result.Name)
 			}
 		})
 	}

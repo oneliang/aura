@@ -16,6 +16,7 @@ import (
 	"github.com/oneliang/aura/session/pkg/subscription"
 	"github.com/oneliang/aura/shared/pkg/config"
 	"github.com/oneliang/aura/shared/pkg/logger"
+	"github.com/oneliang/aura/shared/pkg/user"
 )
 
 // setupTestServer creates a real server with temporary storage for integration testing.
@@ -50,6 +51,22 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 		Output: "stdout",
 	})
 
+	// Create user manager for authentication
+	usersCfg := &config.UsersConfig{
+		Default: "test-user",
+		Definitions: []config.UserConfig{
+			{
+				ID:       "test-user",
+				APIToken: "test-token-123",
+			},
+		},
+	}
+	userManager, err := user.NewManagerWithBaseDir(usersCfg, tmpDir)
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("Failed to create user manager: %v", err)
+	}
+
 	// Create a minimal config to prevent nil pointer dereference in getOrCreateRuntime
 	testConfig := &config.Config{
 		Intent: config.IntentConfig{
@@ -59,13 +76,16 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	}
 
 	server := &Server{
-		manager:   sessionManager,
-		store:     store,
-		port:      "8080",
-		config:    testConfig,
-		llmClient: llmClient,
-		logger:    log,
-		runtimes:  make(map[string]*sessionRuntime),
+		manager:       sessionManager,
+		store:         store,
+		port:          "8080",
+		config:        testConfig,
+		llmClient:     llmClient,
+		logger:        log,
+		userManager:   userManager,
+		runtimes:      make(map[string]*sessionRuntime),
+		orchestrators: make(map[string]*SessionOrchestrator),
+		sseProcessing: make(map[string]bool),
 	}
 
 	// Initialize handlers

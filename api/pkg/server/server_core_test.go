@@ -288,6 +288,10 @@ func TestServer_registerRoutes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
+			// Add auth token for protected routes
+			if tt.path == "/api/sessions" || tt.path == "/api/sessions/" {
+				req.Header.Set("Authorization", "Bearer test-token-123")
+			}
 			w := httptest.NewRecorder()
 
 			mux.ServeHTTP(w, req)
