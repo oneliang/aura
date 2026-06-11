@@ -23,7 +23,7 @@ llm:
   thinking:
     enabled: true              # Enable native thinking mode
     reasoning_effort: medium   # OpenAI: low/medium/high (non-reasoning models may error)
-    budget_tokens: 102400        # Max thinking tokens (Anthropic/Ollama)
+    budget_tokens: 10240        # Max thinking tokens (Anthropic/Ollama)
 
 # Memory Settings
 memory:
