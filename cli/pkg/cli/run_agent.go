@@ -342,7 +342,6 @@ func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.Comm
 
 	// Build runtime options
 	opts := []sdk.RuntimeOption{
-		sdk.WithAutoApprove(),
 		sdk.WithCommands(cmdProvider),
 		sdk.WithIntentService(intentSvc),
 		sdk.WithSessionStore(sessionStore),

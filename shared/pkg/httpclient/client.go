@@ -9,14 +9,18 @@ import (
 )
 
 // NewClient creates a new HTTP client with connection pooling.
+// The timeout parameter controls ResponseHeaderTimeout (TTFB): the max time to wait
+// for response headers after sending the request. http.Client.Timeout is intentionally
+// NOT set — it covers the entire request lifecycle including reading the response body,
+// which kills active streaming connections. Use idle timeout in the stream reader instead.
 // 调用方负责管理单例，这里只提供创建能力。
 func NewClient(timeout time.Duration) *http.Client {
 	return &http.Client{
-		Timeout: timeout,
 		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     90 * time.Second,
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   10,
+			IdleConnTimeout:       90 * time.Second,
+			ResponseHeaderTimeout: timeout,
 		},
 	}
 }

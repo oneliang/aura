@@ -70,8 +70,15 @@ func TestNewClientWithOptions(t *testing.T) {
 	if client.apiKey != "test-key" {
 		t.Errorf("apiKey = %v, want 'test-key'", client.apiKey)
 	}
-	if client.httpClient.Timeout != 60*time.Second {
-		t.Errorf("httpClient.Timeout = %v, want 60s", client.httpClient.Timeout)
+	if client.httpClient.Timeout != 0 {
+		t.Errorf("httpClient.Timeout = %v, want 0 (should use ResponseHeaderTimeout instead)", client.httpClient.Timeout)
+	}
+	if t2, ok := client.httpClient.Transport.(*http.Transport); ok {
+		if t2.ResponseHeaderTimeout != 60*time.Second {
+			t.Errorf("Transport.ResponseHeaderTimeout = %v, want 60s", t2.ResponseHeaderTimeout)
+		}
+	} else {
+		t.Error("Transport is not *http.Transport")
 	}
 }
 

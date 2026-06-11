@@ -40,9 +40,16 @@ func WithAPIKey(key string) Option {
 	return func(c *Client) { c.apiKey = key }
 }
 
-// WithTimeout sets the HTTP timeout.
+// WithTimeout sets the HTTP response header timeout (TTFB).
+// Note: this sets Transport.ResponseHeaderTimeout, NOT http.Client.Timeout,
+// because Client.Timeout covers the entire request lifecycle including reading
+// the response body, which kills active streaming connections.
 func WithTimeout(timeout time.Duration) Option {
-	return func(c *Client) { c.httpClient.Timeout = timeout }
+	return func(c *Client) {
+		if t, ok := c.httpClient.Transport.(*http.Transport); ok {
+			t.ResponseHeaderTimeout = timeout
+		}
+	}
 }
 
 // WithHTTPClient injects an external HTTP client.
@@ -236,7 +243,7 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 
 		// Use StreamSSEWithContext for context-aware streaming
 		// This prevents blocking on scanner.Scan() when waiting for network data
-		err := internal.StreamSSEWithContext(ctx, resp, func(data []byte) error {
+		err := internal.StreamSSEWithContext(ctx, resp, constants.DefaultStreamIdleTimeout, func(data []byte) error {
 			if string(data) == "[DONE]" {
 				select {
 				case ch <- llm.Chunk{Done: true}:

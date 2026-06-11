@@ -39,10 +39,15 @@ func WithModel(model string) Option {
 	}
 }
 
-// WithTimeout sets the HTTP timeout.
+// WithTimeout sets the HTTP response header timeout (TTFB).
+// Note: this sets Transport.ResponseHeaderTimeout, NOT http.Client.Timeout,
+// because Client.Timeout covers the entire request lifecycle including reading
+// the response body, which kills active streaming connections.
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *Client) {
-		c.httpClient.Timeout = timeout
+		if t, ok := c.httpClient.Transport.(*http.Transport); ok {
+			t.ResponseHeaderTimeout = timeout
+		}
 	}
 }
 
@@ -311,46 +316,77 @@ func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk
 		defer close(ch)
 		defer resp.Body.Close()
 
-		decoder := json.NewDecoder(resp.Body)
+		// Separate decode goroutine: json.Decoder.Decode() blocks on resp.Body.Read(),
+		// so we run it in its own goroutine and communicate via channel.
+		type decodeResult struct {
+			resp *ollamaResponse
+			err  error
+		}
+		decodeCh := make(chan decodeResult, 1)
+		go func() {
+			decoder := json.NewDecoder(resp.Body)
+			for {
+				var ollamaResp ollamaResponse
+				err := decoder.Decode(&ollamaResp)
+				decodeCh <- decodeResult{resp: &ollamaResp, err: err}
+				if err != nil || ollamaResp.Done {
+					return
+				}
+			}
+		}()
+
+		idleTimer := time.NewTimer(constants.DefaultStreamIdleTimeout)
+		defer idleTimer.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			default:
-			}
-
-			var ollamaResp ollamaResponse
-			if err := decoder.Decode(&ollamaResp); err != nil {
-				if err == io.EOF {
-					return
-				}
+			case <-idleTimer.C:
 				ch <- llm.Chunk{Done: true}
 				return
-			}
-
-			chunk := llm.Chunk{
-				Content: ollamaResp.Message.Content,
-				Done:    ollamaResp.Done,
-			}
-
-			// Extract tool call delta if present
-			if len(ollamaResp.Message.ToolCalls) > 0 {
-				tc := ollamaResp.Message.ToolCalls[0]
-				chunk.ToolCallDelta = &llm.ToolCall{
-					ID:         string(rune(tc.ID)),
-					Name:       tc.Function,
-					Parameters: tc.Arguments,
+			case result := <-decodeCh:
+				// Reset idle timer on each decoded chunk
+				if !idleTimer.Stop() {
+					select {
+					case <-idleTimer.C:
+					default:
+					}
 				}
-			}
+				idleTimer.Reset(constants.DefaultStreamIdleTimeout)
 
-			select {
-			case ch <- chunk:
-			case <-ctx.Done():
-				return
-			}
+				if result.err != nil {
+					if result.err == io.EOF {
+						return
+					}
+					ch <- llm.Chunk{Done: true}
+					return
+				}
 
-			if ollamaResp.Done {
-				return
+				chunk := llm.Chunk{
+					Content: result.resp.Message.Content,
+					Done:    result.resp.Done,
+				}
+
+				// Extract tool call delta if present
+				if len(result.resp.Message.ToolCalls) > 0 {
+					tc := result.resp.Message.ToolCalls[0]
+					chunk.ToolCallDelta = &llm.ToolCall{
+						ID:         string(rune(tc.ID)),
+						Name:       tc.Function,
+						Parameters: tc.Arguments,
+					}
+				}
+
+				select {
+				case ch <- chunk:
+				case <-ctx.Done():
+					return
+				}
+
+				if result.resp.Done {
+					return
+				}
 			}
 		}
 	}()

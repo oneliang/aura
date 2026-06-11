@@ -26,6 +26,11 @@ var (
 
 	DefaultLLMTimeout = 120 * time.Second
 
+	// StreamIdleTimeout is the max duration between consecutive streaming chunks.
+	// If no chunk arrives within this window, the stream is considered stalled.
+	// This is separate from total request timeout — active streams are never killed.
+	DefaultStreamIdleTimeout = 30 * time.Second
+
 	// Tools related
 	DefaultToolTimeout  = 30 * time.Second
 	DefaultShellTimeout = 30 * time.Second

@@ -189,6 +189,10 @@ Your output MUST follow this structure:
 %s
 
 %s
+
+%s
+
+%s
 `, cwd,
 		rolePrompt,
 		step1DetermineType, projectTypeTable,

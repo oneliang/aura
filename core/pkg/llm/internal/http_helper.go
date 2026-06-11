@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // HTTPError wraps an HTTP error with status code and response headers.
@@ -148,7 +149,10 @@ func StreamSSE(resp *http.Response, handler func(data []byte) error) error {
 // StreamSSEWithContext reads SSE stream from response and calls handler for each chunk.
 // Context-aware: returns ctx.Err() immediately when context is cancelled.
 // This prevents blocking on scanner.Scan() when waiting for network data.
-func StreamSSEWithContext(ctx context.Context, resp *http.Response, handler func(data []byte) error) error {
+// idleTimeout: max duration between consecutive chunks. If no chunk arrives within
+// this window, the stream is considered stalled and an error is returned.
+// Pass 0 to disable idle timeout (not recommended for production).
+func StreamSSEWithContext(ctx context.Context, resp *http.Response, idleTimeout time.Duration, handler func(data []byte) error) error {
 	defer resp.Body.Close()
 
 	// Create a channel to receive scanner lines
@@ -175,11 +179,22 @@ func StreamSSEWithContext(ctx context.Context, resp *http.Response, handler func
 		}
 	}()
 
-	// Process lines with context check
+	// Set up idle timeout timer
+	var idleTimer *time.Timer
+	var idleCh <-chan time.Time
+	if idleTimeout > 0 {
+		idleTimer = time.NewTimer(idleTimeout)
+		defer idleTimer.Stop()
+		idleCh = idleTimer.C
+	}
+
+	// Process lines with context and idle timeout checks
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-idleCh:
+			return fmt.Errorf("stream idle timeout: no data received for %v", idleTimeout)
 		case err, ok := <-errCh:
 			if ok && err != nil {
 				return err
@@ -188,6 +203,16 @@ func StreamSSEWithContext(ctx context.Context, resp *http.Response, handler func
 		case line, ok := <-lineCh:
 			if !ok {
 				return nil // channel closed, scanner done
+			}
+			// Reset idle timer on each chunk received
+			if idleTimer != nil {
+				if !idleTimer.Stop() {
+					select {
+					case <-idleTimer.C:
+					default:
+					}
+				}
+				idleTimer.Reset(idleTimeout)
 			}
 			// Skip empty lines
 			if line == "" {
