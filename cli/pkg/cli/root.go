@@ -273,6 +273,7 @@ var toolsCmd = &cobra.Command{
 		fmt.Println("  datetime    - Get date and time information")
 		fmt.Println("  calculator  - Perform calculations")
 		fmt.Println("  text        - Text manipulation")
+		fmt.Println("  ask_user_question - Proactively ask user questions for clarification")
 		fmt.Println("\nKnowledge:")
 		fmt.Println("  knowledge_search - Search personal knowledge base")
 		fmt.Println("  knowledge_import - Import documents to knowledge base")

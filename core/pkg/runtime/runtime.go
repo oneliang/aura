@@ -1110,18 +1110,32 @@ func (r *AgentRuntime) requestInteraction(ctx context.Context, req events.Intera
 	r.interactionMu.Unlock()
 
 	// 发送交互请求事件到OUT
+	// Map interaction type to confirmType for TUI compatibility
+	confirmType := ""
+	switch req.Type {
+	case events.InteractionTypeToolConfirmation:
+		confirmType = "sensitive_tool"
+	case events.InteractionTypePlanReview:
+		confirmType = "plan_review"
+	case events.InteractionTypeAskUserQuestion:
+		confirmType = "question"
+	case events.InteractionTypeRollbackConfirm:
+		confirmType = "rollback"
+	}
+
 	extra := map[string]any{
-		"tool_name":   req.ToolName,
-		"tool_params": req.ToolParams,
-		"plan_goal":   req.PlanGoal,
-		"plan_steps":  req.PlanSteps,
-		"plan_files":  req.PlanFiles,
-		"question":    req.Question,
-		"question_type": req.QuestionType,
-		"options":     req.Options,
-		"default_answer": req.DefaultAnswer,
-		"rollback_reason": req.RollbackReason,
-		"rollback_target": req.RollbackTarget,
+		"confirmType":   confirmType,
+		"toolName":      req.ToolName,
+		"toolParams":    req.ToolParams,
+		"planGoal":      req.PlanGoal,
+		"planSteps":     req.PlanSteps,
+		"planFiles":     req.PlanFiles,
+		"question":      req.Question,
+		"questionType":  req.QuestionType,
+		"options":       req.Options,
+		"defaultAnswer": req.DefaultAnswer,
+		"rollbackReason": req.RollbackReason,
+		"rollbackTarget": req.RollbackTarget,
 	}
 
 	event := events.NewInteractionEvent(

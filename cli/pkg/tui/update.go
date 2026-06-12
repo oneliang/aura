@@ -520,7 +520,7 @@ func (m Model) handleMultiChoiceQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea
 				answers = append(answers, req.Options[idx].Value)
 			}
 		}
-		m.sendInteractionResponse(true, map[string]any{"answers": answers})
+		m.sendInteractionResponse(true, map[string]any{"selections": answers})
 		m.confirmState.Waiting = false
 		m.confirmState.Request = nil
 		m.confirmState.Selected = 0

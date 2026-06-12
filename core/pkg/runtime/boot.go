@@ -29,6 +29,7 @@ import (
 	"github.com/oneliang/aura/skill/pkg/loader"
 	tools "github.com/oneliang/aura/tools/pkg"
 	"github.com/oneliang/aura/tools/pkg/tasktool"
+	"github.com/oneliang/aura/tools/pkg/utility"
 
 	"github.com/oneliang/aura/habit/pkg/manager"
 
@@ -387,6 +388,14 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 		r.toolNamesMu.Unlock()
 		r.logger.Debug("skill_activate tool registered", "module", "runtime")
 	}
+
+	// Register ask_user_question tool for proactive user interaction
+	askUserTool := utility.NewAskUserQuestionTool(r.AskUserQuestionHandler())
+	r.agent.AddTool(askUserTool)
+	r.toolNamesMu.Lock()
+	r.toolNames = append(r.toolNames, askUserTool.Name())
+	r.toolNamesMu.Unlock()
+	r.logger.Debug("ask_user_question tool registered", "module", "runtime")
 
 	r.toolNames = factory.GetToolNames(r.agent)
 

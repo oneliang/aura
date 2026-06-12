@@ -25,10 +25,11 @@ const (
 	ToolWebSearch = "web_search"
 
 	// Utility tools
-	ToolDateTime   = "datetime"
-	ToolText       = "text"
-	ToolCalculator = "calculator"
-	ToolLocation   = "location"
+	ToolDateTime        = "datetime"
+	ToolText            = "text"
+	ToolCalculator      = "calculator"
+	ToolLocation        = "location"
+	ToolAskUserQuestion = "ask_user_question"
 
 	// Task tracking
 	ToolTask = "task"
