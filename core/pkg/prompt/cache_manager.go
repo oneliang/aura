@@ -12,10 +12,11 @@ type CacheLayer int
 
 const (
 	LayerStaticSystem  CacheLayer = 0 // Immutable base system prompt
-	LayerTools         CacheLayer = 1 // Tool definitions
-	LayerSkills        CacheLayer = 2 // Skills metadata
-	LayerAgents        CacheLayer = 3 // Agents metadata
-	LayerProjectAura   CacheLayer = 4 // Project-level AURA.md
+	LayerProfile       CacheLayer = 1 // User profile markdown
+	LayerTools         CacheLayer = 2 // Tool definitions
+	LayerSkills        CacheLayer = 3 // Skills metadata
+	LayerAgents        CacheLayer = 4 // Agents metadata
+	LayerProjectAura   CacheLayer = 5 // Project-level AURA.md
 )
 
 // PromptCacheManager manages cached prompt layers for provider-agnostic caching.
@@ -23,10 +24,11 @@ type PromptCacheManager struct {
 	mu sync.RWMutex
 
 	// Cached layers (immutable after initialization)
-	staticSystem    string
-	toolsBlock      string
-	skillsBlock     string
-	agentsBlock     string
+	staticSystem     string
+	profileBlock     string
+	toolsBlock       string
+	skillsBlock      string
+	agentsBlock      string
 	projectAuraBlock string
 
 	// Configuration
@@ -43,6 +45,13 @@ func (m *PromptCacheManager) SetStaticSystem(prompt string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.staticSystem = prompt
+}
+
+// SetProfileBlock sets the user profile markdown block.
+func (m *PromptCacheManager) SetProfileBlock(profile string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.profileBlock = profile
 }
 
 // SetToolsBlock sets the cached tool definitions block.
@@ -93,7 +102,16 @@ func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 		})
 	}
 
-	// Layer 1: Tools block
+	// Layer 1: User profile markdown
+	if m.profileBlock != "" {
+		blocks = append(blocks, llm.SystemBlock{
+			Type:         "text",
+			Text:         m.profileBlock,
+			CacheControl: &llm.CacheControl{Type: "ephemeral"},
+		})
+	}
+
+	// Layer 2: Tools block
 	if m.toolsBlock != "" {
 		blocks = append(blocks, llm.SystemBlock{
 			Type:         "text",
@@ -102,7 +120,7 @@ func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 		})
 	}
 
-	// Layer 2: Skills metadata
+	// Layer 3: Skills metadata
 	if m.skillsBlock != "" {
 		blocks = append(blocks, llm.SystemBlock{
 			Type:         "text",
@@ -111,7 +129,7 @@ func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 		})
 	}
 
-	// Layer 3: Agents metadata
+	// Layer 4: Agents metadata
 	if m.agentsBlock != "" {
 		blocks = append(blocks, llm.SystemBlock{
 			Type:         "text",
@@ -120,7 +138,7 @@ func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 		})
 	}
 
-	// Layer 4: Project-level AURA.md
+	// Layer 5: Project-level AURA.md
 	if m.projectAuraBlock != "" {
 		blocks = append(blocks, llm.SystemBlock{
 			Type:         "text",
@@ -145,6 +163,13 @@ func (m *PromptCacheManager) InvalidateTools() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.toolsBlock = ""
+}
+
+// InvalidateProfile invalidates the profile cache.
+func (m *PromptCacheManager) InvalidateProfile() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.profileBlock = ""
 }
 
 // InvalidateSkills invalidates the skills cache.

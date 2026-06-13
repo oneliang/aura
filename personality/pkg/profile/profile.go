@@ -4,127 +4,84 @@ package profile
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
-	"gopkg.in/yaml.v3"
 )
 
-// Profile represents a personal profile.
+// Profile represents a personal profile stored as markdown.
 type Profile struct {
-	BasicInfo   BasicInfo    `yaml:"basic"`
-	Background  string       `yaml:"background"`
-	Skills      []Skill      `yaml:"skills"`
-	Experiences []Experience `yaml:"experiences"`
-	Preferences []Preference `yaml:"preferences"`
-	Style       Style        `yaml:"style"`
+	Content string // Raw markdown content
 }
 
-// BasicInfo contains basic personal information.
-type BasicInfo struct {
-	Name       string `yaml:"name"`
-	Location   string `yaml:"location,omitempty"`
-	Occupation string `yaml:"occupation,omitempty"`
-}
+// defaultTemplate is the default profile markdown template.
+const defaultTemplate = `# 关于我
 
-// Skill represents a skill.
-type Skill struct {
-	Name     string `yaml:"name"`
-	Level    string `yaml:"level"` // beginner, intermediate, expert
-	Category string `yaml:"category,omitempty"`
-}
+- 名字：
+- 职业：
+- 位置：
 
-// Experience represents a work or life experience.
-type Experience struct {
-	Title       string `yaml:"title"`
-	Description string `yaml:"description"`
-	StartYear   int    `yaml:"start_year,omitempty"`
-	EndYear     int    `yaml:"end_year,omitempty"` // 0 means current
-}
+# 背景
 
-// Preference represents a preference.
-type Preference struct {
-	Category string `yaml:"category"`
-	Value    string `yaml:"value"`
-}
+简要描述你的背景和经验。
 
-// Style represents communication style.
-type Style struct {
-	Tone       string  `yaml:"tone"`       // formal, casual, technical
-	Vocabulary string  `yaml:"vocabulary"` // simple, technical
-	Humor      float64 `yaml:"humor"`      // 0-1
-	Verbosity  string  `yaml:"verbosity"`  // concise, detailed
-}
+# 技能
 
-// DefaultProfile returns a default profile.
+- 技能1
+- 技能2
+
+# 偏好
+
+- 回复语言：中文
+- 代码风格：简洁
+`
+
+// DefaultProfile returns a default profile with a markdown template.
 func DefaultProfile() *Profile {
-	return &Profile{
-		BasicInfo: BasicInfo{
-			Name: "User",
-		},
-		Style: Style{
-			Tone:       "casual",
-			Vocabulary: "simple",
-			Humor:      0.3,
-			Verbosity:  "concise",
-		},
-	}
+	return &Profile{Content: defaultTemplate}
 }
 
-// Load loads a profile from a YAML file.
+// Load loads a profile from a markdown file.
 func Load(path string) (*Profile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-
-	var profile Profile
-	if err := yaml.Unmarshal(data, &profile); err != nil {
-		return nil, err
-	}
-
-	return &profile, nil
+	return &Profile{Content: string(data)}, nil
 }
 
-// Save saves the profile to a YAML file.
+// Save saves the profile to a markdown file.
 func (p *Profile) Save(path string) error {
 	dir := filepath.Dir(path)
 	if err := ffp.EnsureDir(dir); err != nil {
 		return err
 	}
-
-	data, err := yaml.Marshal(p)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, []byte(p.Content), 0644)
 }
 
-// ToSystemPrompt converts the profile to a system prompt.
+// ToSystemPrompt converts the profile to a system prompt fragment.
 func (p *Profile) ToSystemPrompt() string {
-	prompt := "You are a personal assistant with the following characteristics:\n\n"
+	return "User Profile:\n\n" + p.Content
+}
 
-	if p.BasicInfo.Name != "" {
-		prompt += "User's name: " + p.BasicInfo.Name + "\n"
-	}
-	if p.BasicInfo.Occupation != "" {
-		prompt += "User's occupation: " + p.BasicInfo.Occupation + "\n"
-	}
-	if p.Background != "" {
-		prompt += "Background: " + p.Background + "\n"
-	}
-
-	if len(p.Skills) > 0 {
-		prompt += "\nSkills:\n"
-		for _, skill := range p.Skills {
-			prompt += "- " + skill.Name + " (" + skill.Level + ")\n"
+// DisplayName extracts a display name from the profile markdown.
+// It looks for the first non-empty value after "名字" or "Name" in the content.
+// Falls back to "Aura" if no name is found.
+func (p *Profile) DisplayName() string {
+	for _, line := range strings.Split(p.Content, "\n") {
+		line = strings.TrimSpace(line)
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "名字") || strings.Contains(lower, "name") {
+			// Try to extract value after colon (supports both ： and :)
+			for _, sep := range []string{"：", ":"} {
+				if idx := strings.Index(line, sep); idx >= 0 {
+					val := strings.TrimSpace(line[idx+len(sep):])
+					if val != "" {
+						return val
+					}
+				}
+			}
 		}
 	}
-
-	prompt += "\nCommunication style:\n"
-	prompt += "- Tone: " + p.Style.Tone + "\n"
-	prompt += "- Vocabulary: " + p.Style.Vocabulary + "\n"
-	prompt += "- Verbosity: " + p.Style.Verbosity + "\n"
-
-	return prompt
+	return "Aura"
 }

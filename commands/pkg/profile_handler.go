@@ -37,38 +37,8 @@ func (h *ProfileHandler) ExecuteCommand(ctx context.Context, cmd string, params 
 
 // showProfile shows the current profile.
 func (h *ProfileHandler) showProfile() (string, error) {
-	if h.profile == nil {
+	if h.profile == nil || h.profile.Content == "" {
 		return "No profile loaded", nil
 	}
-
-	result := "=== Personal Profile ===\n"
-	result += fmt.Sprintf("Name:       %s\n", h.profile.BasicInfo.Name)
-	if h.profile.BasicInfo.Occupation != "" {
-		result += fmt.Sprintf("Occupation: %s\n", h.profile.BasicInfo.Occupation)
-	}
-	if h.profile.BasicInfo.Location != "" {
-		result += fmt.Sprintf("Location:   %s\n", h.profile.BasicInfo.Location)
-	}
-	if h.profile.Background != "" {
-		result += fmt.Sprintf("Background: %s\n", h.profile.Background)
-	}
-
-	if len(h.profile.Skills) > 0 {
-		result += "\nSkills:\n"
-		for _, s := range h.profile.Skills {
-			cat := ""
-			if s.Category != "" {
-				cat = " [" + s.Category + "]"
-			}
-			result += fmt.Sprintf("  - %s (%s)%s\n", s.Name, s.Level, cat)
-		}
-	}
-
-	result += "\nCommunication Style:\n"
-	result += fmt.Sprintf("  Tone:       %s\n", h.profile.Style.Tone)
-	result += fmt.Sprintf("  Vocabulary: %s\n", h.profile.Style.Vocabulary)
-	result += fmt.Sprintf("  Verbosity:  %s\n", h.profile.Style.Verbosity)
-	result += fmt.Sprintf("  Humor:      %.1f\n", h.profile.Style.Humor)
-
-	return result, nil
+	return h.profile.Content, nil
 }

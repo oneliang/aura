@@ -42,8 +42,8 @@ func TestDefaultProfileFile(t *testing.T) {
 	if DefaultProfileFile == "" {
 		t.Error("DefaultProfileFile should not be empty")
 	}
-	if !strings.HasSuffix(DefaultProfileFile, ".yaml") {
-		t.Errorf("DefaultProfileFile = %q, should end with '.yaml'", DefaultProfileFile)
+	if !strings.HasSuffix(DefaultProfileFile, ".md") {
+		t.Errorf("DefaultProfileFile = %q, should end with '.md'", DefaultProfileFile)
 	}
 }
 

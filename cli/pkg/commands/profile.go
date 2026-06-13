@@ -4,9 +4,7 @@ package commands
 import (
 	"fmt"
 	"os"
-	"strings"
 
-	"github.com/oneliang/aura/personality/pkg/importer"
 	"github.com/oneliang/aura/personality/pkg/profile"
 	"github.com/oneliang/aura/shared/pkg/constants"
 	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
@@ -27,7 +25,7 @@ var profileShowCmd = &cobra.Command{
 
 var profileInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Create a default profile at ~/.aura/profile.yaml",
+	Short: "Create a default profile at ~/.aura/profile.md",
 	Run:   runProfileInit,
 }
 
@@ -92,18 +90,18 @@ func runProfileInit(cmd *cobra.Command, args []string) {
 func runProfileImport(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	// Profile import requires file I/O and merging logic, handle at CLI layer
-	imp := importer.New()
-
-	extracted, err := imp.ImportFile(path)
+	// Read the source file
+	data, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Merge with existing profile
+	// Load existing profile or use default
 	existing := loadOrDefaultProfile()
-	mergeProfile(existing, extracted)
+
+	// Append imported content with separator
+	existing.Content += "\n---\n\n" + string(data)
 
 	if err := existing.Save(profilePath()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving profile: %v\n", err)
@@ -111,33 +109,4 @@ func runProfileImport(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("Profile updated from %s\n", path)
-	if existing.BasicInfo.Name != "" && existing.BasicInfo.Name != "User" {
-		fmt.Printf("  Name: %s\n", existing.BasicInfo.Name)
-	}
-	if len(extracted.Skills) > 0 {
-		names := make([]string, 0, len(extracted.Skills))
-		for _, s := range extracted.Skills {
-			names = append(names, s.Name)
-		}
-		fmt.Printf("  Skills added: %s\n", strings.Join(names, ", "))
-	}
-}
-
-// mergeProfile merges src into dst (non-destructive).
-func mergeProfile(dst, src *profile.Profile) {
-	if src.BasicInfo.Name != "" && src.BasicInfo.Name != "User" {
-		dst.BasicInfo.Name = src.BasicInfo.Name
-	}
-	if src.BasicInfo.Occupation != "" {
-		dst.BasicInfo.Occupation = src.BasicInfo.Occupation
-	}
-	if src.BasicInfo.Location != "" {
-		dst.BasicInfo.Location = src.BasicInfo.Location
-	}
-	if src.Background != "" {
-		dst.Background = src.Background
-	}
-	dst.Skills = append(dst.Skills, src.Skills...)
-	dst.Experiences = append(dst.Experiences, src.Experiences...)
-	dst.Preferences = append(dst.Preferences, src.Preferences...)
 }

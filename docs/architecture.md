@@ -2031,7 +2031,7 @@ Phase 9: initPostSetup()
 | 文件 | 路径 | 用途 |
 |------|------|------|
 | `config.yaml` | `~/.aura/config.yaml` | 主配置（LLM、工具、权限、Thinking、Prompt Cache） |
-| `profile.yaml` | `~/.aura/profile.yaml` | 用户档案和风格偏好 |
+| `profile.md` | `~/.aura/profile.md` | 用户档案（Markdown 格式） |
 | `roles/*.md` | `~/.aura/roles/{role}.md` | 会话角色定义 |
 | `skills/*/SKILL.md` | `~/.aura/skills/` | Skill 定义（Prompt 模板） |
 | `agents/*/AGENT.md` | `~/.aura/agents/` | Agent 定义（系统提示模板、权限继承） |

@@ -730,7 +730,7 @@ func (r *AgentRuntime) GetSystemPrompt() string {
 	if r.cacheManager != nil && r.cacheManager.Enabled() {
 		result += "\n\n=== Cache Status ===\n\n"
 		result += "Prompt caching: ENABLED\n"
-		result += fmt.Sprintf("Layers: StaticSystem(0), Tools(1), Skills(2), Agents(3), ProjectAura(4)\n")
+		result += fmt.Sprintf("Layers: StaticSystem(0), Profile(1), Tools(2), Skills(3), Agents(4), ProjectAura(5)\n")
 	} else {
 		result += "\n\n=== Cache Status ===\n\n"
 		result += "Prompt caching: DISABLED\n"

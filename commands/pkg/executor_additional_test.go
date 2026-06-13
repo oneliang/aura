@@ -206,9 +206,7 @@ func TestCommandProvider_Execute_SessionCommands(t *testing.T) {
 // TestCommandProvider_Execute_ProfileCommands tests Execute with profile commands.
 func TestCommandProvider_Execute_ProfileCommands(t *testing.T) {
 	p := &profile.Profile{
-		BasicInfo: profile.BasicInfo{
-			Name: "Test User",
-		},
+		Content: "# About Me\n\n- Name: Test User\n",
 	}
 	deps := CommandProviderDeps{
 		Profile: p,
@@ -376,9 +374,7 @@ func TestCommandProvider_Execute_SessionCommandRouting(t *testing.T) {
 // TestCommandProvider_Execute_ProfileCommandRouting tests profile command routing.
 func TestCommandProvider_Execute_ProfileCommandRouting(t *testing.T) {
 	p := &profile.Profile{
-		BasicInfo: profile.BasicInfo{
-			Name: "Test User",
-		},
+		Content: "# About Me\n\n- Name: Test User\n",
 	}
 	deps := CommandProviderDeps{
 		Profile: p,

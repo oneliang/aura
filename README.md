@@ -750,7 +750,7 @@ debug:
 
 ## 个人档案
 
-个人档案存储于 `~/.aura/profile.yaml`，Aura 会根据档案调整回答风格。
+个人档案存储于 `~/.aura/profile.md`，使用 Markdown 格式，方便手动编辑。Profile 内容会作为独立的 system block 注入对话，不影响 base prompt 的缓存。
 
 ### 管理命令
 
@@ -761,51 +761,33 @@ debug:
 # 创建默认档案模板
 ./bin/aura profile init
 
-# 从文件导入档案信息（如从简历中提取技能、经历等）
+# 从文件导入档案信息（内容追加到 profile.md）
 ./bin/aura profile import /path/to/resume.md
 ```
 
-### 配置项
+### 配置示例
 
-```yaml
-basic:
-  name: 你的名字
-  occupation: 你的职业
-  location: 你的位置
-  role: 你的角色
-  background: 个人背景描述
+```markdown
+# 关于我
 
-style:
-  tone: casual        # formal（正式）, casual（随意）, technical（技术）
-  vocabulary: simple  # simple（简单）, technical（专业）
-  humor: 0.3          # 0-1，越高越幽默
-  verbosity: concise  # concise（简洁）, detailed（详细）
+- 名字：你的名字
+- 职业：你的职业
+- 位置：你的位置
 
-skills:
-  - name: Go
-    level: expert
-    category: Programming
-  - name: Python
-    level: intermediate
-    category: Programming
+# 背景
 
-experiences:
-  - title: 工作经历
-    description: 详细描述
+个人背景描述。
 
-preferences:
-  - name: 偏好项
-    value: 偏好值
+# 技能
+
+- Go (expert)
+- Python (intermediate)
+
+# 偏好
+
+- 回复语言：中文
+- 代码风格：简洁
 ```
-
-### 自适应学习
-
-Aura 会在对话中自动学习你的偏好：
-- 说 "haha"、"funny"、"lol" → 增加幽默度
-- 说 "more detail"、"elaborate" → 增加详细度
-- 说 "brief"、"concise"、"too long" → 减少详细度
-
-风格变化会自动保存到档案中。
 
 ---
 

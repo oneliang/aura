@@ -6,8 +6,6 @@ import (
 
 	"github.com/oneliang/aura/personality/pkg/profile"
 	"github.com/oneliang/aura/shared/pkg/config"
-	"github.com/oneliang/aura/shared/pkg/constants"
-	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
 )
 
 // PromptBuilder builds system prompts for agents.
@@ -135,22 +133,13 @@ func (b *PromptBuilder) BuildWithProfile(profilePath string) string {
 	if err != nil {
 		return b.BuildBase()
 	}
-	return p.ToSystemPrompt()
+	return b.Combine(b.BuildBase(), p.ToSystemPrompt())
 }
 
 // BuildWithConfig builds a system prompt based on configuration.
-// This includes profile, SSH server notes, and other config-based prompts.
+// Profile is handled separately as a cache layer — this only returns base prompt + SSH notes.
 func (b *PromptBuilder) BuildWithConfig(cfg *config.Config) string {
-	profilePath := ffp.MustAuraHomePath(constants.DefaultProfileFile)
-
 	base := b.BuildBase()
-
-	// If profile exists, use it as base
-	if p, err := profile.Load(profilePath); err == nil {
-		base = p.ToSystemPrompt()
-		// Add image recognition instructions
-		base += "\n\nImage Recognition:\n- When the user asks to identify, analyze, or describe an image, use the 'file_read' tool to read the image file\n- Image files include: .jpg, .jpeg, .png, .gif, .webp, .bmp, .svg\n- The file_read tool will return the image content as a dataURI format\n- After receiving the dataURI, you can analyze the image and provide a description"
-	}
 
 	// Add SSH server notes if configured
 	if len(cfg.SSH.Servers) > 0 {

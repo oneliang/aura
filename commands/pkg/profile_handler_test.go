@@ -71,20 +71,21 @@ func TestProfileHandler_showProfile(t *testing.T) {
 		}
 	})
 
+	t.Run("empty content", func(t *testing.T) {
+		handler := &ProfileHandler{profile: &profile.Profile{Content: ""}}
+
+		result, err := handler.showProfile()
+		if err != nil {
+			t.Fatalf("showProfile() error = %v", err)
+		}
+		if !strings.Contains(result, "No profile loaded") {
+			t.Error("Result should contain 'No profile loaded' for empty content")
+		}
+	})
+
 	t.Run("with profile", func(t *testing.T) {
 		prof := &profile.Profile{
-			BasicInfo: profile.BasicInfo{
-				Name:       "Test User",
-				Occupation: "Developer",
-				Location:   "Test City",
-			},
-			Background: "Test background",
-			Style: profile.Style{
-				Tone:       "casual",
-				Vocabulary: "simple",
-				Verbosity:  "concise",
-				Humor:      0.5,
-			},
+			Content: "# About Me\n\n- Name: Test User\n- Occupation: Developer\n",
 		}
 		handler := &ProfileHandler{profile: prof}
 
@@ -101,21 +102,13 @@ func TestProfileHandler_showProfile(t *testing.T) {
 		if !strings.Contains(result, "Developer") {
 			t.Error("Result should contain occupation")
 		}
-		if !strings.Contains(result, "casual") {
-			t.Error("Result should contain tone")
-		}
 	})
 }
 
 // TestProfileHandler_ExecuteCommand_ShowProfile tests show command.
 func TestProfileHandler_ExecuteCommand_ShowProfile(t *testing.T) {
 	prof := &profile.Profile{
-		BasicInfo: profile.BasicInfo{
-			Name: "Test User",
-		},
-		Style: profile.Style{
-			Tone: "casual",
-		},
+		Content: "# About Me\n\n- Name: Test User\n",
 	}
 	handler := NewProfileHandler(prof)
 	ctx := context.Background()
@@ -132,9 +125,7 @@ func TestProfileHandler_ExecuteCommand_ShowProfile(t *testing.T) {
 // TestProfileHandler_ExecuteCommand_UpdateProfile tests update command.
 func TestProfileHandler_ExecuteCommand_UpdateProfile(t *testing.T) {
 	prof := &profile.Profile{
-		BasicInfo: profile.BasicInfo{
-			Name: "Test User",
-		},
+		Content: "# About Me\n\n- Name: Test User\n",
 	}
 	handler := NewProfileHandler(prof)
 	ctx := context.Background()

@@ -186,7 +186,7 @@ func runAgent(cmd *cobra.Command, args []string) {
 	sl := tui.LoadSessionLearner()
 	logger.RegistryDefault().Debug("[DIAG] runAgent: session learner loaded", "elapsed", time.Since(startTime))
 	if !useCLI {
-		runTUIMode(runCtx, rt, sl, sessionMgr, currentSessionID, ctx, prof.BasicInfo.Name, mcpManager, sharedEventCh)
+		runTUIMode(runCtx, rt, sl, sessionMgr, currentSessionID, ctx, prof.DisplayName(), mcpManager, sharedEventCh)
 		return
 	}
 

@@ -5,7 +5,7 @@ package constants
 const (
 	DefaultHomeDir     = ".aura"
 	DefaultConfigFile  = "config.yaml"
-	DefaultProfileFile = "profile.yaml"
+	DefaultProfileFile = "profile.md"
 	DefaultUsersFile   = "users.yaml"
 )
 
