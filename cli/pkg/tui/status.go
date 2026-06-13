@@ -74,6 +74,10 @@ func (w *StatusBarWidget) buildConfirmLine(cs *ConfirmState) string {
 		case ConfirmationPlanReview:
 			return w.buildPlanReviewLine(cs)
 		case ConfirmationQuestion:
+			// Don't render in status bar if popup is showing (popup handles rendering)
+			if w.model.questionPopup != nil && w.model.questionPopup.IsShowing() {
+				return ""
+			}
 			return w.buildQuestionLine(cs)
 		default:
 			return w.buildSensitiveToolLine(cs)

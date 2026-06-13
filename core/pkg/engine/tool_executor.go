@@ -385,9 +385,15 @@ func (e *Engine) createToolExecutionContext(ctx context.Context, tool tools.Tool
 		timeout = tp.Timeout()
 	}
 
-	// Create context with timeout from engine background context
-	// This gives each tool a fresh timeout, independent of previous operations
-	execCtx, execCancel := context.WithTimeout(e.ctx, timeout)
+	// Create context for tool execution.
+	// timeout <= 0 means no timeout (e.g., interactive tools waiting for user input).
+	var execCtx context.Context
+	var execCancel context.CancelFunc
+	if timeout > 0 {
+		execCtx, execCancel = context.WithTimeout(e.ctx, timeout)
+	} else {
+		execCtx, execCancel = context.WithCancel(e.ctx)
+	}
 
 	// Also monitor request context for user cancellation
 	// If request context is cancelled, we should cancel tool execution too

@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/events"
+	"github.com/oneliang/aura/shared/pkg/i18n"
 	tools "github.com/oneliang/aura/tools/pkg"
 )
 
@@ -31,44 +33,51 @@ func (t *AskUserQuestionTool) Name() string {
 
 // Description returns the tool description.
 func (t *AskUserQuestionTool) Description() string {
-	return `主动向用户提问以澄清需求或获取决策。
+	return `Proactively ask the user questions to clarify requirements or get decisions.
 
-使用场景：
-- 需求不明确或有多种理解
-- 存在多种可行方案需要用户选择
-- 涉及关键决策点（架构、技术选型、用户体验）
-- 你不确定用户的真实意图
+When to use:
+- Requirements are unclear or have multiple interpretations
+- Multiple viable solutions exist and user needs to choose
+- Key decision points (architecture, tech stack, UX)
+- You are uncertain about the user's true intent
 
-不要使用：
-- 任务已经明确且你理解正确
-- 可以自己做出合理判断的细节
-- 是之前讨论过的延续
-- 琐碎的实现细节
+When NOT to use:
+- Task is clear and you understand it correctly
+- Details where you can make a reasonable judgment
+- Continuation of a previous discussion
+- Trivial implementation details
 
-参数说明：
-- question: 问题文本（必填）
-- type: 问题类型 - "text"（文本输入）、"choice"（单选）、"multi_choice"（多选）
-- options: 选项列表，仅 choice/multi_choice 类型使用，每个选项是字符串
+Parameters:
+- question: The question text (required)
+- type: Question type - "text" (free input), "choice" (single select), "multi_choice" (multi select)
+- options: Option list, only for choice/multi_choice types, each option is a string
 
-示例 1（选择题）：
+IMPORTANT: NEVER include "Other", "其它", "其他" in your options list. An "Other" option with custom text input is AUTOMATICALLY appended by the system.
+
+Example 1 (single choice):
 {
-  "question": "你想优化哪个方面的性能？",
+  "question": "Which aspect of performance do you want to optimize?",
   "type": "choice",
-  "options": ["页面加载速度", "数据库查询", "API 延迟"]
+  "options": ["Page load speed", "Database queries", "API latency"]
 }
 
-示例 2（文本输入）：
+Example 2 (text input):
 {
-  "question": "请描述一下你期望的用户体验流程",
+  "question": "Please describe the user experience flow you expect",
   "type": "text"
 }
 
-示例 3（多选题）：
+Example 3 (multi choice):
 {
-  "question": "你希望支持哪些数据库？",
+  "question": "Which databases do you want to support?",
   "type": "multi_choice",
   "options": ["PostgreSQL", "MySQL", "MongoDB", "Redis"]
 }`
+}
+
+// Timeout returns 0 to indicate no timeout — this tool waits for user input indefinitely.
+func (t *AskUserQuestionTool) Timeout() time.Duration {
+	return 0
 }
 
 // Execute asks the user a question and returns their response.
@@ -117,6 +126,15 @@ func (t *AskUserQuestionTool) Execute(ctx context.Context, params map[string]any
 		}, nil
 	}
 
+	// Always append "Other" option for choice/multi_choice, allowing custom text input.
+	// The LLM is instructed NOT to include "Other" — this is Aura-controlled.
+	if questionType == "choice" || questionType == "multi_choice" {
+		options = append(options, events.QuestionOption{
+			Label: i18n.T("tui.question.other"),
+			Value: constants.OtherOptionValue,
+		})
+	}
+
 	// Call the ask function
 	if t.askFn == nil {
 		return &tools.ToolResult{
@@ -137,7 +155,7 @@ func (t *AskUserQuestionTool) Execute(ctx context.Context, params map[string]any
 	if response.Cancelled {
 		return &tools.ToolResult{
 			Status:  tools.ToolStatusSuccess,
-			Content: "用户取消了回答",
+			Content: i18n.T("tool.ask_user.cancelled"),
 		}, nil
 	}
 
@@ -148,11 +166,11 @@ func (t *AskUserQuestionTool) Execute(ctx context.Context, params map[string]any
 	} else if response.Answer != "" {
 		answer = response.Answer
 	} else {
-		answer = "(无回答)"
+		answer = i18n.T("tool.ask_user.no_answer")
 	}
 
 	return &tools.ToolResult{
 		Status:  tools.ToolStatusSuccess,
-		Content: fmt.Sprintf("用户回答: %s", answer),
+		Content: fmt.Sprintf(i18n.T("tool.ask_user.answer"), answer),
 	}, nil
 }

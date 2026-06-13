@@ -344,6 +344,10 @@ func (m Model) View() tea.View {
 		}
 		result = renderOverlayAt(result, popupContent, popupTop, width, m.styles)
 	}
+	if m.questionPopup != nil && m.questionPopup.IsShowing() {
+		popupContent := m.questionPopup.Render(m.styles)
+		result = renderOverlay(result, popupContent, width, height, m.styles)
+	}
 
 	v := tea.NewView(result)
 	v.AltScreen = true

@@ -31,6 +31,10 @@ const (
 	ToolLocation        = "location"
 	ToolAskUserQuestion = "ask_user_question"
 
+	// OtherOptionValue is a sentinel value for the auto-appended "Other" option
+	// in ask_user_question choice/multi_choice types, allowing custom text input.
+	OtherOptionValue = "__other__"
+
 	// Task tracking
 	ToolTask = "task"
 )

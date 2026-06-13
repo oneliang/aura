@@ -104,6 +104,7 @@ type Model struct {
 	// Popup states
 	sessionPopup      SessionPopupState
 	subscriptionPopup SubscriptionPopupState
+	questionPopup     *QuestionPopup
 	currentSession    *SessionItem
 	sessionItems      []SessionItem
 
@@ -223,6 +224,7 @@ func NewWithRuntime(ctx context.Context, rt *sdk.Runtime, config Config, session
 		commandProvider:     commandProvider,
 		sessionPopup:        NewSessionPopup(),
 		subscriptionPopup:   NewSubscriptionPopup(),
+		questionPopup:       NewQuestionPopup(80, 20),
 		userID:              user.GetDefaultUserID(), // Load current user ID from users.yaml
 		mcpManager:          mcpManager,
 		viewport:            viewport.New(viewport.WithWidth(0), viewport.WithHeight(0)),

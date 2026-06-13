@@ -179,6 +179,37 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// 2.5 Handle question popup
+	if m.questionPopup != nil && m.questionPopup.IsShowing() {
+		// Handle key press FIRST — intercept Enter/Esc before textarea processes them
+		submitted, answer, selections, cancelled := m.questionPopup.HandleKey(msg)
+		if submitted {
+			// Send response to runtime
+			response := make(map[string]any)
+			if answer != "" {
+				response["answer"] = answer
+			}
+			if len(selections) > 0 {
+				response["selections"] = selections
+			}
+			m.sendInteractionResponse(true, response)
+			m.confirmState.Waiting = false
+			m.confirmState.Request = nil
+			return m, nil
+		}
+		if cancelled {
+			m.sendInteractionResponse(false, map[string]any{"cancelled": true})
+			m.confirmState.Waiting = false
+			m.confirmState.Request = nil
+			return m, nil
+		}
+		// Then update textarea for text input processing (character insertion, cursor blink)
+		if cmd := m.questionPopup.Update(msg); cmd != nil {
+			return m, cmd
+		}
+		return m, nil // Consumed by popup
+	}
+
 	// 3. Handle confirmation state
 	if m.confirmState.Waiting {
 		return m.handleConfirmKey(msg)

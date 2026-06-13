@@ -851,6 +851,21 @@ func (m Model) handleEventConfirmationRequest(msg ChatEvent) (tea.Model, tea.Cmd
 		m.confirmState.TextInput = defaultAnswer
 	}
 
+	// Show question popup for question type
+	if confType == "question" && m.questionPopup != nil {
+		m.questionPopup.Show(
+			question,
+			QuestionType(questionType),
+			questionOptions,
+			func(answer string, selections []string) {
+				// This callback is handled in Update() where we have access to sendInteractionResponse
+			},
+			func() {
+				// Cancel callback - handled in Update()
+			},
+		)
+	}
+
 	// Return nil command — Bubble Tea v2 calls View() after Update() returns,
 	// so the confirmation dialog will be rendered immediately.
 	return m, nil

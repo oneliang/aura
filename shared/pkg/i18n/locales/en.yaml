@@ -441,3 +441,9 @@ error.memory.summary_failed: "failed to generate summary: %w"
 # Command matched messages (P2)
 command.matched: "Command recognized: %s"
 command.exit: "Goodbye!"
+
+# Question popup
+tui.question.other: "Other"
+tool.ask_user.cancelled: "User cancelled the question"
+tool.ask_user.answer: "User answer: %s"
+tool.ask_user.no_answer: "(no answer)"

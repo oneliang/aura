@@ -465,3 +465,9 @@ error.memory.summary_failed: "生成摘要失败：%w"
 # Command matched messages (P2)
 command.matched: "识别到命令：%s"
 command.exit: "再见！"
+
+# 提问弹窗
+tui.question.other: "其它"
+tool.ask_user.cancelled: "用户取消了回答"
+tool.ask_user.answer: "用户回答: %s"
+tool.ask_user.no_answer: "(无回答)"
