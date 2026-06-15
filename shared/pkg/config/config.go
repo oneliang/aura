@@ -380,6 +380,7 @@ func DefaultConfig() *Config {
 				ReasoningEffort: constants.DefaultThinkingEffort,
 				BudgetTokens:    constants.DefaultThinkingBudget,
 			},
+			EnablePromptCache: true,
 		},
 		Memory: MemoryConfig{
 			Type:             "sqlite",

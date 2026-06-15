@@ -338,22 +338,31 @@ func (m *Model) loadSessionHistory() bool {
 			continue
 		}
 		timestamp := time.UnixMilli(msg.Timestamp)
-		// Extract text from ContentBlocks
+		// Extract text and thinking from ContentBlocks
 		var textContent string
+		var thinkingContent string
 		for _, block := range msg.ContentBlocks {
-			if tb, ok := block.(sharedmemory.TextBlock); ok {
-				textContent = tb.Text
-				break
+			switch b := block.(type) {
+			case sharedmemory.TextBlock:
+				textContent = b.Text
+			case sharedmemory.ThinkingBlock:
+				thinkingContent = b.Thinking
 			}
-		}
-		// Skip messages without actual text content (e.g., tool_use, pure thinking)
-		if textContent == "" {
-			continue
 		}
 		switch msg.Role {
 		case "user":
+			if textContent == "" {
+				continue
+			}
 			m.messages.AddWithTimestamp(MessageTypeUser, textContent, nil, timestamp, renderMessage, m.renderer, m.styles)
 		case "assistant":
+			// Thinking before text, matching live conversation order
+			if thinkingContent != "" {
+				m.messages.AddWithTimestamp(MessageTypeThinking, thinkingContent, nil, timestamp, renderMessage, m.renderer, m.styles)
+			}
+			if textContent == "" {
+				continue
+			}
 			m.messages.AddWithTimestamp(MessageTypeAssistant, textContent, nil, timestamp, renderMessage, m.renderer, m.styles)
 		}
 	}

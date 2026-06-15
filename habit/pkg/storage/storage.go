@@ -15,6 +15,13 @@ import (
 	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
 )
 
+const (
+	// initialScannerBufferSize is the initial buffer size for bufio.Scanner (64 KB).
+	initialScannerBufferSize = 64 * 1024
+	// maxScannerCapacity is the maximum buffer size for bufio.Scanner (10 MB).
+	maxScannerCapacity = 10 * 1024 * 1024
+)
+
 // Storage provides per-user isolated habit storage using JSONL files.
 type Storage struct {
 	mu      sync.RWMutex
@@ -98,6 +105,7 @@ func (s *Storage) readActions(path string, limit int) ([]*model.Action, error) {
 
 	var actions []*model.Action
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, initialScannerBufferSize), maxScannerCapacity)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -207,6 +215,7 @@ func (s *Storage) GetPreferences(ctx context.Context, userID string) ([]*model.P
 
 	var prefs []*model.Preference
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, initialScannerBufferSize), maxScannerCapacity)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {

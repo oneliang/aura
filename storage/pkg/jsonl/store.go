@@ -16,6 +16,14 @@ import (
 	"github.com/oneliang/aura/storage/pkg/message"
 )
 
+const (
+	// initialScannerBufferSize is the initial buffer size for bufio.Scanner (64 KB).
+	initialScannerBufferSize = 64 * 1024
+	// maxScannerCapacity is the maximum buffer size for bufio.Scanner (10 MB).
+	// Prevents "token too long" errors when a single JSONL line exceeds the default 64 KB limit.
+	maxScannerCapacity = 10 * 1024 * 1024
+)
+
 // MessageStore provides JSONL-based storage for messages, partitioned by sessionID.
 type MessageStore struct {
 	dataDir string
@@ -80,6 +88,7 @@ func (s *MessageStore) Get(ctx context.Context, sessionID string, limit int, use
 
 	var messages []message.Message
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, initialScannerBufferSize), maxScannerCapacity)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
