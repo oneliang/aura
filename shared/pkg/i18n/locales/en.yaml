@@ -444,6 +444,7 @@ command.exit: "Goodbye!"
 
 # Question popup
 tui.question.other: "Other"
+tui.question.other_placeholder: "type here..."
 tool.ask_user.cancelled: "User cancelled the question"
 tool.ask_user.answer: "User answer: %s"
 tool.ask_user.no_answer: "(no answer)"

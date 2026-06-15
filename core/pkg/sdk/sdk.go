@@ -57,6 +57,7 @@ import (
 	"github.com/oneliang/aura/core/pkg/permissions"
 	"github.com/oneliang/aura/core/pkg/prompt"
 	"github.com/oneliang/aura/core/pkg/runtime"
+	"github.com/oneliang/aura/personality/pkg/profile"
 	sessionService "github.com/oneliang/aura/session/pkg/service"
 	sessionStorage "github.com/oneliang/aura/session/pkg/storage"
 	"github.com/oneliang/aura/shared/pkg/config"
@@ -199,6 +200,11 @@ func WithSessionID(id string) RuntimeOption {
 // WithUserID sets the user ID for multi-user isolation.
 func WithUserID(id string) RuntimeOption {
 	return runtime.WithUserID(id)
+}
+
+// WithProfile sets the user profile.
+func WithProfile(p *profile.Profile) RuntimeOption {
+	return runtime.WithProfile(p)
 }
 
 // WithDataDir sets the session data directory for task persistence.

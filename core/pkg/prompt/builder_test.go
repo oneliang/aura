@@ -109,7 +109,7 @@ func TestPromptBuilder_BuildWithProfile(t *testing.T) {
 	builder := NewPromptBuilder(roleLoader)
 
 	// Test with non-existent profile - should return base
-	result := builder.BuildWithProfile("/non-existent/profile.yaml")
+	result := builder.BuildWithProfile("/non-existent/profile.md")
 	base := builder.BuildBase()
 
 	if result != base {
@@ -119,12 +119,11 @@ func TestPromptBuilder_BuildWithProfile(t *testing.T) {
 
 func TestPromptBuilder_BuildWithProfile_Success(t *testing.T) {
 	tmpDir := t.TempDir()
-	profilePath := filepath.Join(tmpDir, "profile.yaml")
+	profilePath := filepath.Join(tmpDir, "profile.md")
 
 	// Create a minimal profile file
-	profileContent := `
-tone: friendly
-vocabulary: technical
+	profileContent := `# About Me
+Name: Test User
 `
 	err := os.WriteFile(profilePath, []byte(profileContent), 0644)
 	if err != nil {
@@ -194,68 +193,6 @@ func TestPromptBuilder_BuildWithConfig_WithSSH(t *testing.T) {
 	}
 	if !contains(result, "test-server") {
 		t.Error("BuildWithConfig() missing server name")
-	}
-}
-
-func TestPromptBuilder_BuildWithConfig_ProfileAndSSH(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create profile
-	profilePath := filepath.Join(tmpDir, "profile.yaml")
-	profileContent := `
-tone: professional
-`
-	os.WriteFile(profilePath, []byte(profileContent), 0644)
-
-	// Temporarily move home directory profile
-	homeDir, _ := os.UserHomeDir()
-	originalProfilePath := filepath.Join(homeDir, ".aura", "profile.yaml")
-
-	// Read original if exists
-	var originalProfile []byte
-	var originalExists bool
-	if _, err := os.Stat(originalProfilePath); err == nil {
-		originalProfile, _ = os.ReadFile(originalProfilePath)
-		originalExists = true
-	}
-
-	// Ensure .aura directory exists
-	configDir := filepath.Join(homeDir, ".aura")
-	os.MkdirAll(configDir, 0755)
-
-	// Copy test profile
-	testProfile, _ := os.ReadFile(profilePath)
-	os.WriteFile(originalProfilePath, testProfile, 0644)
-
-	// Restore original on cleanup
-	defer func() {
-		if originalExists {
-			os.WriteFile(originalProfilePath, originalProfile, 0644)
-		} else {
-			os.Remove(originalProfilePath)
-		}
-	}()
-
-	roleLoader := NewRoleLoader("")
-	builder := NewPromptBuilder(roleLoader)
-
-	cfg := &config.Config{
-		SSH: config.SSHConfig{
-			Servers: []config.SSHServerConfig{
-				{
-					Name: "deploy-server",
-					Host: "deploy.example.com",
-					User: "deploy",
-					Port: 22,
-				},
-			},
-		},
-	}
-
-	result := builder.BuildWithConfig(cfg)
-
-	if result == "" {
-		t.Error("BuildWithConfig() returned empty string")
 	}
 }
 

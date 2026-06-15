@@ -6,7 +6,9 @@ import (
 
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
+	lipglossv2 "charm.land/lipgloss/v2"
 	"github.com/oneliang/aura/shared/pkg/constants"
+	"github.com/oneliang/aura/shared/pkg/i18n"
 )
 
 // QuestionPopup displays a question dialog for text input, single choice, or multi-choice.
@@ -34,6 +36,24 @@ func NewQuestionPopup(width, height int) *QuestionPopup {
 	ta.Placeholder = "Type your answer..."
 	ta.Focus()
 
+	// Strip default textarea chrome to match popup theme and prevent background flicker.
+	// The default CursorLine (inverted bg), Prompt ("▐ "), and Base frame cause visual
+	// artifacts when rendered inside the popup overlay.
+	s := ta.Styles()
+	noChrome := lipglossv2.NewStyle().Padding(0).Margin(0)
+	s.Focused.Base = noChrome
+	s.Blurred.Base = noChrome
+	s.Focused.CursorLine = lipglossv2.NewStyle()
+	s.Blurred.CursorLine = lipglossv2.NewStyle()
+	s.Focused.Prompt = lipglossv2.NewStyle()
+	s.Blurred.Prompt = lipglossv2.NewStyle()
+	s.Focused.Text = s.Focused.Text.Foreground(lipglossv2.Color(ColorCommandItem))
+	s.Blurred.Text = s.Blurred.Text.Foreground(lipglossv2.Color(ColorCommandItem))
+	s.Focused.Placeholder = s.Focused.Placeholder.Foreground(lipglossv2.Color(ColorHelp))
+	s.Cursor.Blink = false
+	ta.SetStyles(s)
+	ta.Prompt = ""
+
 	return &QuestionPopup{
 		PopupBase:    NewPopupBase(10),
 		textarea:     ta,
@@ -47,7 +67,7 @@ func NewQuestionPopup(width, height int) *QuestionPopup {
 func (p *QuestionPopup) Show(question string, qType QuestionType, options []QuestionOption, onSubmit func(string, []string), onCancel func()) {
 	p.question = question
 	p.questionType = qType
-	p.options = options
+	p.options = p.deduplicateOther(options)
 	p.onSubmit = onSubmit
 	p.onCancel = onCancel
 	p.selected = 0
@@ -60,6 +80,38 @@ func (p *QuestionPopup) Show(question string, qType QuestionType, options []Ques
 	}
 
 	p.PopupBase.Show()
+}
+
+// deduplicateOther ensures any LLM-generated "Other"-like option uses the sentinel value,
+// so it's properly detected by isOtherOption(). This handles the case where the LLM
+// ignores the instruction not to include "Other" and adds its own variant.
+func (p *QuestionPopup) deduplicateOther(options []QuestionOption) []QuestionOption {
+	for i := range options {
+		if options[i].Value != constants.OtherOptionValue && isOtherLabel(options[i].Label) {
+			options[i].Value = constants.OtherOptionValue
+		}
+	}
+	return options
+}
+
+// isOtherLabel checks if a label matches known "Other" translations.
+func isOtherLabel(label string) bool {
+	known := []string{
+		"Other",
+		"其它",
+		"其他",
+		"Others",
+		"其它选项",
+		"其他选项",
+	}
+	// Also match the localized "Other" label
+	localized := i18n.T("tui.question.other")
+	for _, k := range known {
+		if label == k || label == localized {
+			return true
+		}
+	}
+	return false
 }
 
 // Hide hides the question popup.
@@ -346,11 +398,7 @@ func (p *QuestionPopup) renderChoice(styles UIStyles, contentWidth int) []string
 
 		// Show text input below when "Other" is selected
 		if p.isOtherOption(i) && i == p.selected {
-			inputLine := fmt.Sprintf("      > %s", p.otherText)
-			if len(inputLine) > contentWidth+2 {
-				inputLine = inputLine[:contentWidth+2]
-			}
-			lines = append(lines, styles.CommandItem.Render(inputLine))
+			lines = append(lines, p.renderOtherInput(styles, contentWidth)...)
 		}
 	}
 
@@ -378,15 +426,32 @@ func (p *QuestionPopup) renderMultiChoice(styles UIStyles, contentWidth int) []s
 
 		// Show text input below when "Other" is checked
 		if p.isOtherOption(i) && p.selectedOpts[i] {
-			inputLine := fmt.Sprintf("      > %s", p.otherText)
-			if len(inputLine) > contentWidth+2 {
-				inputLine = inputLine[:contentWidth+2]
-			}
-			lines = append(lines, styles.CommandItem.Render(inputLine))
+			lines = append(lines, p.renderOtherInput(styles, contentWidth)...)
 		}
 	}
 
 	return lines
+}
+
+// renderOtherInput renders the text input line for the "Other" option with
+// a visible cursor and placeholder to make it obvious that input is expected.
+func (p *QuestionPopup) renderOtherInput(styles UIStyles, contentWidth int) []string {
+	var display string
+	if p.otherText == "" {
+		// Show placeholder + cursor when empty
+		display = fmt.Sprintf("      > %s ▏", i18n.T("tui.question.other_placeholder"))
+	} else {
+		// Show typed text + cursor
+		display = fmt.Sprintf("      > %s▏", p.otherText)
+	}
+	if len(display) > contentWidth+2 {
+		display = display[:contentWidth+2]
+	}
+	// Use Help style (dim) for placeholder, Command style for active input
+	if p.otherText == "" {
+		return []string{styles.Help.Render(display)}
+	}
+	return []string{styles.Command.Render(display)}
 }
 
 func (p *QuestionPopup) getHelpText() string {

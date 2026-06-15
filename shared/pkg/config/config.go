@@ -353,7 +353,7 @@ type UserConfig struct {
 	ID              string   `mapstructure:"id" yaml:"id"`                                  // User unique identifier
 	Name            string   `mapstructure:"name" yaml:"name"`                              // Display name
 	APIToken        string   `mapstructure:"api_token" yaml:"api_token"`                    // API authentication token
-	ProfilePath     string   `mapstructure:"profile_path" yaml:"profile_path"`              // Path to user's profile.yaml
+	ProfilePath     string   `mapstructure:"profile_path" yaml:"profile_path"`              // Path to user's profile.md
 	KnowledgeDirs   []string `mapstructure:"knowledge_dirs" yaml:"knowledge_dirs"`          // User's knowledge directories (private + shared)
 	AllowedSharedKB []string `mapstructure:"allowed_shared_kb" yaml:"allowed_shared_kb"`    // Other users' shared KB this user can access
 }

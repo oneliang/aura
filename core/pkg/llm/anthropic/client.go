@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/oneliang/aura/core/pkg/llm"
@@ -73,34 +74,53 @@ func New(opts ...Option) *Client {
 
 // buildSystemValue builds the system value for Anthropic API requests.
 // Returns string format by default, or []systemBlock for caching when enabled.
-func buildSystemValue(system string, req *llm.Request) any {
-	if req.PromptCache == nil || !req.PromptCache.Enabled || len(req.PromptCache.SystemBlocks) == 0 {
-		return system // default string format
+// Static cached blocks (from PromptCacheConfig) are merged with dynamic system messages.
+func buildSystemValue(systems []string, req *llm.Request) any {
+	hasCacheBlocks := req.PromptCache != nil && req.PromptCache.Enabled && len(req.PromptCache.SystemBlocks) > 0
+
+	if !hasCacheBlocks {
+		// No caching: concatenate all system messages into single string
+		return strings.Join(systems, "\n\n")
 	}
 
-	// Use Anthropic-style system blocks with cache_control
-	blocks := make([]systemBlock, len(req.PromptCache.SystemBlocks))
-	for i, sb := range req.PromptCache.SystemBlocks {
-		blocks[i] = systemBlock{
+	// Caching enabled: merge static cached blocks + dynamic messages
+	blocks := make([]systemBlock, 0, len(req.PromptCache.SystemBlocks)+len(systems))
+
+	// Static cached blocks (6 layers: base prompt, profile, tools, skills, agents, AURA.md)
+	for _, sb := range req.PromptCache.SystemBlocks {
+		block := systemBlock{
 			Type: sb.Type,
 			Text: sb.Text,
 		}
 		if sb.CacheControl != nil {
-			blocks[i].CacheControl = &cacheControl{Type: sb.CacheControl.Type}
+			block.CacheControl = &cacheControl{Type: sb.CacheControl.Type}
+		}
+		blocks = append(blocks, block)
+	}
+
+	// Dynamic system messages (RAG, summary, skill bodies) — non-cached
+	for _, sys := range systems {
+		if sys != "" {
+			blocks = append(blocks, systemBlock{
+				Type: "text",
+				Text: sys,
+				// No CacheControl — dynamic content changes per request
+			})
 		}
 	}
+
 	return blocks
 }
 
 // Complete implements llm.Client.
 func (c *Client) Complete(ctx context.Context, req *llm.Request) (*llm.Response, error) {
-	system, msgs := convertMessages(req.Messages)
+	systems, msgs := convertMessages(req.Messages)
 
 	anthReq := chatRequest{
 		Model:     c.model,
 		MaxTokens: 4096,
 		Messages:  msgs,
-		System:    buildSystemValue(system, req),
+		System:    buildSystemValue(systems, req),
 		Stream:    false,
 		Thinking:  buildThinkingBlock(req.Thinking),
 	}
@@ -181,13 +201,13 @@ func (c *Client) Complete(ctx context.Context, req *llm.Request) (*llm.Response,
 
 // Stream implements llm.Client.
 func (c *Client) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Chunk, error) {
-	system, msgs := convertMessages(req.Messages)
+	systems, msgs := convertMessages(req.Messages)
 
 	anthReq := chatRequest{
 		Model:     c.model,
 		MaxTokens: 4096,
 		Messages:  msgs,
-		System:    buildSystemValue(system, req),
+		System:    buildSystemValue(systems, req),
 		Stream:    true,
 		Thinking:  buildThinkingBlock(req.Thinking),
 	}

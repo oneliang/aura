@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oneliang/aura/shared/pkg/constants"
 	"github.com/oneliang/aura/shared/pkg/i18n"
 )
 
@@ -184,13 +185,28 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Handle key press FIRST — intercept Enter/Esc before textarea processes them
 		submitted, answer, selections, cancelled := m.questionPopup.HandleKey(msg)
 		if submitted {
+			// Safety: never leak the "__other__" sentinel to the LLM.
+			// If Path B (old confirmState handler) submits the raw sentinel Value,
+			// or if Other is selected but otherText is empty, treat as no answer.
+			if answer == constants.OtherOptionValue {
+				answer = ""
+			}
 			// Send response to runtime
 			response := make(map[string]any)
 			if answer != "" {
 				response["answer"] = answer
 			}
 			if len(selections) > 0 {
-				response["selections"] = selections
+				// Safety: filter out any sentinel values from selections
+				cleaned := make([]string, 0, len(selections))
+				for _, s := range selections {
+					if s != constants.OtherOptionValue && s != "" {
+						cleaned = append(cleaned, s)
+					}
+				}
+				if len(cleaned) > 0 {
+					response["selections"] = cleaned
+				}
 			}
 			m.sendInteractionResponse(true, response)
 			m.confirmState.Waiting = false

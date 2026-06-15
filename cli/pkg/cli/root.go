@@ -149,7 +149,7 @@ func runAgent(cmd *cobra.Command, args []string) {
 	}
 
 	// Create and initialize runtime
-	rt, mcpManager, sharedEventCh := createRuntime(ctx, currentSessionID, cmdProvider, sessionMgr)
+	rt, mcpManager, sharedEventCh := createRuntime(ctx, currentSessionID, cmdProvider, sessionMgr, prof)
 	logger.RegistryDefault().Debug("[DIAG] runAgent: runtime created", "elapsed", time.Since(startTime))
 	if rt == nil {
 		os.Exit(1)

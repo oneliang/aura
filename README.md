@@ -1094,7 +1094,7 @@ aura/
 │   ├── pkg/workspace/      # 工作空间隔离器
 │   ├── pkg/factory/        # 工厂函数
 │   ├── pkg/llm/            # LLM 客户端 (Ollama、OpenAI、Anthropic，含 ThinkingConfig、PromptCacheConfig)
-│   ├── pkg/prompt/         # Prompt 构建器（含 PromptCacheManager 5 层缓存）
+│   ├── pkg/prompt/         # Prompt 构建器（含 PromptCacheManager 6 层缓存）
 │   ├── pkg/rollback/       # Git stash 回滚管理器
 │   └── pkg/skilltool/      # 技能匹配和注入（渐进式披露，LLM 语义匹配 + 关键词回退）
 ├── api/                  # 应用层：REST API 服务器、Webhooks、Web UI
@@ -1163,7 +1163,7 @@ aura/
 | `core/pkg/workspace` | `github.com/oneliang/aura/core/pkg/workspace` | 工作空间隔离器 (为子 Agent 提供独立环境) |
 | `core/pkg/factory` | `github.com/oneliang/aura/core/pkg/factory` | 工厂函数 (EngineFactory、ToolRegistry) |
 | `core/pkg/llm` | `github.com/oneliang/aura/core/pkg/llm` | LLM 客户端 (Ollama、OpenAI、Anthropic，含 ThinkingConfig、PromptCacheConfig) |
-| `core/pkg/prompt` | `github.com/oneliang/aura/core/pkg/prompt` | Prompt 构建器 (系统提示、角色加载、PromptCacheManager 5 层缓存) |
+| `core/pkg/prompt` | `github.com/oneliang/aura/core/pkg/prompt` | Prompt 构建器 (系统提示、角色加载、PromptCacheManager 6 层缓存) |
 | `core/pkg/intent` | `github.com/oneliang/aura/core/pkg/intent` | 意图识别服务 (自然语言命令识别) |
 | `core/pkg/rollback` | `github.com/oneliang/aura/core/pkg/rollback` | Git stash 回滚管理器 (Plan Mode 快照和恢复) |
 | `core/pkg/skilltool` | `github.com/oneliang/aura/core/pkg/skilltool` | 技能匹配和注入（渐进式披露，LLM 语义匹配 + 关键词回退） |

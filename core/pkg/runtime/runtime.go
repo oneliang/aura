@@ -12,6 +12,8 @@ import (
 	"github.com/oneliang/aura/shared/pkg/logger"
 	sharedmemory "github.com/oneliang/aura/shared/pkg/memory"
 
+	"github.com/oneliang/aura/personality/pkg/profile"
+
 	agentloader "github.com/oneliang/aura/agent/pkg/loader"
 	commands "github.com/oneliang/aura/commands/pkg"
 	enginepkg "github.com/oneliang/aura/core/pkg/engine"
@@ -137,6 +139,9 @@ type AgentRuntime struct {
 	// Prompt cache manager for LLM prompt caching
 	cacheManager *prompt.PromptCacheManager
 
+	// User profile (injected from CLI, user-specific)
+	profile *profile.Profile
+
 	// Session context (new instance per sub-agent)
 	session *SessionContext
 }
@@ -194,6 +199,13 @@ func WithSessionID(id string) RuntimeOption {
 func WithUserID(userID string) RuntimeOption {
 	return func(r *AgentRuntime) {
 		r.userID = userID
+	}
+}
+
+// WithProfile sets the user profile.
+func WithProfile(p *profile.Profile) RuntimeOption {
+	return func(r *AgentRuntime) {
+		r.profile = p
 	}
 }
 

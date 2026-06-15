@@ -15,9 +15,6 @@ import (
 	"github.com/oneliang/aura/shared/pkg/httpclient"
 	"github.com/oneliang/aura/shared/pkg/logger"
 	"github.com/oneliang/aura/shared/pkg/user"
-	ffp "github.com/oneliang/aura/shared/pkg/utils/filepath"
-
-	"github.com/oneliang/aura/personality/pkg/profile"
 
 	agentbuilder "github.com/oneliang/aura/agent/pkg/builder"
 	agentloader "github.com/oneliang/aura/agent/pkg/loader"
@@ -277,11 +274,8 @@ func (r *AgentRuntime) initEngine(ctx context.Context) error {
 
 	// Legacy path: when prompt caching is disabled, append profile to system prompt
 	// (When caching is enabled, profile is handled as a separate cache layer)
-	if r.cacheManager == nil || !r.cacheManager.Enabled() {
-		profilePath := ffp.MustAuraHomePath(constants.DefaultProfileFile)
-		if p, err := profile.Load(profilePath); err == nil {
-			systemPrompt += "\n\n" + p.ToSystemPrompt()
-		}
+	if (r.cacheManager == nil || !r.cacheManager.Enabled()) && r.profile != nil {
+		systemPrompt += "\n\n" + r.profile.ToSystemPrompt()
 	}
 
 	// Create confirmation handler that checks for TUI channel at execution time
@@ -683,9 +677,8 @@ func (r *AgentRuntime) initPromptCachePreEngine(ctx context.Context) {
 	r.cacheManager.SetStaticSystem(staticPrompt)
 
 	// Build user profile block (Layer 1)
-	profilePath := ffp.MustAuraHomePath(constants.DefaultProfileFile)
-	if p, err := profile.Load(profilePath); err == nil {
-		r.cacheManager.SetProfileBlock(p.ToSystemPrompt())
+	if r.profile != nil {
+		r.cacheManager.SetProfileBlock(r.profile.ToSystemPrompt())
 	}
 
 	// Build skills metadata block

@@ -310,7 +310,7 @@ func runTUIMode(
 
 // createRuntime creates and initializes the agent runtime.
 // For TUI mode, creates a shared event channel for multi-runtime scenarios.
-func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.CommandProvider, sessionMgr *sdk.SessionManager) (*sdk.Runtime, *sdk.MCPManager, chan sdk.Event) {
+func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.CommandProvider, sessionMgr *sdk.SessionManager, prof *profile.Profile) (*sdk.Runtime, *sdk.MCPManager, chan sdk.Event) {
 	runtimeConfig := sdk.FromConfig(ctx.Config)
 	if sessionID != "" {
 		runtimeConfig.SessionID = sessionID
@@ -348,6 +348,7 @@ func createRuntime(ctx *CommandContext, sessionID string, cmdProvider *cmds.Comm
 		sdk.WithSessionID(sessionID),
 		sdk.WithUserID(ctx.UserID),
 		sdk.WithDataDir(ctx.DataDir),
+		sdk.WithProfile(prof),
 	}
 
 	// TUI mode: inject unified logger and shared event channel

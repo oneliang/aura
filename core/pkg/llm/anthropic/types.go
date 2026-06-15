@@ -139,16 +139,16 @@ func extractTextContent(blocks []contentBlock) string {
 }
 
 // convertMessages converts llm.Messages to Anthropic chat messages.
-// System messages are extracted separately; user/assistant messages become chat messages.
+// All system messages are collected into a slice; user/assistant messages become chat messages.
 // ContentBlocks are converted to Anthropic's content block format.
-func convertMessages(messages []llm.Message) (system string, chatMsgs []chatMessage) {
+func convertMessages(messages []llm.Message) (systems []string, chatMsgs []chatMessage) {
 	for _, msg := range messages {
 		switch msg.Role {
 		case "system":
-			// Extract text from ContentBlocks for system message
+			// Collect ALL system messages (RAG, summary, skill bodies, etc.)
 			for _, block := range msg.GetContentBlocks() {
 				if tb, ok := block.(memory.TextBlock); ok {
-					system = tb.Text
+					systems = append(systems, tb.Text)
 					break
 				}
 			}
