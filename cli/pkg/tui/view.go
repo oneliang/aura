@@ -346,7 +346,12 @@ func (m Model) View() tea.View {
 	}
 	if m.questionPopup != nil && m.questionPopup.IsShowing() {
 		popupContent := m.questionPopup.Render(m.styles)
-		result = renderOverlay(result, popupContent, width, height, m.styles)
+		popupH := m.questionPopup.Height()
+		popupTop := height - bottomH - popupH - 1
+		if popupTop < 0 {
+			popupTop = 0
+		}
+		result = renderOverlayAt(result, popupContent, popupTop, width, m.styles)
 	}
 
 	v := tea.NewView(result)

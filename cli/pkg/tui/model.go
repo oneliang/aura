@@ -331,14 +331,64 @@ func (m *Model) loadSessionHistory() bool {
 	}
 	m.input.SetUserMessageHistory(userInputs)
 
-	// Add messages to store for viewport rendering
+	// Add messages to store for viewport rendering.
+	// Engine persists in interleaved order: thinking/text → tool_use_1 → tool_result_1 → tool_use_2 → tool_result_2
+	// This ensures IN/OUT pairs are together when loading history
 	for _, msg := range msgs {
-		// Skip observation messages - they're tool results, not user input
-		if msg.Type == sharedmemory.MessageTypeObservation {
+		timestamp := time.UnixMilli(msg.Timestamp)
+
+		// Action message: thinking, text, or tool_use (in logical order)
+		if msg.Type == sharedmemory.MessageTypeAction {
+			// Extract thinking and text
+			var textContent string
+			var thinkingContent string
+			for _, block := range msg.ContentBlocks {
+				switch b := block.(type) {
+				case sharedmemory.TextBlock:
+					textContent = b.Text
+				case sharedmemory.ThinkingBlock:
+					thinkingContent = b.Thinking
+				}
+			}
+			if thinkingContent != "" {
+				m.messages.AddWithTimestamp(MessageTypeThinking, thinkingContent, nil, timestamp, renderMessage, m.renderer, m.styles)
+			}
+			if textContent != "" {
+				m.messages.AddWithTimestamp(MessageTypeAssistant, textContent, nil, timestamp, renderMessage, m.renderer, m.styles)
+			}
+			// Extract tool calls
+			for _, block := range msg.ContentBlocks {
+				if tub, ok := block.(sharedmemory.ToolUseBlock); ok {
+					m.messages.AddWithTimestamp(MessageTypeToolStart, tub.Name, map[string]any{
+						"params":       string(tub.Input),
+						"execution_id": tub.ID,
+					}, timestamp, renderMessage, m.renderer, m.styles)
+				}
+			}
 			continue
 		}
-		timestamp := time.UnixMilli(msg.Timestamp)
-		// Extract text and thinking from ContentBlocks
+
+		// Tool result (observation message): show as ToolEnd
+		if msg.Type == sharedmemory.MessageTypeObservation {
+			for _, block := range msg.ContentBlocks {
+				if trb, ok := block.(sharedmemory.ToolResultBlock); ok {
+					var resultText string
+					for _, c := range trb.Content {
+						if tb, ok := c.(sharedmemory.TextBlock); ok {
+							resultText = tb.Text
+							break
+						}
+					}
+					m.messages.AddWithTimestamp(MessageTypeToolEnd, resultText, map[string]any{
+						"execution_id": trb.ToolUseID,
+						"duration":     time.Duration(0),
+					}, timestamp, renderMessage, m.renderer, m.styles)
+				}
+			}
+			continue
+		}
+
+		// Regular messages: extract text and thinking from ContentBlocks
 		var textContent string
 		var thinkingContent string
 		for _, block := range msg.ContentBlocks {

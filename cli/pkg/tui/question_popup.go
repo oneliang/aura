@@ -307,9 +307,8 @@ func (p *QuestionPopup) HandleKey(msg tea.KeyPressMsg) (bool, string, []string, 
 	return false, "", nil, false
 }
 
-// Render renders the question popup.
-// Clean layout: title → separator → content → help text.
-// Outer frame (───── borders) is handled by renderOverlay().
+// Render renders the question popup with top/bottom border lines.
+// Layout: border → title → separator → content → help text → border.
 func (p *QuestionPopup) Render(styles UIStyles) string {
 	if !p.IsShowing() {
 		return ""
@@ -354,7 +353,50 @@ func (p *QuestionPopup) Render(styles UIStyles) string {
 	// Help text
 	lines = append(lines, styles.Help.Render("  "+p.getHelpText()))
 
-	return strings.Join(lines, "\n")
+	// Calculate border width: max of content lines and minimum width
+	popupW := 0
+	for _, line := range lines {
+		if w := len(line); w > popupW {
+			popupW = w
+		}
+	}
+	if popupW < OverlayMinWidth {
+		popupW = OverlayMinWidth
+	}
+
+	// Add top/bottom borders
+	borderLine := styles.Separator.Render(strings.Repeat(OverlayBorderChar, popupW))
+	allLines := append([]string{borderLine}, lines...)
+	allLines = append(allLines, borderLine)
+
+	return strings.Join(allLines, "\n")
+}
+
+// Height returns the total height of the rendered popup including borders.
+// Computed from internal state to avoid double-rendering.
+func (p *QuestionPopup) Height() int {
+	if !p.IsShowing() {
+		return 0
+	}
+	// Fixed overhead: top border + title + separator + blank + blank + help + bottom border = 7
+	h := 7
+	switch p.questionType {
+	case QuestionTypeText:
+		h += 5 // textarea lines
+	case QuestionTypeChoice:
+		h += len(p.options)
+		if p.isOtherOption(p.selected) {
+			h++ // Other input line
+		}
+	case QuestionTypeMultiChoice:
+		h += len(p.options)
+		for i := range p.options {
+			if p.isOtherOption(i) && p.selectedOpts[i] {
+				h++ // Other input line
+			}
+		}
+	}
+	return h
 }
 
 func (p *QuestionPopup) renderTextInput(styles UIStyles, contentWidth int) []string {

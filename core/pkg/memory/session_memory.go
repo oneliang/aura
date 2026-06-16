@@ -113,13 +113,21 @@ func (m *SessionMemory) AddWithType(role, content string, msgType sharedmemory.M
 		m.trimByCount()
 	}
 
-	// Persist to storage based on type (async with WaitGroup for shutdown sync)
+	// Persist to storage based on type
+	// For action/observation messages, persist synchronously to maintain order
+	// For other message types, persist asynchronously for better performance
 	if m.store != nil && shouldPersistByType(msgType) {
-		m.persistWg.Add(1)
-		go func() {
-			defer m.persistWg.Done()
+		if msgType == sharedmemory.MessageTypeAction || msgType == sharedmemory.MessageTypeObservation {
+			// Synchronous persistence for action/observation to ensure correct ordering
 			m.persistWithType(role, content, msgType)
-		}()
+		} else {
+			// Asynchronous persistence for other messages
+			m.persistWg.Add(1)
+			go func() {
+				defer m.persistWg.Done()
+				m.persistWithType(role, content, msgType)
+			}()
+		}
 	}
 }
 
@@ -226,13 +234,21 @@ func (m *SessionMemory) AddWithBlocks(role string, blocks []sharedmemory.Content
 		m.trimByCount()
 	}
 
-	// Persist to storage based on type (async with WaitGroup for shutdown sync)
+	// Persist to storage based on type
+	// For tool_use and tool_result (action/observation), persist synchronously to maintain order
+	// For other message types, persist asynchronously for better performance
 	if m.store != nil && shouldPersistByType(msgType) {
-		m.persistWg.Add(1)
-		go func() {
-			defer m.persistWg.Done()
+		if msgType == sharedmemory.MessageTypeAction || msgType == sharedmemory.MessageTypeObservation {
+			// Synchronous persistence for tool messages to ensure IN/OUT pairing
 			m.persistWithBlocks(role, blocks, msgType)
-		}()
+		} else {
+			// Asynchronous persistence for other messages
+			m.persistWg.Add(1)
+			go func() {
+				defer m.persistWg.Done()
+				m.persistWithBlocks(role, blocks, msgType)
+			}()
+		}
 	}
 }
 

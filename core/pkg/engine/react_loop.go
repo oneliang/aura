@@ -454,6 +454,37 @@ func (e *Engine) getReActLLMResponse(ctx context.Context, eventsCh chan<- events
 		return "", nil, "", false
 	}
 
+	// Detect empty response (no response text and no tool calls)
+	if response == "" && len(toolCalls) == 0 {
+		if thinkingContent != "" {
+			// Has thinking but no response - model may have stopped after thinking
+			e.logger.Warn("LLM returned thinking but no response",
+				"module", "engine",
+				"requestID", requestID,
+				"thinking_length", len(thinkingContent))
+
+			errorMsg := "LLM completed thinking but did not generate a response. " +
+				"This may be due to:\n" +
+				"1. Model decided to stop after thinking\n" +
+				"2. API configuration issue (thinking mode parameters)\n" +
+				"3. Token budget exhausted\n\n" +
+				"Please try rephrasing your request or check LLM configuration."
+
+			eventsCh <- events.NewEvent(events.EventTypeError, errorMsg, requestID)
+		} else {
+			// Completely empty response (no thinking and no response)
+			e.logger.Error("LLM returned empty response",
+				"module", "engine",
+				"requestID", requestID)
+
+			errorMsg := "LLM returned an empty response. This is unexpected. " +
+				"Please try again or check your LLM provider status."
+
+			eventsCh <- events.NewEvent(events.EventTypeError, errorMsg, requestID)
+		}
+		return "", nil, "", false
+	}
+
 	e.logger.Debug("runReActLoop: LLM response received", "module", "engine", "requestID", requestID, "response_length", len(response))
 	return response, toolCalls, thinkingContent, true
 }
@@ -475,31 +506,24 @@ func (e *Engine) logReActActions(actions []*ToolAction, toolCalls []llm.ToolCall
 // thinkingContent is the accumulated LLM thinking/reasoning content to store.
 // toolCalls contains the structured tool calls from LLM (with IDs for ToolUseBlock).
 func (e *Engine) handleReActActions(ctx context.Context, eventsCh chan<- events.Event, actions []*ToolAction, toolCalls []llm.ToolCall, response string, thinkingContent string, requestID string) bool {
-	// Persist ToolUse records for each tool call (with proper IDs)
-	for _, tc := range toolCalls {
-		inputJSON, _ := json.Marshal(tc.Parameters)
-		toolUseBlock := sharedmemory.ToolUseBlock{
-			Type:  sharedmemory.BlockTypeToolUse,
-			ID:    tc.ID,
-			Name:  tc.Name,
-			Input: inputJSON,
-		}
-		e.memory.AddWithBlocks(sharedmemory.RoleAssistant, []sharedmemory.ContentBlock{toolUseBlock}, memory.MessageTypeAction)
-		e.logger.Debug("handleReActActions: persisted tool_use record", "module", "engine", "requestID", requestID, "tool", tc.Name, "tool_id", tc.ID)
-	}
+	// Clean response text first
+	response = codeFencePattern.ReplaceAllString(response, "")
 
-	// If no structured tool calls but actions exist, persist actions without IDs
-	if len(toolCalls) == 0 && len(actions) > 0 {
-		for i, action := range actions {
-			inputJSON, _ := json.Marshal(action.Parameters)
-			toolUseBlock := sharedmemory.ToolUseBlock{
-				Type:  sharedmemory.BlockTypeToolUse,
-				ID:    fmt.Sprintf("action_%d_%s", i, action.Tool), // Generate ID for parsed actions
-				Name:  action.Tool,
-				Input: inputJSON,
-			}
-			e.memory.AddWithBlocks(sharedmemory.RoleAssistant, []sharedmemory.ContentBlock{toolUseBlock}, memory.MessageTypeAction)
+	// Persist thinking/text FIRST (logical order: thinking → text → tool_use)
+	if thinkingContent != "" {
+		blocks := []sharedmemory.ContentBlock{
+			sharedmemory.ThinkingBlock{
+				Type:     sharedmemory.BlockTypeThinking,
+				Thinking: thinkingContent,
+			},
+			sharedmemory.TextBlock{
+				Type: sharedmemory.BlockTypeText,
+				Text: response,
+			},
 		}
+		e.memory.AddWithBlocks(sharedmemory.RoleAssistant, blocks, memory.MessageTypeAction)
+	} else if response != "" {
+		e.memory.AddWithType(sharedmemory.RoleAssistant, response, memory.MessageTypeAction)
 	}
 
 	// Check if any action requires confirmation - if so, use serial execution
@@ -524,7 +548,7 @@ func (e *Engine) handleReActActions(ctx context.Context, eventsCh chan<- events.
 		}
 	}
 
-	// Execute actions
+	// Execute actions (parallel or serial)
 	var results []toolResult
 	if len(actions) == 1 || needsSerial {
 		results = e.executeToolsSerial(ctx, actions, eventsCh, requestID)
@@ -546,55 +570,39 @@ func (e *Engine) handleReActActions(ctx context.Context, eventsCh chan<- events.
 		return false
 	}
 
-	// Record to memory with ContentBlocks if thinking present
-	response = codeFencePattern.ReplaceAllString(response, "")
-	if thinkingContent != "" {
-		// Build ContentBlocks with ThinkingBlock + TextBlock
-		blocks := []sharedmemory.ContentBlock{
-			sharedmemory.ThinkingBlock{
-				Type:     sharedmemory.BlockTypeThinking,
-				Thinking: thinkingContent,
-			},
-			sharedmemory.TextBlock{
-				Type: sharedmemory.BlockTypeText,
-				Text: response,
-			},
+	// Persist tool_use and tool_result in interleaved order (tool_use_1 → tool_result_1 → tool_use_2 → tool_result_2)
+	// This ensures IN/OUT pairs are together when loading history
+	for i, action := range actions {
+		// Determine tool_use ID
+		var toolUseID string
+		if i < len(toolCalls) {
+			toolUseID = toolCalls[i].ID
+		} else {
+			toolUseID = fmt.Sprintf("action_%d_%s", i, action.Tool)
 		}
-		e.memory.AddWithBlocks(sharedmemory.RoleAssistant, blocks, memory.MessageTypeAction)
-	} else {
-		e.memory.AddWithType(sharedmemory.RoleAssistant, response, memory.MessageTypeAction)
-	}
 
-	// Build observation with ToolResultBlock
-	if len(actions) == 1 {
-		toolUseID := ""
-		if len(toolCalls) > 0 {
-			toolUseID = toolCalls[0].ID
-		} else {
-			toolUseID = fmt.Sprintf("action_0_%s", actions[0].Tool)
+		// 1. Persist tool_use
+		inputJSON, _ := json.Marshal(action.Parameters)
+		toolUseBlock := sharedmemory.ToolUseBlock{
+			Type:  sharedmemory.BlockTypeToolUse,
+			ID:    toolUseID,
+			Name:  action.Tool,
+			Input: inputJSON,
 		}
-		e.recordSingleToolResultWithBlock(results[0], actions[0].Tool, toolUseID)
-	} else {
-		// Extract tool use IDs from toolCalls or generate them
-		toolUseIDs := make([]string, len(actions))
-		if len(toolCalls) > 0 {
-			for i, tc := range toolCalls {
-				toolUseIDs[i] = tc.ID
-			}
-		} else {
-			for i, action := range actions {
-				toolUseIDs[i] = fmt.Sprintf("action_%d_%s", i, action.Tool)
-			}
-		}
-		e.recordMultipleToolResultsWithBlock(results, actions, toolUseIDs)
+		e.memory.AddWithBlocks(sharedmemory.RoleAssistant, []sharedmemory.ContentBlock{toolUseBlock}, memory.MessageTypeAction)
+		e.logger.Debug("handleReActActions: persisted tool_use record", "module", "engine", "requestID", requestID, "tool", action.Tool, "tool_id", toolUseID)
+
+		// 2. Persist corresponding tool_result
+		tr := results[i]
+		e.recordToolResultWithBlock(tr, action.Tool, toolUseID)
 	}
 
 	e.logger.Debug("runReActLoop: added observations to memory, continuing loop", "module", "engine", "requestID", requestID)
 	return true
 }
 
-// recordSingleToolResultWithBlock records a single tool result as ToolResultBlock.
-func (e *Engine) recordSingleToolResultWithBlock(tr toolResult, toolName string, toolUseID string) {
+// recordToolResultWithBlock records a single tool result as ToolResultBlock.
+func (e *Engine) recordToolResultWithBlock(tr toolResult, toolName string, toolUseID string) {
 	content := ""
 	isError := tr.Err != nil
 	if tr.Err != nil {
@@ -618,39 +626,7 @@ func (e *Engine) recordSingleToolResultWithBlock(tr toolResult, toolName string,
 		IsError:   isError,
 	}
 	e.memory.AddWithBlocks(sharedmemory.RoleUser, []sharedmemory.ContentBlock{toolResultBlock}, memory.MessageTypeObservation)
-	e.logger.Debug("recordSingleToolResultWithBlock: persisted tool_result", "module", "engine", "tool", toolName, "tool_use_id", toolUseID)
-}
-
-// recordMultipleToolResultsWithBlock records multiple tool results as ToolResultBlocks.
-func (e *Engine) recordMultipleToolResultsWithBlock(results []toolResult, actions []*ToolAction, toolUseIDs []string) {
-	for i, action := range actions {
-		tr := results[i]
-		toolUseID := toolUseIDs[i]
-		content := ""
-		isError := tr.Err != nil
-		if tr.Err != nil {
-			content = fmt.Sprintf("Error: %v", tr.Err)
-		} else if tr.Result != nil {
-			content = tr.Result.Content
-			if len(tr.Result.Data) > 0 {
-				dataJSON, _ := json.Marshal(tr.Result.Data)
-				content = fmt.Sprintf("%s\nData: %s", content, string(dataJSON))
-			}
-		}
-
-		textBlock := sharedmemory.TextBlock{
-			Type: sharedmemory.BlockTypeText,
-			Text: content,
-		}
-		toolResultBlock := sharedmemory.ToolResultBlock{
-			Type:      sharedmemory.BlockTypeToolResult,
-			ToolUseID: toolUseID,
-			Content:   []sharedmemory.ContentBlock{textBlock},
-			IsError:   isError,
-		}
-		e.memory.AddWithBlocks(sharedmemory.RoleUser, []sharedmemory.ContentBlock{toolResultBlock}, memory.MessageTypeObservation)
-		e.logger.Debug("recordMultipleToolResultsWithBlock: persisted tool_result", "module", "engine", "tool", action.Tool, "tool_use_id", toolUseID)
-	}
+	e.logger.Debug("recordToolResultWithBlock: persisted tool_result", "module", "engine", "tool", toolName, "tool_use_id", toolUseID)
 }
 
 // handleReActFinalAnswer handles final answer emission and memory recording.

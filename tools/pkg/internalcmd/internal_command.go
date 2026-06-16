@@ -3,6 +3,7 @@ package internalcmd
 
 import (
 	"context"
+	"time"
 
 	"github.com/oneliang/aura/shared/pkg/i18n"
 	"github.com/oneliang/aura/shared/pkg/logger"
@@ -65,4 +66,11 @@ func (t *InternalCommandTool) Execute(ctx context.Context, params map[string]any
 		Status:  tools.ToolStatusSuccess,
 		Content: result,
 	}, nil
+}
+
+// Timeout returns a longer timeout for internal commands since some (like agent delegation)
+// can take several minutes to complete. Most internal commands finish quickly, but agent
+// delegation needs up to 10 minutes.
+func (t *InternalCommandTool) Timeout() time.Duration {
+	return 10 * time.Minute
 }
