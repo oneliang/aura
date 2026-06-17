@@ -142,6 +142,9 @@ type AgentRuntime struct {
 	// User profile (injected from CLI, user-specific)
 	profile *profile.Profile
 
+	// Hook-injected context (generic: any hook can contribute via SystemMessage)
+	hookContext string
+
 	// Session context (new instance per sub-agent)
 	session *SessionContext
 }
@@ -739,14 +742,9 @@ func (r *AgentRuntime) GetSystemPrompt() string {
 	}
 
 	// Show cache status
-	if r.cacheManager != nil && r.cacheManager.Enabled() {
-		result += "\n\n=== Cache Status ===\n\n"
-		result += "Prompt caching: ENABLED\n"
-		result += fmt.Sprintf("Layers: StaticSystem(0), Profile(1), Tools(2), Skills(3), Agents(4), ProjectAura(5)\n")
-	} else {
-		result += "\n\n=== Cache Status ===\n\n"
-		result += "Prompt caching: DISABLED\n"
-	}
+	result += "\n\n=== Cache Status ===\n\n"
+	result += "Prompt caching: ENABLED\n"
+	result += "Layers: StaticSystem(0), Profile(1), HookContext(6), Tools(2), Skills(3), Agents(4), ProjectAura(5)\n"
 
 	return result
 }

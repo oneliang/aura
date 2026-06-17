@@ -205,8 +205,7 @@ type EngineConfig struct {
 	EnableReflection bool    // Enable reflection step before final response
 	ReflectionConfig ReflectionConfig // Reflection settings
 
-	// Prompt caching
-	EnablePromptCache bool                // Enable prompt caching for LLM requests
+	// Prompt caching (always enabled — application layer uses blocks, provider adapts)
 	PromptCacheConfig *llm.PromptCacheConfig // Pre-built cache configuration (from PromptCacheManager)
 
 	// SkillInjector for retrieving activated skill bodies (cache-aware)
@@ -399,7 +398,6 @@ func WithThinking(thinking *llm.ThinkingConfig) Option {
 // WithPromptCacheConfig sets the prompt cache configuration for LLM requests.
 func WithPromptCacheConfig(cacheConfig *llm.PromptCacheConfig) Option {
 	return func(e *Engine) {
-		e.config.EnablePromptCache = cacheConfig != nil && cacheConfig.Enabled
 		e.config.PromptCacheConfig = cacheConfig
 	}
 }

@@ -86,6 +86,11 @@ func (r *AgentRuntime) Initialize(ctx context.Context) error {
 	// Cache manager must be created before initEngine() so config can be passed.
 	r.initPromptCachePreEngine(ctx)
 
+	// Phase 5.5: Fire SessionStart hook synchronously, capture generic hook context as cache block
+	if err := r.initHookContext(ctx); err != nil {
+		r.logger.Warn("Hook context loading failed (non-fatal)", "error", err.Error())
+	}
+
 	// Phase 6: Create Engine
 	if err := r.initEngine(ctx); err != nil {
 		return err
@@ -272,12 +277,6 @@ func (r *AgentRuntime) initEngine(ctx context.Context) error {
 	// Build system prompt
 	systemPrompt := r.buildSystemPrompt()
 
-	// Legacy path: when prompt caching is disabled, append profile to system prompt
-	// (When caching is enabled, profile is handled as a separate cache layer)
-	if (r.cacheManager == nil || !r.cacheManager.Enabled()) && r.profile != nil {
-		systemPrompt += "\n\n" + r.profile.ToSystemPrompt()
-	}
-
 	// Create confirmation handler that checks for TUI channel at execution time
 	confirmHandler := r.createConfirmationHandler()
 
@@ -310,16 +309,14 @@ func (r *AgentRuntime) initEngine(ctx context.Context) error {
 		BudgetTokens:    r.config.LLM.Thinking.BudgetTokens,
 	}))
 
-	// Pass prompt cache config if caching is enabled
-	if r.cacheManager != nil && r.cacheManager.Enabled() {
-		agentFactoryOpts = append(agentFactoryOpts, factory.WithPromptCacheConfig(
-			&llm.PromptCacheConfig{
-				Enabled:      true,
-				SystemBlocks: r.cacheManager.BuildSystemBlocks(),
-				CacheType:    r.cacheManager.BuildOpenAICacheType(),
-			},
-		))
-	}
+	// Pass prompt cache config (always — application layer uses blocks, provider adapts)
+	agentFactoryOpts = append(agentFactoryOpts, factory.WithPromptCacheConfig(
+		&llm.PromptCacheConfig{
+			Enabled:      true,
+			SystemBlocks: r.cacheManager.BuildSystemBlocks(),
+			CacheType:    r.cacheManager.BuildOpenAICacheType(),
+		},
+	))
 
 	// Pass skill injector if skills are enabled (for cache-aware skill body retrieval)
 	if r.skillInjector != nil {
@@ -431,6 +428,44 @@ func (r *AgentRuntime) initTools(ctx context.Context) {
 	}
 }
 
+// initHookContext fires SessionStart hook synchronously and captures any
+// SystemMessage returned. Generic — no service-specific knowledge.
+// Called between Phase 5 (cache pre-engine) and Phase 6 (engine creation)
+// so the hook context is available as a cache block when the engine is built.
+func (r *AgentRuntime) initHookContext(ctx context.Context) error {
+	if r.hookEngine == nil || !r.hookEngine.HasEvents(hooks.EventSessionStart) {
+		return nil
+	}
+
+	result, err := r.hookEngine.FireBlocking(ctx, hooks.EventSessionStart, map[string]any{
+		"session_id": r.sessionID,
+		"user_id":    r.userID,
+	})
+	if err != nil {
+		return err
+	}
+	if result != nil && result.Parsed != nil && result.Parsed.SystemMessage != "" {
+		r.hookContext = result.Parsed.SystemMessage
+		r.logger.Info("Hook provided system context",
+			"length", len(r.hookContext),
+			"preview", truncateString(r.hookContext, 100))
+
+		// Set as cache block (provider layer adapts: Anthropic per-block cache_control, OpenAI concatenation)
+		if r.cacheManager != nil {
+			r.cacheManager.SetHookContextBlock(r.hookContext)
+		}
+	}
+	return nil
+}
+
+// truncateString truncates s to at most maxLen bytes for logging.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 // initPostSetup performs post-initialization: delegation, hooks, habit manager.
 func (r *AgentRuntime) initPostSetup(ctx context.Context) error {
 	// Initialize delegation audit logger (ensures log file exists before first delegation)
@@ -456,12 +491,6 @@ func (r *AgentRuntime) initPostSetup(ctx context.Context) error {
 			r.agent.SetAgentDelegateFn(r.agentDelegateFn)
 		}
 	}
-
-	// Fire SessionStart hook via component (non-blocking)
-	r.hooks.Fire(ctx, hooks.EventSessionStart, map[string]any{
-		"session_id": r.sessionID,
-		"user_id":    r.userID,
-	})
 
 	// Initialize habit manager (after initialized flag so Process() can access it)
 	if !user.IsLegacyMode(r.userID) && r.config.Habit.Enabled {
@@ -665,12 +694,8 @@ func (r *AgentRuntime) loadProjectAuraMd() string {
 // initPromptCachePreEngine initializes the prompt cache manager before Engine creation.
 // Creates the manager and sets static system prompt, skills, and agents blocks.
 func (r *AgentRuntime) initPromptCachePreEngine(ctx context.Context) {
-	if !r.config.LLM.EnablePromptCache {
-		return
-	}
-
-	// Create prompt cache manager
-	r.cacheManager = prompt.NewPromptCacheManager(true)
+	// Create prompt cache manager (always enabled — application layer uses blocks)
+	r.cacheManager = prompt.NewPromptCacheManager()
 
 	// Build static system prompt
 	staticPrompt := r.buildSystemPrompt()
@@ -703,10 +728,6 @@ func (r *AgentRuntime) initPromptCachePreEngine(ctx context.Context) {
 // initPromptCachePostTools completes prompt cache initialization after tools are registered.
 // Sets the tools block which requires r.agent.GetTools().
 func (r *AgentRuntime) initPromptCachePostTools(ctx context.Context) {
-	if !r.config.LLM.EnablePromptCache || r.cacheManager == nil {
-		return
-	}
-
 	// Build tools block after tools are registered
 	toolsBlock := r.buildToolsBlock()
 	r.cacheManager.SetToolsBlock(toolsBlock)

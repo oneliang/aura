@@ -5,22 +5,14 @@ import (
 )
 
 func TestPromptCacheManager_New(t *testing.T) {
-	m := NewPromptCacheManager(true)
+	m := NewPromptCacheManager()
 	if m == nil {
 		t.Fatal("Expected non-nil manager")
-	}
-	if !m.Enabled() {
-		t.Error("Expected enabled=true")
-	}
-
-	mDisabled := NewPromptCacheManager(false)
-	if mDisabled.Enabled() {
-		t.Error("Expected enabled=false")
 	}
 }
 
 func TestPromptCacheManager_SetAndGetLayers(t *testing.T) {
-	m := NewPromptCacheManager(true)
+	m := NewPromptCacheManager()
 
 	// Set all layers
 	m.SetStaticSystem("static prompt")
@@ -55,18 +47,8 @@ func TestPromptCacheManager_SetAndGetLayers(t *testing.T) {
 	}
 }
 
-func TestPromptCacheManager_BuildSystemBlocks_Disabled(t *testing.T) {
-	m := NewPromptCacheManager(false)
-	m.SetStaticSystem("static prompt")
-
-	blocks := m.BuildSystemBlocks()
-	if blocks != nil {
-		t.Errorf("Expected nil blocks when disabled, got %d blocks", len(blocks))
-	}
-}
-
 func TestPromptCacheManager_BuildSystemBlocks_EmptyLayers(t *testing.T) {
-	m := NewPromptCacheManager(true)
+	m := NewPromptCacheManager()
 	// Don't set any layers
 
 	blocks := m.BuildSystemBlocks()
@@ -76,7 +58,7 @@ func TestPromptCacheManager_BuildSystemBlocks_EmptyLayers(t *testing.T) {
 }
 
 func TestPromptCacheManager_BuildSystemBlocks_PartialLayers(t *testing.T) {
-	m := NewPromptCacheManager(true)
+	m := NewPromptCacheManager()
 	m.SetStaticSystem("static prompt")
 	m.SetToolsBlock("tools block")
 	// Skip skills and agents
@@ -88,19 +70,14 @@ func TestPromptCacheManager_BuildSystemBlocks_PartialLayers(t *testing.T) {
 }
 
 func TestPromptCacheManager_BuildOpenAICacheType(t *testing.T) {
-	mEnabled := NewPromptCacheManager(true)
-	if mEnabled.BuildOpenAICacheType() != "ephemeral" {
-		t.Error("Expected 'ephemeral' for enabled manager")
-	}
-
-	mDisabled := NewPromptCacheManager(false)
-	if mDisabled.BuildOpenAICacheType() != "" {
-		t.Errorf("Expected empty string for disabled manager, got '%s'", mDisabled.BuildOpenAICacheType())
+	m := NewPromptCacheManager()
+	if m.BuildOpenAICacheType() != "ephemeral" {
+		t.Errorf("Expected 'ephemeral', got '%s'", m.BuildOpenAICacheType())
 	}
 }
 
 func TestPromptCacheManager_Invalidate(t *testing.T) {
-	m := NewPromptCacheManager(true)
+	m := NewPromptCacheManager()
 	m.SetStaticSystem("static")
 	m.SetToolsBlock("tools")
 	m.SetSkillsBlock("skills")
@@ -121,7 +98,7 @@ func TestPromptCacheManager_Invalidate(t *testing.T) {
 }
 
 func TestPromptCacheManager_ConcurrentAccess(t *testing.T) {
-	m := NewPromptCacheManager(true)
+	m := NewPromptCacheManager()
 
 	// Concurrent writes
 	done := make(chan bool)
@@ -137,7 +114,6 @@ func TestPromptCacheManager_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			_ = m.BuildSystemBlocks()
-			_ = m.Enabled()
 			done <- true
 		}()
 	}
@@ -149,7 +125,7 @@ func TestPromptCacheManager_ConcurrentAccess(t *testing.T) {
 }
 
 func TestPromptCacheManager_LayerOrder(t *testing.T) {
-	m := NewPromptCacheManager(true)
+	m := NewPromptCacheManager()
 	m.SetAgentsBlock("agents")  // Set out of order
 	m.SetStaticSystem("static")
 	m.SetSkillsBlock("skills")
@@ -162,5 +138,40 @@ func TestPromptCacheManager_LayerOrder(t *testing.T) {
 		if blocks[i].Text != expected {
 			t.Errorf("Block %d: expected '%s', got '%s'", i, expected, blocks[i].Text)
 		}
+	}
+}
+
+func TestPromptCacheManager_HookContextBlock(t *testing.T) {
+	m := NewPromptCacheManager()
+	m.SetStaticSystem("static")
+	m.SetProfileBlock("profile")
+	m.SetHookContextBlock("hook context")
+	m.SetToolsBlock("tools")
+
+	blocks := m.BuildSystemBlocks()
+	// Expected order: static, profile, hook context, tools
+	if len(blocks) != 4 {
+		t.Fatalf("Expected 4 blocks, got %d", len(blocks))
+	}
+
+	expectedOrder := []string{"static", "profile", "hook context", "tools"}
+	for i, expected := range expectedOrder {
+		if blocks[i].Text != expected {
+			t.Errorf("Block %d: expected '%s', got '%s'", i, expected, blocks[i].Text)
+		}
+	}
+}
+
+func TestPromptCacheManager_InvalidateHookContext(t *testing.T) {
+	m := NewPromptCacheManager()
+	m.SetStaticSystem("static")
+	m.SetHookContextBlock("hook context")
+	m.SetToolsBlock("tools")
+
+	m.InvalidateHookContext()
+
+	blocks := m.BuildSystemBlocks()
+	if len(blocks) != 2 {
+		t.Errorf("Expected 2 blocks after invalidation, got %d", len(blocks))
 	}
 }

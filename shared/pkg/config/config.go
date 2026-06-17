@@ -89,7 +89,6 @@ type LLMConfig struct {
 	Timeout          time.Duration  `mapstructure:"timeout" yaml:"timeout"`         // HTTP client timeout for LLM requests
 	Retry            RetryConfig    `mapstructure:"retry" yaml:"retry"`           // retry configuration for LLM requests
 	Thinking         ThinkingConfig `mapstructure:"thinking" yaml:"thinking"`        // thinking/reasoning configuration
-	EnablePromptCache bool          `mapstructure:"enable_prompt_cache" yaml:"enable_prompt_cache"` // enable prompt caching
 }
 
 // RetryConfig represents retry configuration for LLM requests.
@@ -380,7 +379,6 @@ func DefaultConfig() *Config {
 				ReasoningEffort: constants.DefaultThinkingEffort,
 				BudgetTokens:    constants.DefaultThinkingBudget,
 			},
-			EnablePromptCache: true,
 		},
 		Memory: MemoryConfig{
 			Type:             "sqlite",

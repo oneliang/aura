@@ -205,6 +205,10 @@ func (e *Engine) logResult(eventType HookEventType, command string, result *Hook
 		if result.Parsed.Continue != nil {
 			args = append(args, "continue", *result.Parsed.Continue)
 		}
+		if result.Parsed.SystemMessage != "" {
+			args = append(args, "system_message_len", len(result.Parsed.SystemMessage))
+			args = append(args, "system_message_preview", truncateString(result.Parsed.SystemMessage, 100))
+		}
 	}
 	e.logger.Debug("hook executed", args...)
 }

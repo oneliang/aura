@@ -521,85 +521,47 @@ func (e *Engine) augmentSystemPromptWithRAG(ctx context.Context, systemPrompt st
 }
 
 // buildReActMessages builds messages for ReAct loop.
-// When prompt caching is enabled, system prompt is sent via PromptCacheConfig,
-// not in messages array. Dynamic content (RAG, Summary) goes into messages.
+// System prompt is sent via PromptCacheConfig (block mode).
+// Only dynamic content (RAG, Summary, Skills) goes into messages.
 func (e *Engine) buildReActMessages(ctx context.Context) []llm.Message {
 	messages := make([]llm.Message, 0)
 
-	// When caching is enabled, system prompt is handled via PromptCacheConfig
-	// We only add dynamic content to messages
-	if e.config.EnablePromptCache && e.config.PromptCacheConfig != nil {
-		// Add RAG knowledge as separate system message (not cached)
-		if rag := e.getRAGKnowledge(ctx); rag != "" {
-			messages = append(messages, llm.Message{
-				Role:          memory.RoleSystem,
-				ContentBlocks: []memory.ContentBlock{
-					memory.TextBlock{Type: memory.BlockTypeText, Text: rag},
-				},
-			})
-		}
-
-		// Add summary as separate system message (not cached)
-		if e.config.EnableSummarization {
-			if summary := e.getSummary(); summary != "" {
-				messages = append(messages, llm.Message{
-					Role:          memory.RoleSystem,
-					ContentBlocks: []memory.ContentBlock{
-						memory.TextBlock{Type: memory.BlockTypeText, Text: "Previous conversation summary:\n" + summary},
-					},
-				})
-			}
-		}
-
-		// Add activated skill bodies as dynamic system messages (not cached)
-		// Skill bodies are retrieved from SkillInjector, not from memory
-		if e.config.SkillInjector != nil {
-			for _, body := range e.config.SkillInjector.GetInjectedBodies() {
-				messages = append(messages, llm.Message{
-					Role:          memory.RoleSystem,
-					ContentBlocks: []memory.ContentBlock{
-						memory.TextBlock{Type: memory.BlockTypeText, Text: body},
-					},
-				})
-			}
-		}
-
-		// Add conversation history (without summary, since we added it separately)
-		messages = append(messages, e.memory.Get()...)
-	} else {
-		// Legacy behavior: inline system prompt into messages
-		systemPrompt := e.getReActSystemPrompt()
-		systemPrompt = e.augmentSystemPromptWithRAG(ctx, systemPrompt)
-
+	// Add RAG knowledge as separate system message (not cached)
+	if rag := e.getRAGKnowledge(ctx); rag != "" {
 		messages = append(messages, llm.Message{
 			Role:          memory.RoleSystem,
 			ContentBlocks: []memory.ContentBlock{
-				memory.TextBlock{Type: memory.BlockTypeText, Text: systemPrompt},
+				memory.TextBlock{Type: memory.BlockTypeText, Text: rag},
 			},
 		})
+	}
 
-		// Add activated skill bodies (same logic as cache-aware path)
-		if e.config.SkillInjector != nil {
-			for _, body := range e.config.SkillInjector.GetInjectedBodies() {
-				messages = append(messages, llm.Message{
-					Role:          memory.RoleSystem,
-					ContentBlocks: []memory.ContentBlock{
-						memory.TextBlock{Type: memory.BlockTypeText, Text: body},
-					},
-				})
-			}
-		}
-
-		if e.config.EnableSummarization {
-			if sm, ok := e.memory.(memory.SummarizingMemory); ok {
-				messages = append(messages, sm.GetMessagesWithSummary()...)
-			} else {
-				messages = append(messages, e.memory.Get()...)
-			}
-		} else {
-			messages = append(messages, e.memory.Get()...)
+	// Add summary as separate system message (not cached)
+	if e.config.EnableSummarization {
+		if summary := e.getSummary(); summary != "" {
+			messages = append(messages, llm.Message{
+				Role:          memory.RoleSystem,
+				ContentBlocks: []memory.ContentBlock{
+					memory.TextBlock{Type: memory.BlockTypeText, Text: "Previous conversation summary:\n" + summary},
+				},
+			})
 		}
 	}
+
+	// Add activated skill bodies as dynamic system messages (not cached)
+	if e.config.SkillInjector != nil {
+		for _, body := range e.config.SkillInjector.GetInjectedBodies() {
+			messages = append(messages, llm.Message{
+				Role:          memory.RoleSystem,
+				ContentBlocks: []memory.ContentBlock{
+					memory.TextBlock{Type: memory.BlockTypeText, Text: body},
+				},
+			})
+		}
+	}
+
+	// Add conversation history (without summary, since we added it separately)
+	messages = append(messages, e.memory.Get()...)
 
 	return messages
 }
@@ -652,8 +614,8 @@ func (e *Engine) buildRequest(messages []llm.Message) *llm.Request {
 		Thinking: e.config.Thinking,
 	}
 
-	// Add caching configuration if enabled
-	if e.config.EnablePromptCache && e.config.PromptCacheConfig != nil {
+	// Add caching configuration (always — application layer uses blocks, provider adapts)
+	if e.config.PromptCacheConfig != nil {
 		req.PromptCache = e.config.PromptCacheConfig
 	}
 

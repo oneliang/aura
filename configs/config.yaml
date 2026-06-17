@@ -25,12 +25,6 @@ llm:
     reasoning_effort: medium   # OpenAI: low/medium/high (non-reasoning models may error)
     budget_tokens: 51200        # Max thinking tokens (Anthropic/Ollama)
 
-  # Prompt caching (default: disabled)
-  # When enabled, caches system prompts and tool definitions to reduce token usage
-  # and improve response latency for multi-turn conversations.
-  # Supported providers: OpenAI (cache_control), Anthropic (cache_control), Ollama
-  enable_prompt_cache: true
-
 # Memory Settings
 memory:
   type: sqlite

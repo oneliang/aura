@@ -17,27 +17,28 @@ const (
 	LayerSkills        CacheLayer = 3 // Skills metadata
 	LayerAgents        CacheLayer = 4 // Agents metadata
 	LayerProjectAura   CacheLayer = 5 // Project-level AURA.md
+	LayerHookContext   CacheLayer = 6 // Hook-injected context (generic, any hook can contribute)
 )
 
 // PromptCacheManager manages cached prompt layers for provider-agnostic caching.
+// Application layer always works with blocks; LLM provider clients handle
+// cache adaptation (Anthropic: per-block cache_control; OpenAI: concatenation + request-level cache).
 type PromptCacheManager struct {
 	mu sync.RWMutex
 
-	// Cached layers (immutable after initialization)
+	// Cached layers
 	staticSystem     string
 	profileBlock     string
+	hookContextBlock string // Hook-injected context (generic: any hook can contribute via SystemMessage)
 	toolsBlock       string
 	skillsBlock      string
 	agentsBlock      string
 	projectAuraBlock string
-
-	// Configuration
-	enabled bool
 }
 
 // NewPromptCacheManager creates a new cache manager.
-func NewPromptCacheManager(enabled bool) *PromptCacheManager {
-	return &PromptCacheManager{enabled: enabled}
+func NewPromptCacheManager() *PromptCacheManager {
+	return &PromptCacheManager{}
 }
 
 // SetStaticSystem sets the immutable base system prompt.
@@ -82,14 +83,18 @@ func (m *PromptCacheManager) SetProjectAuraBlock(projectAura string) {
 	m.projectAuraBlock = projectAura
 }
 
+// SetHookContextBlock sets the hook-injected context block.
+// Generic: any hook can contribute via SystemMessage in its output.
+func (m *PromptCacheManager) SetHookContextBlock(block string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hookContextBlock = block
+}
+
 // BuildSystemBlocks builds Anthropic-style system blocks with cache_control.
 func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	if !m.enabled {
-		return nil
-	}
 
 	var blocks []llm.SystemBlock
 
@@ -107,6 +112,15 @@ func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 		blocks = append(blocks, llm.SystemBlock{
 			Type:         "text",
 			Text:         m.profileBlock,
+			CacheControl: &llm.CacheControl{Type: "ephemeral"},
+		})
+	}
+
+	// Layer 6: Hook-injected context (generic: any hook can contribute via SystemMessage)
+	if m.hookContextBlock != "" {
+		blocks = append(blocks, llm.SystemBlock{
+			Type:         "text",
+			Text:         m.hookContextBlock,
 			CacheControl: &llm.CacheControl{Type: "ephemeral"},
 		})
 	}
@@ -152,10 +166,7 @@ func (m *PromptCacheManager) BuildSystemBlocks() []llm.SystemBlock {
 
 // BuildOpenAICacheType returns the cache type for OpenAI request-level caching.
 func (m *PromptCacheManager) BuildOpenAICacheType() string {
-	if m.enabled {
-		return "ephemeral"
-	}
-	return ""
+	return "ephemeral"
 }
 
 // InvalidateTools invalidates the tools cache.
@@ -186,9 +197,9 @@ func (m *PromptCacheManager) InvalidateAgents() {
 	m.agentsBlock = ""
 }
 
-// Enabled returns whether caching is enabled.
-func (m *PromptCacheManager) Enabled() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.enabled
+// InvalidateHookContext invalidates the hook context cache.
+func (m *PromptCacheManager) InvalidateHookContext() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hookContextBlock = ""
 }
