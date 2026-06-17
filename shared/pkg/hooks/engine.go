@@ -93,7 +93,8 @@ func (e *Engine) Fire(ctx context.Context, eventType HookEventType, input any) e
 
 // FireBlocking triggers all hooks for the given event type and waits for
 // the first hook to return a blocking result (Continue=false or exit code 2).
-// If no hook blocks, returns a result with Continue=true.
+// Returns the last hook result regardless of blocking — callers can inspect
+// SystemMessage, ReflectionFeedback, etc. even when no hook blocked.
 func (e *Engine) FireBlocking(ctx context.Context, eventType HookEventType, input any) (*HookResult, error) {
 	if e == nil || !e.HasEvents(eventType) {
 		return nil, nil
@@ -104,6 +105,7 @@ func (e *Engine) FireBlocking(ctx context.Context, eventType HookEventType, inpu
 		return nil, nil
 	}
 
+	var lastResult *HookResult
 	for _, cm := range matchers {
 		for _, hc := range cm.hooks {
 			if hc.Type != "command" {
@@ -117,13 +119,14 @@ func (e *Engine) FireBlocking(ctx context.Context, eventType HookEventType, inpu
 			}
 			e.logResult(eventType, hc.Command, result)
 
+			lastResult = result
 			if e.ShouldBlock(result) {
 				return result, nil
 			}
 		}
 	}
 
-	return nil, nil
+	return lastResult, nil
 }
 
 // Shutdown shuts down the hook engine (closes file watchers if any).

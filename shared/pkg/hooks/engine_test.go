@@ -373,7 +373,8 @@ func TestFireBlocking_BlocksOnExitCode2(t *testing.T) {
 	}
 }
 
-// TestFireBlocking_DoesNotBlockOnExitCode0 does not block on normal exit.
+// TestFireBlocking_DoesNotBlockOnExitCode0 does not block on normal exit,
+// but still returns the last result for callers to inspect.
 func TestFireBlocking_DoesNotBlockOnExitCode0(t *testing.T) {
 	t.Parallel()
 	cfg := &HooksConfig{
@@ -387,8 +388,37 @@ func TestFireBlocking_DoesNotBlockOnExitCode0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
-		t.Errorf("expected nil result for non-blocking hook, got %+v", result)
+	if result == nil {
+		t.Fatal("expected non-nil result for non-blocking hook")
+	}
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+}
+
+// TestFireBlocking_ReturnsSystemMessage verifies that FireBlocking returns the
+// hook result (including SystemMessage) even when the hook doesn't block.
+func TestFireBlocking_ReturnsSystemMessage(t *testing.T) {
+	t.Parallel()
+	cfg := &HooksConfig{
+		Enabled: true,
+		SessionStart: []HookEvent{
+			{Hooks: []HookConfig{{Type: "command", Command: `echo '{"systemMessage":"hello from hook"}'`}}},
+		},
+	}
+	e := NewEngine(cfg, newTestLogger())
+	result, err := e.FireBlocking(context.Background(), EventSessionStart, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Parsed == nil {
+		t.Fatal("expected parsed output")
+	}
+	if result.Parsed.SystemMessage != "hello from hook" {
+		t.Errorf("expected systemMessage='hello from hook', got '%s'", result.Parsed.SystemMessage)
 	}
 }
 
