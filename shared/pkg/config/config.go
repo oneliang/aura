@@ -253,10 +253,9 @@ type TUIConfig struct {
 
 // AdaptersConfig represents external platform adapters configuration.
 type AdaptersConfig struct {
-	Enabled         bool                `mapstructure:"enabled" yaml:"enabled"`          // Master switch for all adapters
-	EnabledAdapters []string            `mapstructure:"enabled_adapters" yaml:"enabled_adapters"` // List of enabled adapter names
-	DataDir         string              `mapstructure:"data_dir" yaml:"data_dir"`         // Data directory for adapter storage
-	Feishu          FeishuAdapterConfig `mapstructure:"feishu" yaml:"feishu"`           // Feishu adapter configuration
+	Enabled bool                `mapstructure:"enabled" yaml:"enabled"`       // Master switch for all adapters
+	DataDir string              `mapstructure:"data_dir" yaml:"data_dir"`     // Data directory for adapter storage
+	Feishu  FeishuAdapterConfig `mapstructure:"feishu" yaml:"feishu"`         // Feishu adapter configuration
 }
 
 // FeishuAdapterConfig represents Feishu adapter configuration.
@@ -480,9 +479,8 @@ func DefaultConfig() *Config {
 			DebugMode: false,
 		},
 		Adapters: AdaptersConfig{
-			Enabled:         false,
-			DataDir:         stdpath.Join(homeDir, constants.DirData),
-			EnabledAdapters: []string{},
+			Enabled: false,
+			DataDir: stdpath.Join(homeDir, constants.DirData),
 			Feishu: FeishuAdapterConfig{
 				Enabled:         false,
 				WebhookPath:     "/webhook/feishu",
@@ -700,7 +698,7 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate Feishu adapter configuration if enabled
-	if c.Adapters.Enabled && c.Adapters.Feishu.Enabled {
+	if c.Adapters.Feishu.Enabled {
 		if c.Adapters.Feishu.AppID == "" {
 			return errors.New(i18n.T("error.config.feishu_appid_empty"))
 		}

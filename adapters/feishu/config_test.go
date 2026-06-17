@@ -39,8 +39,6 @@ llm:
 
 adapters:
   enabled: true
-  enabled_adapters:
-    - feishu
   data_dir: /tmp/feishu-test-data
   feishu:
     enabled: true
@@ -110,7 +108,6 @@ llm:
 
 adapters:
   enabled: false
-  enabled_adapters: []
   data_dir: /tmp/feishu-test-data-empty
   feishu:
     enabled: false
@@ -161,8 +158,6 @@ llm:
 
 adapters:
   enabled: true
-  enabled_adapters:
-    - feishu
   data_dir: /tmp/feishu-test-data-empty
   feishu:
     enabled: true

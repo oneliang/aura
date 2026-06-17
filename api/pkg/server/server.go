@@ -228,10 +228,15 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 // initializeAdapters loads and initializes configured adapters.
 func (s *Server) initializeAdapters() error {
+	// Check master switch
+	if !s.config.Adapters.Enabled {
+		return nil
+	}
+
 	// Check if Feishu adapter is enabled
 	feishuConfig := s.config.Adapters.Feishu
 	if !feishuConfig.Enabled {
-		return nil // Adapters disabled
+		return nil
 	}
 
 	// Validate required config

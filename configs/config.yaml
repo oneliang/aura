@@ -286,13 +286,6 @@ adapters:
   # Each adapter stores its data in a separate file under this directory
   data_dir: ~/.aura/data
 
-  # List of enabled adapters by name
-  enabled_adapters:
-    - feishu
-    # - wechat  # Future: WeChat integration
-    # - dingtalk # Future: DingTalk integration
-    # - telegram # Future: Telegram integration
-
   # Feishu Adapter Configuration
   # To use Feishu adapter, you need to:
   # 1. Create a Feishu Open Platform app at https://open.feishu.cn/
