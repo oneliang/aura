@@ -331,7 +331,8 @@ func runInteractiveWithRuntime(ctx context.Context, rt *sdk.Runtime, sl *tui.Ses
 		}
 
 		switch input {
-		case commands.CmdExit, commands.CmdQuit, commands.CmdQuickExit:
+		case commands.CmdExit, commands.CmdQuit, commands.CmdQuickExit,
+			"exit", "quit", "q": // Support bare words (without /)
 			fmt.Println("\nGoodbye!")
 			return
 		case commands.CmdClear:
@@ -465,6 +466,12 @@ func runInteractiveWithRuntime(ctx context.Context, rt *sdk.Runtime, sl *tui.Ses
 				case sdk.EventTypeResponseChunk:
 					// Ignore chunks in CLI mode - wait for complete response
 				case sdk.EventTypeResponse:
+					// Check if this is an exit signal from internal_command
+					if ev.Content() == "exit" {
+						fmt.Println("\nGoodbye!")
+						rt.Stop(ctx)
+						return
+					}
 					fmt.Printf("Aura: %s\n\n", ev.Content())
 				case sdk.EventTypeAction:
 					fmt.Printf("\033[33m%s\033[0m\n", ev.Content())
