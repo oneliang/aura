@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -1062,6 +1063,17 @@ func (r *AgentRuntime) processInputQueue(ctx context.Context) {
 			// This is essential for buildReActMessages to include user input
 			r.memory.AddWithType(sharedmemory.RoleUser, req.Input, sharedmemory.MessageTypeUser)
 			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: user message added to memory")
+
+			// Fire UserPromptSubmit hook (async, non-blocking)
+			if r.hookEngine != nil && r.hookEngine.HasEvents(hooks.EventUserPromptSubmit) {
+				cwd, _ := os.Getwd()
+				_ = r.hookEngine.Fire(ctx, hooks.EventUserPromptSubmit, map[string]any{
+					"user_id":    r.userID,
+					"session_id": r.sessionID,
+					"input":      req.Input,
+					"directory":  cwd,
+				})
+			}
 
 			// 直接调用Engine.Run而非Process包装器
 			r.logger.Debug("[RUNTIME_EVENT] processInputQueue: calling agent.Run", "requestID", req.RequestID)

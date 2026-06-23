@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -62,6 +63,7 @@ func (e *Engine) executeToolsParallel(ctx context.Context, actions []*ToolAction
 		maxParallel = defaultMaxParallelTools
 	}
 
+	cwd, _ := os.Getwd()
 	results := make([]toolResult, len(actions))
 	sem := make(chan struct{}, maxParallel)
 	var wg sync.WaitGroup
@@ -79,6 +81,7 @@ func (e *Engine) executeToolsParallel(ctx context.Context, actions []*ToolAction
 					"tool_name":  a.Tool,
 					"tool_input": a.Parameters,
 					"error":      err.Error(),
+					"directory":  cwd,
 				})
 				results[idx] = toolResult{Err: err}
 				return
@@ -87,6 +90,7 @@ func (e *Engine) executeToolsParallel(ctx context.Context, actions []*ToolAction
 				"tool_name":   a.Tool,
 				"tool_input":  a.Parameters,
 				"tool_result": result,
+				"directory":   cwd,
 			})
 			results[idx] = toolResult{Result: result}
 		}(i, action)
@@ -99,6 +103,7 @@ func (e *Engine) executeToolsParallel(ctx context.Context, actions []*ToolAction
 // executeToolsSerial executes actions sequentially for backward compatibility.
 // Returns a slice of results (one per action, in order).
 func (e *Engine) executeToolsSerial(ctx context.Context, actions []*ToolAction, eventsCh chan<- events.Event, requestID string) []toolResult {
+	cwd, _ := os.Getwd()
 	results := make([]toolResult, len(actions))
 	for i, action := range actions {
 		result, err := e.executeToolWithEvents(ctx, action, eventsCh, requestID)
@@ -107,6 +112,7 @@ func (e *Engine) executeToolsSerial(ctx context.Context, actions []*ToolAction, 
 				"tool_name":  action.Tool,
 				"tool_input": action.Parameters,
 				"error":      err.Error(),
+				"directory":  cwd,
 			})
 			results[i] = toolResult{Err: err}
 			continue
@@ -115,6 +121,7 @@ func (e *Engine) executeToolsSerial(ctx context.Context, actions []*ToolAction, 
 			"tool_name":   action.Tool,
 			"tool_input":  action.Parameters,
 			"tool_result": result,
+			"directory":   cwd,
 		})
 		results[i] = toolResult{Result: result}
 	}

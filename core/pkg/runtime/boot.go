@@ -437,9 +437,11 @@ func (r *AgentRuntime) initHookContext(ctx context.Context) error {
 		return nil
 	}
 
+	cwd, _ := os.Getwd()
 	result, err := r.hookEngine.FireBlocking(ctx, hooks.EventSessionStart, map[string]any{
 		"session_id": r.sessionID,
 		"user_id":    r.userID,
+		"directory":  cwd,
 	})
 	if err != nil {
 		return err
