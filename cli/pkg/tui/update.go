@@ -657,7 +657,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	m.lastInputValue = "" // Reset for next input
 
 	// Start processing — user message already in store, no need to print again
-	return m, tea.Batch(
+	return m, tea.Sequence(
 		m.sendMessage(input),
 		waitingCmd,
 		m.scrollToBottom(),
@@ -722,6 +722,7 @@ func (m Model) scrollToBottom() tea.Cmd {
 }
 
 // eventLoop returns a cmd that waits for events.
+// Uses tea.Sequence to ensure events are processed in order.
 func (m Model) eventLoop() tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-m.eventChan

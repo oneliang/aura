@@ -112,7 +112,8 @@ func applyAgentConfigInheritance(cfg *RuntimeConfig, meta *agentpkg.AgentMeta) {
 }
 
 // executeSubAgent runs the sub-agent and collects the result.
-func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task string, subAgentID string, hookEngine *hooks.Engine) (string, error) {
+// eventForwarder is an optional callback to forward intermediate events to parent runtime.
+func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task string, subAgentID string, hookEngine *hooks.Engine, eventForwarder func(Event)) (string, error) {
 	var (
 		mu         sync.Mutex
 		result     string
@@ -137,20 +138,47 @@ func executeSubAgent(ctx context.Context, subAgentRuntime *AgentRuntime, task st
 	}
 
 	// Process events from stream
+	eventLoop:
 	for ev := range subAgentRuntime.Events() {
 		eventCount++
+
+		// Forward intermediate events to parent runtime (except final results)
+		if eventForwarder != nil {
+			switch ev.Type() {
+			case EventTypeResponse, EventTypeError, EventTypeDone:
+				// Don't forward final result events
+			default:
+				// Forward intermediate events: thinking, tool_start, tool_end, step, etc.
+				// Keep original content, let TUI handle display format based on runtimeID
+				forwardedEvent := events.NewEventWithExtraAndRuntimeID(
+					ev.Type(),
+					ev.Content(), // Keep original content, no prefix
+					ev.Extra(),
+					ev.RequestID(),
+					subAgentID, // Use subAgentID as runtimeID for TUI to identify
+				)
+				eventForwarder(forwardedEvent)
+			}
+		}
+
+		// Original result collection logic
 		mu.Lock()
 		switch ev.Type() {
 		case EventTypeResponse:
 			result = ev.Content()
+			subAgentLog.Debug("executeSubAgent: received Response event", "result_len", len(result))
 		case EventTypeError:
 			lastError = fmt.Errorf("%s", ev.Content())
+			subAgentLog.Debug("executeSubAgent: received Error event", "error", lastError.Error())
 		case EventTypeDone:
-			// Done event signals completion
-			break
+			// Done event signals completion - exit loop immediately
+			subAgentLog.Debug("executeSubAgent: received Done event, exiting loop", "total_events", eventCount)
+			mu.Unlock()
+			break eventLoop
 		}
 		mu.Unlock()
 	}
+	subAgentLog.Debug("executeSubAgent: event loop exited, calling Stop", "total_events", eventCount)
 	subAgentRuntime.Stop(ctx)
 
 	mu.Lock()
@@ -216,6 +244,11 @@ func (r *AgentRuntime) createAgentDelegateFn(ctx context.Context) func(ctx conte
 			dl.Error(reqID, agentName, "create_runtime", time.Since(startTime).Milliseconds(), err)
 			return "", fmt.Errorf("failed to create sub-agent runtime: %w", err)
 		}
+
+		// Configure sub-agent runtime ID for event source identification
+		// Events from this sub-agent will have runtimeID="sa-xxx" in TUI
+		subAgentRuntime.runtimeID = subAgentID
+
 		// Tag logger with sub-agent ID for tracking (use fileLogger if available)
 		if fileLogger != nil {
 			subAgentLogger := fileLogger.Logger().WithModule("sub-agent:" + agentName)
@@ -238,8 +271,13 @@ func (r *AgentRuntime) createAgentDelegateFn(ctx context.Context) func(ctx conte
 		defer subAgentRuntime.Shutdown()
 		dl.Step(reqID, "initialize", time.Since(startTime).Milliseconds())
 
+		// Create event forwarder to forward sub-agent events to parent runtime
+		eventForwarder := func(ev Event) {
+			r.sendEvent(ev) // Forward to parent runtime's event stream
+		}
+
 		// Execute and get result
-		result, err := executeSubAgent(subCtx, subAgentRuntime, task, subAgentID, r.hookEngine)
+		result, err := executeSubAgent(subCtx, subAgentRuntime, task, subAgentID, r.hookEngine, eventForwarder)
 		if err != nil {
 			if fileLogger != nil {
 				fileLogger.Close()
