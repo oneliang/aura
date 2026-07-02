@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	commands "github.com/oneliang/aura/commands/pkg"
 	"github.com/oneliang/aura/shared/pkg/i18n"
+	"github.com/oneliang/aura/shared/pkg/constants"
 	tools "github.com/oneliang/aura/tools/pkg"
 )
 
@@ -75,6 +77,13 @@ func (t *CommandTool) Execute(ctx context.Context, params map[string]any) (*tool
 		return &tools.ToolResult{Status: tools.ToolStatusError, Error: err.Error()}, nil
 	}
 	return &tools.ToolResult{Status: tools.ToolStatusSuccess, Content: result}, nil
+}
+
+// Timeout returns a longer timeout for internal commands since some (like agent delegation)
+// can take several minutes to complete. Most internal commands finish quickly, but agent
+// delegation needs up to 10 minutes.
+func (t *CommandTool) Timeout() time.Duration {
+	return constants.DefaultAgentDelegationTimeout
 }
 
 // MarshalCommandParams converts command parameters to JSON string for LLM consumption.

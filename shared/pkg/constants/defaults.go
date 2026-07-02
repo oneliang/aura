@@ -37,6 +37,10 @@ var (
 	DefaultSSHTimeout   = 30 * time.Second
 	DefaultWebTimeout   = 30 * time.Second
 
+	// Agent delegation timeout - sub-agent execution can take several minutes
+	// for complex exploration/analysis tasks
+	DefaultAgentDelegationTimeout = 10 * time.Minute
+
 	// Thinking related
 	DefaultThinkingEnabled = true
 	DefaultThinkingEffort  = "medium"
